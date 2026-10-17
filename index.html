@@ -1012,6 +1012,8 @@
       appId: "1:365392158959:web:a4581cabe2d2eb5a25fb1a"
     };
 
+    const EMBEDDED_GEMINI_KEY = "AQ.Ab8RN6JOBfiHjOEOdGWw9TywGZx9ZBoKTFBqhmHNZ7gUqrI9mA";
+
     const DEFAULT_CATALOG = [
       { name: "Sukkahousut", cat: "Muut" },
       { name: "Tarmo avainpiilo", cat: "Muut" },
@@ -1705,7 +1707,7 @@
         statusBox.innerText = "Tutkitaan verkkohaulla Tammiston & Jumbon tämänhetkisiä tarjouksia...";
       }
 
-      let apiKey = localStorage.getItem("corsia_gemini_api_key") || "";
+      let apiKey = localStorage.getItem("corsia_gemini_api_key") || EMBEDDED_GEMINI_KEY || "";
       const userPrompt = `Etsi Google-haulla tämänhetkiset ajankohtaiset ruoka- ja myymälätarjoukset Vantaan alueelta, erityisesti K-Citymarket Tammisto, Prisma Jumbo, Lidl Tammisto ja Neste K Tammisto (autopesut). Poimi 8-10 todellista tai tyypillistä parasta tarjoustärppiä (esim. lohi, jauheliha, hevi, kahvi, pesutarjous).
 Palauta VAIN puhdas JSON-taulukko ilman markdown-tägejä:
 [
@@ -2079,13 +2081,13 @@ Kategoriat (mainCat): Liha, Hevi, Maitotuotteet, Juustot, Kuivat, Einekset, Herk
 
       try {
         const compressed = await compressImageForVision(file, 1280, 0.82);
-        let apiKey = localStorage.getItem("corsia_gemini_api_key") || "";
+        let apiKey = localStorage.getItem("corsia_gemini_api_key") || EMBEDDED_GEMINI_KEY || "";
         let parsedProducts = [];
 
-        // If an API key is saved, call Gemini Vision
+        // Direct multimodal call to Gemini Vision
         if (apiKey) {
           try {
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
             const payload = {
               contents: [{
                 parts: [
@@ -2096,7 +2098,7 @@ Tunnista ja poimi KAIKKI ostettavat ruoka- ja taloustuotteet sekä niiden määr
 Jäsennä kukin tuote johonkin näistä virallisista kategorioista:
 Hevi, Juurekset, Hedelmät, Liha, Leikkeleet, Einekset, Vegaaniset, Maitotuotteet, Juustot, Kuivat, Kuivat (mutta märät), Jauhot, Aasia / Texmex, Pakasteet, Leivät, Herkut, Hygienia, Apteekki, IKEA, Rautakauppa, Muut.
 
-Palauta tulos VAIN puhtaana JSON-taulukkona:
+Palauta tulos VAIN puhtaana JSON-taulukkona ilman markdownia tai lisätekstiä:
 [
   {
     "name": "Maito",
@@ -2129,60 +2131,54 @@ Palauta tulos VAIN puhtaana JSON-taulukkona:
               if (jsonMatch) {
                 parsedProducts = JSON.parse(jsonMatch[0]);
               }
+            } else {
+              console.warn("Gemini vision response error:", await response.text());
             }
           } catch(e) {
-            console.warn("API vision attempt failed, falling back to smart parser", e);
+            console.warn("API vision attempt failed:", e);
           }
-        }
-
-        // Automatic fallback: if no key or API failed, activate smart list scanner
-        if (!Array.isArray(parsedProducts) || parsedProducts.length === 0) {
-          // Rule-based heuristic: activate popular household items from image trigger
-          const typicalHouseholdPicks = ["Maito", "Banaani", "Kananmunat", "Kurkku", "Ruisleipä", "Jauheliha"];
-          parsedProducts = typicalHouseholdPicks.slice(0, 4).map(name => {
-            const item = DEFAULT_CATALOG.find(c => c.name.toLowerCase().includes(name.toLowerCase()));
-            return {
-              name: item ? item.name : name,
-              cat: item ? item.cat : "Muut",
-              qty: 1
-            };
-          });
         }
 
         let addedCount = 0;
-        parsedProducts.forEach(item => {
-          if (!item.name) return;
-          const cleanName = String(item.name).trim();
-          const targetCat = item.cat || "Muut";
-          const qty = item.qty ? Number(item.qty) : null;
+        if (Array.isArray(parsedProducts) && parsedProducts.length > 0) {
+          parsedProducts.forEach(item => {
+            if (!item.name) return;
+            const cleanName = String(item.name).trim();
+            const targetCat = item.cat || "Muut";
+            const qty = item.qty ? Number(item.qty) : null;
 
-          const matchIdx = appState.items.findIndex(i => 
-            i.name.toLowerCase() === cleanName.toLowerCase() || 
-            i.name.toLowerCase().includes(cleanName.toLowerCase())
-          );
+            const matchIdx = appState.items.findIndex(i => 
+              i.name.toLowerCase() === cleanName.toLowerCase() || 
+              i.name.toLowerCase().includes(cleanName.toLowerCase())
+            );
 
-          if (matchIdx >= 0) {
-            appState.items[matchIdx].active = true;
-            appState.items[matchIdx].done = false;
-            if (qty) appState.items[matchIdx].qty = qty;
-          } else {
-            appState.items.unshift({
-              name: cleanName,
-              cat: targetCat,
-              active: true,
-              done: false,
-              qty: qty
-            });
-          }
-          addedCount++;
-        });
+            if (matchIdx >= 0) {
+              appState.items[matchIdx].active = true;
+              appState.items[matchIdx].done = false;
+              if (qty) appState.items[matchIdx].qty = qty;
+            } else {
+              appState.items.unshift({
+                name: cleanName,
+                cat: targetCat,
+                active: true,
+                done: false,
+                qty: qty
+              });
+            }
+            addedCount++;
+          });
+        }
 
         await pushToCloud();
         render();
-        showUndoBar(`📷 Tunnistettu ja tuotu ${addedCount} tuotetta lapusta!`);
+        if (addedCount > 0) {
+          showUndoBar(`📷 Tunnistettu ja tuotu ${addedCount} tuotetta lapusta!`);
+        } else {
+          showUndoBar("⚠️ Kuvaa ei tunnistettu, kokeile kuvata lähempää");
+        }
       } catch (err) {
         console.warn("Kuvanluku epäonnistui:", err);
-        showUndoBar("Kuva käsitelty onnistuneesti!");
+        showUndoBar("Kuvanluku epäonnistui, kokeile uudestaan");
       }
     };
 
