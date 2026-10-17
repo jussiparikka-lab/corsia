@@ -1781,11 +1781,14 @@
         const key = catItem.name.toLowerCase().trim();
         if (savedMap.has(key)) {
           const s = savedMap.get(key);
+          const isDone = !!s.done;
+          // Jos tuote on kerätty (done), se EI voi olla aktiivinen (active)
+          const isActive = isDone ? false : !!s.active;
           merged.push({
             name: catItem.name,
             cat: catItem.cat,
-            active: !!s.active,
-            done: !!s.done,
+            active: isActive,
+            done: isDone,
             qty: s.qty || null
           });
           savedMap.delete(key);
@@ -1802,6 +1805,9 @@
 
       // 2. Lisätään käyttäjän mahdollisesti itse luomat omat lisätuotteet tai tarjoukset
       savedMap.forEach(customItem => {
+        const isDone = !!customItem.done;
+        customItem.done = isDone;
+        customItem.active = isDone ? false : !!customItem.active;
         merged.unshift(customItem);
       });
 
@@ -1814,30 +1820,7 @@
         try {
           const parsed = JSON.parse(local);
           if (parsed && Array.isArray(parsed.items)) {
-            // Palautetaan täsmälleen alkuperäinen vakiovalikoima säilyttäen käyttäjän aktiivisuustilat ja määrät
-            const savedMap = new Map();
-            parsed.items.forEach(item => {
-              if (item && item.name) savedMap.set(item.name, item);
-            });
-
-            const merged = DEFAULT_CATALOG.map(def => {
-              const saved = savedMap.get(def.name);
-              return {
-                ...def,
-                active: saved ? !!saved.active : false,
-                done: saved ? !!saved.done : false,
-                qty: saved && saved.qty !== undefined ? saved.qty : null
-              };
-            });
-
-            // Säilytetään lisäksi käyttäjän itse erikseen lisäämät tuotteet tai valitut tarjoukset
-            parsed.items.forEach(item => {
-              if (item && item.name && !DEFAULT_CATALOG.some(d => d.name === item.name)) {
-                merged.unshift(item);
-              }
-            });
-
-            appState = { items: merged };
+            appState.items = mergeCatalogWithSavedItems(parsed.items);
           }
         } catch(e){}
       }
@@ -2186,12 +2169,14 @@
         if (catItems.length === 0) return;
 
         const isOpen = isSearching || categoryOpenState[cat] === true;
-        const activeCount = catItems.filter(i => i.active).length;
+        // Valitut ovat niitä, jotka ovat aktiivisia eivätkä kuitattuja
+        const activeCount = catItems.filter(i => i.active && !i.done).length;
 
         let itemsRows = "";
         if (isOpen) {
           itemsRows = catItems.map(item => {
-            const globalIdx = appState.items.findIndex(x => x.name === item.name && x.cat === item.cat);
+            const globalIdx = appState.items.indexOf(item);
+            const isSelected = !!item.active && !item.done;
             const qtyStr = formatQty(item.qty);
             const isDeal = item.name.includes("(tarjous:");
 
@@ -2204,13 +2189,13 @@
                   ${qtyStr ? `<span class="qty-tag" onclick="event.stopPropagation(); openQtyModal(${globalIdx})">${qtyStr} ✎</span>` : ''}
                 </div>
                 <div class="row-actions">
-                  ${item.active ? `
+                  ${isSelected ? `
                     <button class="btn-qty-quick" onclick="event.stopPropagation(); openQtyModal(${globalIdx})">
                       ${qtyStr || '+ määrä'}
                     </button>
                   ` : ''}
                   <button class="btn-delete-row" onclick="event.stopPropagation(); openDeleteModal(${globalIdx})">🗑</button>
-                  <div class="checkbox-round ${item.active ? 'checked' : ''}"></div>
+                  <div class="checkbox-round ${isSelected ? 'checked' : ''}"></div>
                 </div>
               </div>
             `;
@@ -2316,8 +2301,18 @@
 
     window.toggleActive = function(index) {
       if (!appState.items[index]) return;
-      appState.items[index].active = !appState.items[index].active;
-      appState.items[index].done = false;
+      const item = appState.items[index];
+      
+      // Jos tuote oli valittuna, poistetaan valinta
+      if (item.active && !item.done) {
+        item.active = false;
+        item.done = false;
+      } else {
+        // Valitaan tuote uudelleen ostoslistalle
+        item.active = true;
+        item.done = false;
+      }
+      
       pushToCloud();
       render();
     };
