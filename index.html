@@ -2123,7 +2123,8 @@ Palauta tulos AINOASTAAN puhtaana JSON-taulukkona ilman muuta tekstiä tai selit
 
         for (const model of candidateModels) {
           try {
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+            // Huom: käytetään VAIN x-goog-api-key headeria, EI ?key= parametrina, jotta Google ei hylkää kaksoisautentikointia
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
             const response = await fetch(url, {
               method: 'POST',
               headers: {
@@ -2148,7 +2149,12 @@ Palauta tulos AINOASTAAN puhtaana JSON-taulukkona ilman muuta tekstiä tai selit
             } else {
               const errBody = await response.text();
               console.warn(`Model ${model} returned error status:`, response.status, errBody);
-              lastApiError = `Status ${response.status}`;
+              try {
+                const errObj = JSON.parse(errBody);
+                lastApiError = errObj.error?.message || `Virhe ${response.status}`;
+              } catch(e) {
+                lastApiError = `Status ${response.status}`;
+              }
             }
           } catch (err) {
             console.warn(`Model ${model} network error:`, err);
