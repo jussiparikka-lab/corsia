@@ -1924,193 +1924,15 @@
       }
     }
 
-    /* ==========================================
-       ÄLYKÄS TUOTEKUVATUNNISTUS (GEMINI VISION)
-       Jääkaappikuvat ja WhatsApp-kuvat
-       ========================================== */
-    window.triggerProductImageCapture = function() {
-      const fileInput = document.getElementById("vision-file-input");
-      if (fileInput) {
-        fileInput.value = "";
-        fileInput.click();
-      }
-    };
-
-    window.closeVisionModal = function() {
-      document.getElementById("vision-modal").style.display = "none";
-      currentPendingImageBase64 = null;
-    };
-
-    window.saveInlineGeminiKeyAndRetry = async function() {
-      const inp = document.getElementById("inline-gemini-key");
-      const val = inp ? inp.value.trim() : "";
-      if (!val) {
-        showUndoBar("Syötä Gemini API -avain ensin.");
-        return;
-      }
-      localStorage.setItem("corsia_gemini_api_key", val);
-      document.getElementById("vision-key-prompt").style.display = "none";
-
-      if (currentPendingImageBase64) {
-        await runProductIdentification(currentPendingImageBase64, val);
-      }
-    };
-
-    async function handleProductImageSelected(e) {
-      const file = e.target.files && e.target.files[0];
-      if (!file) return;
-
-      const modal = document.getElementById("vision-modal");
-      const previewCont = document.getElementById("vision-preview-container");
-      const previewImg = document.getElementById("vision-preview-img");
-      const statusBox = document.getElementById("vision-status-box");
-      const statusText = document.getElementById("vision-status-text");
-      const resultFields = document.getElementById("vision-result-fields");
-      const keyPrompt = document.getElementById("vision-key-prompt");
-      const btnAccept = document.getElementById("btn-vision-accept");
-      const catSelect = document.getElementById("vision-item-cat");
-
-      modal.style.display = "flex";
-      previewCont.style.display = "none";
-      resultFields.style.display = "none";
-      keyPrompt.style.display = "none";
-      btnAccept.disabled = true;
-
-      // Popukoidaan kategoriat alasvetovalikkoon
-      catSelect.innerHTML = STANDARD_CATEGORIES.map(c => `<option value="${c}">${c}</option>`).join("");
-
-      try {
-        const { base64Data, dataUrl } = await convertAndCompressImage(file);
-        previewImg.src = dataUrl;
-        previewCont.style.display = "block";
-        currentPendingImageBase64 = base64Data;
-
-        const apiKey = localStorage.getItem("corsia_gemini_api_key") || DEFAULT_GEMINI_API_KEY;
-
-        if (!apiKey) {
-          keyPrompt.style.display = "block";
-          statusBox.style.display = "none";
-          return;
-        }
-
-        await runProductIdentification(base64Data, apiKey);
-
-      } catch (err) {
-        console.error("Tuotekuvatunnistus epäonnistui:", err);
-        statusBox.style.display = "flex";
-        statusText.innerText = "Virhe kuvan käsittelyssä: " + (err.message || "Tuntematon virhe");
-      }
-    }
-
-    async function runProductIdentification(base64Data, apiKey) {
-      const statusBox = document.getElementById("vision-status-box");
-      const statusText = document.getElementById("vision-status-text");
-      const resultFields = document.getElementById("vision-result-fields");
-      const btnAccept = document.getElementById("btn-vision-accept");
-      const nameInput = document.getElementById("vision-item-name");
-      const qtyInput = document.getElementById("vision-item-qty");
-      const catSelect = document.getElementById("vision-item-cat");
-      const keyPrompt = document.getElementById("vision-key-prompt");
-
-      statusBox.style.display = "flex";
-      statusText.innerText = "Tunnistetaan tuotetta ja brändiä tekoälyllä...";
-      btnAccept.disabled = true;
-      resultFields.style.display = "none";
-
-      try {
-        const identified = await identifyProductWithGemini(base64Data, apiKey);
-
-        nameInput.value = identified.name || "Tuntematon tuote";
-        qtyInput.value = identified.qty || 1;
-        const matchedCat = resolveStandardCategory(identified.category, identified.name);
-        catSelect.value = matchedCat;
-
-        statusBox.style.display = "none";
-        resultFields.style.display = "block";
-        btnAccept.disabled = false;
-      } catch (err) {
-        console.error("Gemini Vision epäonnistui:", err);
-        statusBox.style.display = "flex";
-        statusText.innerText = "Tunnistusvirhe: " + err.message;
-        
-        // Jos avain oli väärä tai vanhentunut, annetaan mahdollisuus syöttää se uudestaan
-        if (err.message.includes("API-avain") || err.message.includes("400") || err.message.includes("401") || err.message.includes("403")) {
-          keyPrompt.style.display = "block";
-          statusBox.style.display = "none";
-        }
-      }
-    }
-
-    async function identifyProductWithGemini(base64Jpeg, apiKey) {
-      const effectiveKey = apiKey || DEFAULT_GEMINI_API_KEY;
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(effectiveKey)}`;
-
-      const promptText = `
-        Toimi suomalaisen ruokakauppasovelluksen huipputarkkana konenäkömoottorina.
-        Kuvassa on elintarvike tai tuote, joka on otettu jääkaapista, ruokakaapista tai WhatsApp-viestistä.
-
-        TÄRKEÄT OHJEET:
-        1. ÄLÄ lue viivakoodeja, eränumeroita, "parasta ennen" -päivämääriä, ravintoarvoja tai kierrätysmerkintöjä!
-        2. Tunnista pakkauksen keskeinen tuote ja brändi selkeällä suomen kielellä (esim. "Valio Oivariini vähemmän suolaa", "Oatly Barista Kaurajuoma", "Fazer Puikula Täysjyväruis", "Felix Ketsuppi", "Valio Polar 15%").
-        3. Valitse kategoria tarkasti jokin näistä: ${STANDARD_CATEGORIES.join(", ")}.
-        4. Määrä (oletus 1).
-
-        Palauta VAIN ja AINOASTAAN JSON ilman markdown-koodiaitaa:
-        {"name": "Brändi ja tuotenimi", "category": "Kategoria", "qty": 1}
-      `;
-
-      let response;
-      try {
-        response = await fetch(url, {
-          method: "POST",
-          headers: { 
-            "Content-Type": "application/json",
-            "x-goog-api-key": effectiveKey
-          },
-          body: JSON.stringify({
-            contents: [{
-              parts: [
-                { text: promptText },
-                { inlineData: { mimeType: "image/jpeg", data: base64Jpeg } }
-              ]
-            }],
-            generationConfig: {
-              temperature: 0.1,
-              responseMimeType: "application/json"
-            }
-          })
-        });
-      } catch (e) {
-        throw new Error("Verkkovirhe Gemini-palvelimeen. Tarkista nettiyhteys.");
-      }
-
-      if (!response.ok) {
-        if (response.status === 400 || response.status === 401 || response.status === 403) {
-          throw new Error("Virheellinen tai vanhentunut Gemini API -avain (HTTP " + response.status + ")");
-        }
-        throw new Error(`Gemini-palvelin vastasi virheellä ${response.status}`);
-      }
-
-      const resData = await response.json();
-      const rawJson = resData.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!rawJson) throw new Error("Tekoäly ei palauttanut vastausta kuvasta.");
-
-      try {
-        return JSON.parse(rawJson);
-      } catch (parseErr) {
-        // Puhdistetaan mahdolliset ylimääräiset merkit
-        const cleaned = rawJson.replace(/```json/gi, "").replace(/```/g, "").trim();
-        return JSON.parse(cleaned);
-      }
-    }
-
     async function pushToCloud() {
       saveLocal();
       if (!dbInstance || !window.FirebaseModule) return;
       try {
         const { doc, setDoc } = window.FirebaseModule;
         await setDoc(doc(dbInstance, "perhe", "kauppalappu"), appState);
-      } catch (e) {}
+      } catch (e) {
+        console.warn("Pilvitallennus epäonnistui:", e);
+      }
     }
 
     window.navigate = function(view, storeKey = "") {
@@ -2125,25 +1947,27 @@
       const pageTitle = document.getElementById("page-title");
       const btnBack = document.getElementById("btn-back");
 
+      if (!appEl) return;
+
       if (currentView === "home") {
         appEl.classList.remove("store-view-padding");
-        btnBack.style.visibility = "hidden";
-        pageTitle.innerText = "Corsia";
+        if (btnBack) btnBack.style.visibility = "hidden";
+        if (pageTitle) pageTitle.innerText = "Corsia";
         renderHome(appEl);
       } else if (currentView === "deals") {
         appEl.classList.remove("store-view-padding");
-        btnBack.style.visibility = "visible";
-        pageTitle.innerText = "Tarjoukset & Tärpit";
+        if (btnBack) btnBack.style.visibility = "visible";
+        if (pageTitle) pageTitle.innerText = "Tarjoukset & Tärpit";
         renderDeals(appEl);
       } else if (currentView === "soffa") {
         appEl.classList.remove("store-view-padding");
-        btnBack.style.visibility = "visible";
-        pageTitle.innerText = "Kotisohva";
+        if (btnBack) btnBack.style.visibility = "visible";
+        if (pageTitle) pageTitle.innerText = "Kotisohva";
         renderSoffa(appEl);
       } else if (currentView === "store") {
         appEl.classList.add("store-view-padding");
-        btnBack.style.visibility = "visible";
-        pageTitle.innerText = STORE_NAMES[activeStoreKey] || "Kauppareitti";
+        if (btnBack) btnBack.style.visibility = "visible";
+        if (pageTitle) pageTitle.innerText = STORE_NAMES[activeStoreKey] || "Kauppareitti";
         renderStore(appEl);
       }
     }
@@ -2154,7 +1978,7 @@
       container.innerHTML = `
         <div class="home-hero">
           <h2>Tervetuloa ostoksille</h2>
-          <p>${activeCount > 0 ? `Listalla on <strong>${activeCount}</strong> tuotetta valmiina kerättäväksi.` : "Kauppalappu on tyhjä. Valitse tuotteet kotisohvalla tai tutustu tarjouksiin!"}</p>
+          <p>${activeCount > 0 ? `Listalla on <strong>${activeCount}</strong> tuotetta valmiina kerättäväksi.` : "Kauppalappu on tyhjä. Valitse tuotteet kotisohvalla tai tarjouksista!"}</p>
         </div>
 
         <div class="card-list">
@@ -2163,7 +1987,7 @@
             <div class="card-icon">🛋️</div>
             <div class="card-info">
               <div class="card-title">Täytä kauppalappua kotisohvalla</div>
-              <div class="card-desc">Valitse vakiotuotteet, sanelu ”ja”-sanalla tai lisää uusia</div>
+              <div class="card-desc">Valitse vakiotuotteet, pikamäärät tai lisää uusia</div>
             </div>
             <div class="card-arrow">›</div>
           </div>
@@ -2183,8 +2007,12 @@
           <!-- K-Citymarket Tammisto -->
           <div class="action-card" onclick="navigate('store', 'cm_tammisto')">
             <div class="logo-container" style="background: #d6001c;">
-              <svg width="80" height="28" viewBox="0 0 170 42">
-                <text x="85" y="26" fill="#ffffff" font-family="sans-serif" font-weight="900" font-size="12" text-anchor="middle">CITYMARKET TAMMISTO</text>
+              <svg width="80" height="28" viewBox="0 0 170 42" xmlns="http://www.w3.org/2000/svg">
+                <line x1="10" y1="9" x2="22" y2="9" stroke="#ff6b00" stroke-width="2.4" stroke-linecap="round"/>
+                <text x="16" y="23" fill="#ff6b00" font-family="-apple-system, BlinkMacSystemFont, Arial, sans-serif" font-weight="900" font-size="14" text-anchor="middle">K</text>
+                <line x1="10" y1="27" x2="22" y2="27" stroke="#ff6b00" stroke-width="2.4" stroke-linecap="round"/>
+                <text x="27" y="24" fill="#ffffff" font-family="-apple-system, BlinkMacSystemFont, Arial, sans-serif" font-weight="900" font-size="15" letter-spacing="0.2">CITYMARKET</text>
+                <text x="85" y="37" fill="#ffffff" font-family="-apple-system, BlinkMacSystemFont, Arial, sans-serif" font-weight="800" font-size="10.5" letter-spacing="1.5" text-anchor="middle">TAMMISTO</text>
               </svg>
             </div>
             <div class="card-info">
@@ -2197,8 +2025,12 @@
           <!-- K-Citymarket Jumbo -->
           <div class="action-card" onclick="navigate('store', 'cm_jumbo')">
             <div class="logo-container" style="background: #d6001c;">
-              <svg width="80" height="28" viewBox="0 0 170 42">
-                <text x="85" y="26" fill="#ffffff" font-family="sans-serif" font-weight="900" font-size="12" text-anchor="middle">CITYMARKET JUMBO</text>
+              <svg width="80" height="28" viewBox="0 0 170 42" xmlns="http://www.w3.org/2000/svg">
+                <line x1="10" y1="9" x2="22" y2="9" stroke="#ff6b00" stroke-width="2.4" stroke-linecap="round"/>
+                <text x="16" y="23" fill="#ff6b00" font-family="-apple-system, BlinkMacSystemFont, Arial, sans-serif" font-weight="900" font-size="14" text-anchor="middle">K</text>
+                <line x1="10" y1="27" x2="22" y2="27" stroke="#ff6b00" stroke-width="2.4" stroke-linecap="round"/>
+                <text x="27" y="24" fill="#ffffff" font-family="-apple-system, BlinkMacSystemFont, Arial, sans-serif" font-weight="900" font-size="15" letter-spacing="0.2">CITYMARKET</text>
+                <text x="85" y="37" fill="#ffffff" font-family="-apple-system, BlinkMacSystemFont, Arial, sans-serif" font-weight="800" font-size="10.5" letter-spacing="2.2" text-anchor="middle">JUMBO</text>
               </svg>
             </div>
             <div class="card-info">
@@ -2208,103 +2040,110 @@
             <div class="card-arrow">›</div>
           </div>
 
-          <!-- IKEA -->
+          <!-- IKEA (Virallinen logo) -->
           <div class="action-card" onclick="navigate('store', 'ikea')">
-            <div class="logo-container" style="background: #0051ba; border: 1px solid #004299;">
-              <svg width="78" height="28" viewBox="0 0 130 50">
-                <!-- Sininen pohja -->
-                <rect width="130" height="50" fill="#0051ba" />
-                <!-- Keltainen soikio / ellipsi -->
-                <ellipse cx="65" cy="25" rx="60" ry="22.5" fill="#ffda1a" />
-                <!-- Sininen IKEA-teksti -->
-                <text x="63" y="35" fill="#0051ba" font-family="Arial Black, Impact, sans-serif" font-weight="900" font-size="31" letter-spacing="1.5" text-anchor="middle">IKEA</text>
-                <!-- Pieni rekisteröity tavaramerkkimerkki ® -->
-                <text x="115" y="19" fill="#0051ba" font-family="Arial, sans-serif" font-weight="bold" font-size="7">®</text>
+            <div class="logo-container" style="background: #0051ba; border-color: #003e8f;">
+              <svg width="82" height="32" viewBox="0 0 180 72" xmlns="http://www.w3.org/2000/svg">
+                <rect width="180" height="72" fill="#0051ba"/>
+                <ellipse cx="90" cy="36" rx="86" ry="32" fill="#ffda1a"/>
+                <text x="90" y="52" font-family="Arial Black, Impact, sans-serif" font-weight="900" font-size="47" fill="#0051ba" text-anchor="middle" letter-spacing="0.5">IKEA</text>
+                <text x="160" y="25" font-family="Arial, sans-serif" font-weight="bold" font-size="14" fill="#0051ba">®</text>
               </svg>
             </div>
-            <div class="card-info"><div class="card-title">IKEA</div><div class="card-desc">Sisustus, huonekalut & pientavarat</div></div>
+            <div class="card-info">
+              <div class="card-title">IKEA</div>
+              <div class="card-desc">Sisustus, huonekalut & pientavarat</div>
+            </div>
             <div class="card-arrow">›</div>
           </div>
 
           <!-- Rautakauppa -->
           <div class="action-card" onclick="navigate('store', 'rautakauppa')">
-            <div class="logo-container" style="background: #ff5722;"><text x="50%" y="68%" fill="#ffffff" font-family="sans-serif" font-weight="900" font-size="14" text-anchor="middle">RAUTA</text></div>
-            <div class="card-info"><div class="card-title">Rautakauppa</div><div class="card-desc">Työkalut, remontointi & tarvikkeet</div></div>
+            <div class="logo-container" style="background: #ff5722; border-color: #e64a19;">
+              <svg width="80" height="28" viewBox="0 0 170 42" xmlns="http://www.w3.org/2000/svg">
+                <g fill="#ffffff"><path d="M26 12 L34 12 L34 16 L29 18 L38 29 L35 32 L26 21 L24 26 L20 26 Z"/></g>
+                <text x="44" y="27" font-family="-apple-system, sans-serif" font-weight="900" font-size="16" fill="#ffffff">RAUTA</text>
+              </svg>
+            </div>
+            <div class="card-info">
+              <div class="card-title">Rautakauppa</div>
+              <div class="card-desc">Työkalut, remontointi & tarvikkeet</div>
+            </div>
             <div class="card-arrow">›</div>
           </div>
 
           <!-- Apteekki -->
           <div class="action-card" onclick="navigate('store', 'apteekki')">
-            <div class="logo-container" style="background: #ffffff; border-color: #a5d6a7;"><text x="50%" y="68%" fill="#007934" font-family="sans-serif" font-weight="900" font-size="13" text-anchor="middle">APTEEKKI</text></div>
-            <div class="card-info"><div class="card-title">Apteekki</div><div class="card-desc">Lääkkeet, vitamiinit & hoitotuotteet</div></div>
-            <div class="card-arrow">›</div>
-          </div>
-        </div>
-
-        <!-- Alalaitaan erilleen siirretty Tarjoukset-osio -->
-        <div class="deals-bottom-section">
-          <div class="deals-bottom-label">
-            <span>🔥 Päivän Parhaat Säästöt</span>
-          </div>
-          <div class="action-card card-deals" onclick="navigate('deals')">
-            <div class="card-icon">🏷️</div>
+            <div class="logo-container" style="background: #ffffff; border-color: #a5d6a7;">
+              <svg width="80" height="28" viewBox="0 0 170 42" xmlns="http://www.w3.org/2000/svg">
+                <rect x="18" y="10" width="8" height="22" rx="2" fill="#007934"/>
+                <rect x="11" y="17" width="22" height="8" rx="2" fill="#007934"/>
+                <text x="44" y="27" font-family="-apple-system, sans-serif" font-weight="900" font-size="15" fill="#007934">APTEEKKI</text>
+              </svg>
+            </div>
             <div class="card-info">
-              <div class="card-title">Tarjoukset</div>
-              <div class="card-desc">Tammiston ja lähialueen ajankohtaiset tärpit</div>
+              <div class="card-title">Apteekki</div>
+              <div class="card-desc">Lääkkeet, vitamiinit & hoitotuotteet</div>
             </div>
             <div class="card-arrow">›</div>
           </div>
-        </div>
 
-        <!-- WA-tuonti ja uusi Kameranappi vierekkäin -->
-        <div class="home-quick-actions-row">
-          <div class="card-wa-subtle" onclick="handleWhatsAppImport()">💬 Tuo WhatsApp-lista</div>
-          <button class="btn-camera-subtle" onclick="triggerCameraCapture()" title="Lue kauppalappu tai kuitti kameralla">📷</button>
-        </div>
+          <!-- Tarjoukset & Tärpit alaosioon -->
+          <div class="deals-bottom-section">
+            <div class="deals-bottom-label">
+              <span>🔥</span> Päivän tärpit & tarjoukset
+            </div>
+            <div class="action-card card-deals" onclick="navigate('deals')">
+              <div class="card-icon">🏷️</div>
+              <div class="card-info">
+                <div class="card-title">Tammiston & Vantaan Tarjoukset</div>
+                <div class="card-desc">Lohi, Liha, Kahvi, Lidl & Paikallisdiilit</div>
+              </div>
+              <div class="card-arrow">›</div>
+            </div>
+          </div>
 
-        <div class="home-footer">
-          <div>Jussi 2026</div>
-          <div style="margin-top: 4px; font-size: 0.68rem; color: #64748b; font-weight: 500; letter-spacing: 0.2px;">
-            Powered by <strong>Gemini AI</strong>, <strong>Tesseract OCR</strong> & <strong>Smart NLP</strong>
+          <!-- WA & Kamera -pikapainikkeet -->
+          <div class="home-quick-actions-row">
+            <div class="card-wa-subtle" onclick="handleWhatsAppImport()" title="Tuo tuotteet viestistä">
+              <span>💬 Tuo WhatsApp-lista</span>
+            </div>
+            <button class="btn-camera-subtle" onclick="triggerCameraCapture()" title="Lue kuitti tai paperilappu kameralla">
+              📷
+            </button>
           </div>
         </div>
+
+        <div class="home-footer">Jussi 2026</div>
       `;
     }
 
     function renderDeals(container) {
-      const validDeals = DAILY_DEALS.filter(d => d && d.name && d.name.trim() !== "" && d.price && d.price.trim() !== "");
-      
-      const rawCategories = [...new Set(validDeals.map(d => d.cat))];
-      const offerillaCat = "🎁 Offerilla – Vantaan Paikallisdiilit";
-      const dealCategories = rawCategories.filter(c => c !== offerillaCat);
-      if (rawCategories.includes(offerillaCat)) {
-        dealCategories.push(offerillaCat);
-      }
+      const dealCategories = [...new Set(DAILY_DEALS.map(d => d.cat))];
 
       let html = `
         <div style="margin-bottom: 12px; background: #fff7ed; border: 1px solid #fed7aa; padding: 10px 12px; border-radius: 10px;">
-          <h3 style="margin: 0 0 3px; font-size: 0.95rem; color: #c2410c;">🔥 Tammiston & Vantaan Päivän Tärpit (Päivittyvä lista)</h3>
-          <p style="margin: 0; font-size: 0.78rem; color: #9a3412;">Klikkaa <strong>+ Valitse</strong> lisätäksesi tuotteen listalle tai <strong>(Linkki)</strong> avataksesi tarjoussivun.</p>
+          <h3 style="margin: 0 0 3px; font-size: 0.95rem; color: #c2410c;">🔥 Tammiston Päivän Tärpit</h3>
+          <p style="margin: 0; font-size: 0.78rem; color: #9a3412;">Klikkaa <strong>+ Valitse</strong> lisätäksesi tuotteen kauppalistaasi. Se merkitään automaattisesti kaupan nimellä.</p>
         </div>
       `;
 
       dealCategories.forEach(cat => {
-        const dealsInCat = validDeals.filter(d => d.cat === cat);
-        if (dealsInCat.length === 0) return;
-        const isOfferillaSection = (cat === offerillaCat);
+        const dealsInCat = DAILY_DEALS.filter(d => d.cat === cat);
+        const isOfferilla = cat.includes("Offerilla");
 
         html += `
           <div class="category-group">
-            <div class="category-header" style="${isOfferillaSection ? 'background: #f1f5f9; color: #0f172a; border-color: #cbd5e1;' : 'background: #ffedd5; color: #9a3412; border-color: #fed7aa;'}">
+            <div class="category-header" style="${isOfferilla ? 'background: #e0f2fe; color: #0369a1; border-color: #bae6fd;' : 'background: #ffedd5; color: #9a3412; border-color: #fed7aa;'}">
               <span>${cat}</span>
-              <span>${dealsInCat.length} tärppiä</span>
+              <span>${dealsInCat.length} kpl</span>
             </div>
             ${dealsInCat.map(deal => {
               const fullItemName = `${deal.name} (tarjous: ${deal.store})`;
-              const isAdded = appState.items.some(i => i.name === fullItemName && i.active);
+              const isAdded = appState.items.some(i => i.name === fullItemName && i.active && !i.done);
 
               return `
-                <div class="deal-card ${isOfferillaSection ? 'deal-card-offerilla' : ''}">
+                <div class="deal-card ${isOfferilla ? 'deal-card-offerilla' : ''}">
                   <div class="deal-info">
                     <div class="deal-title">${deal.name}</div>
                     <div class="deal-price">${deal.price}</div>
@@ -2328,17 +2167,15 @@
       if (!deal) return;
 
       const formattedName = `${deal.name} (tarjous: ${deal.store})`;
-      const existingIdx = appState.items.findIndex(i => i.name === formattedName);
+      const existing = appState.items.find(i => i.name === formattedName);
 
-      if (existingIdx >= 0) {
-        appState.items[existingIdx].active = !appState.items[existingIdx].active;
-        appState.items[existingIdx].done = false;
-        appState.items[existingIdx].cat = resolveStandardCategory(appState.items[existingIdx].cat, formattedName);
+      if (existing) {
+        existing.active = !existing.active;
+        existing.done = false;
       } else {
-        const assignedCat = resolveStandardCategory(deal.mainCat, deal.name);
         appState.items.unshift({
           name: formattedName,
-          cat: assignedCat,
+          cat: deal.mainCat || "Muut",
           active: true,
           done: false,
           qty: 1
@@ -2362,38 +2199,6 @@
         return idxA - idxB;
       });
 
-      const categoriesHtml = buildSoffaCategoriesHtml(categories);
-
-      container.innerHTML = `
-        <div class="search-box">
-          <span class="search-icon">🔍</span>
-          <input type="text" id="soffa-search-input" class="search-input" placeholder="Etsi tuotetta tai kategoriaa..." value="${searchQuery}" oninput="onSearchChange(this.value)">
-          <button class="search-clear-btn" id="soffa-search-clear" onclick="clearSearch()" style="display: ${searchQuery ? 'flex' : 'none'};">✕</button>
-        </div>
-
-        <div class="add-section">
-          <div class="add-section-title"><span>+ Lisää uusi tuote tai sanele listaa</span></div>
-          <div class="form-row">
-            <div class="form-inputs-group">
-              <input type="text" id="new-item-name" class="input-field" placeholder="Tuote (tai sanele mikillä)">
-              <input type="number" id="new-item-qty" class="qty-field" placeholder="Määrä (3/300)">
-              <button class="btn-mic" id="btn-mic" onclick="startDictation()" title="Sanele useita tuotteita kerralla: 'maito ja lohi ja kurkku'">🎤</button>
-              <button class="btn-mic" id="btn-fridge-cam" onclick="triggerProductImageCapture()" title="Ota kuva jääkaapista tai valitse WhatsApp-kuva tuotteesta" style="color: #0284c7;">📷</button>
-            </div>
-            <select id="new-item-cat" class="select-field">
-              ${categories.map(c => `<option value="${c}">${c}</option>`).join("")}
-            </select>
-            <button class="btn-add" onclick="addNewProduct()">Lisää kauppalappuun</button>
-          </div>
-        </div>
-
-        <div id="soffa-categories-container">
-          ${categoriesHtml || '<div class="empty-state">Ei hakua vastaavia tuotteita</div>'}
-        </div>
-      `;
-    }
-
-    function buildSoffaCategoriesHtml(categories) {
       const query = (searchQuery || "").toLowerCase();
       const isSearching = query.length > 0;
       const filteredItems = appState.items.filter(item => {
@@ -2401,29 +2206,26 @@
         return item.name.toLowerCase().includes(query) || item.cat.toLowerCase().includes(query);
       });
 
-      let html = "";
+      let categoriesHtml = "";
       categories.forEach(cat => {
         const catItems = filteredItems.filter(i => i.cat === cat).sort((a, b) => a.name.localeCompare(b.name, 'fi'));
         if (catItems.length === 0) return;
 
         const isOpen = isSearching || categoryOpenState[cat] === true;
-        // Valitut ovat niitä, jotka ovat aktiivisia eivätkä kuitattuja
         const activeCount = catItems.filter(i => i.active && !i.done).length;
 
         let itemsRows = "";
         if (isOpen) {
           itemsRows = catItems.map(item => {
             const globalIdx = appState.items.indexOf(item);
-            const isSelected = !!item.active && !item.done;
             const qtyStr = formatQty(item.qty);
-            const isDeal = item.name.includes("(tarjous:");
+            const isSelected = item.active && !item.done;
 
             return `
               <div class="product-row" onclick="toggleActive(${globalIdx})">
                 <div class="product-info-inline">
                   <span class="product-name">${item.name}</span>
                   <span class="product-cat-tag">(${item.cat})</span>
-                  ${isDeal ? `<span class="deal-badge-tag">Tarjous</span>` : ''}
                   ${qtyStr ? `<span class="qty-tag" onclick="event.stopPropagation(); openQtyModal(${globalIdx})">${qtyStr} ✎</span>` : ''}
                 </div>
                 <div class="row-actions">
@@ -2440,7 +2242,7 @@
           }).join("");
         }
 
-        html += `
+        categoriesHtml += `
           <div class="category-group">
             <div class="category-header" onclick="toggleCategory('${cat}')">
               <div style="display: flex; align-items: center;">
@@ -2453,7 +2255,32 @@
           </div>
         `;
       });
-      return html;
+
+      container.innerHTML = `
+        <div class="search-box">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="soffa-search-input" class="search-input" placeholder="Etsi tuotetta tai kategoriaa..." value="${searchQuery}" oninput="onSearchChange(this.value)">
+          ${searchQuery ? `<button class="search-clear-btn" onclick="clearSearch()">✕</button>` : ''}
+        </div>
+
+        <div class="add-section">
+          <div class="add-section-title"><span>+ Lisää uusi tuote valikoimaan</span></div>
+          <div class="form-row">
+            <div class="form-inputs-group">
+              <input type="text" id="new-item-name" class="input-field" placeholder="Tuotteen nimi">
+              <input type="number" id="new-item-qty" class="qty-field" placeholder="Määrä (3/300)">
+              <button class="btn-mic" id="btn-mic" onclick="startDictation()" title="Sanele ostokset puheella">🎤</button>
+              <button class="btn-mic" onclick="triggerProductImageCapture()" title="Kuvaa tuote tai tuo kuva" style="font-size: 1.15rem;">📷</button>
+            </div>
+            <select id="new-item-cat" class="select-field">
+              ${categories.map(c => `<option value="${c}">${c}</option>`).join("")}
+            </select>
+            <button class="btn-add" onclick="addNewProduct()">Lisää kauppalappuun</button>
+          </div>
+        </div>
+
+        ${categoriesHtml || '<div class="empty-state">Ei hakua vastaavia tuotteita</div>'}
+      `;
     }
 
     function renderStore(container) {
@@ -2482,7 +2309,7 @@
         if (catItems.length === 0) return;
 
         const itemsRows = catItems.map(item => {
-          const globalIdx = appState.items.findIndex(x => x.name === item.name && x.cat === item.cat);
+          const globalIdx = appState.items.indexOf(item);
           const qtyStr = formatQty(item.qty);
 
           return `
@@ -2507,24 +2334,22 @@
 
       if (otherActiveItems.length > 0) {
         storeContentHtml += `
-          <div style="margin-top: 24px; padding-top: 12px; border-top: 1px dashed #cbd5e1;">
-            <div style="font-size: 0.74rem; font-weight: 700; color: #64748b; margin-bottom: 7px;">
-              💡 Muilla listoilla tai tarjouksissa odottaa (${otherActiveItems.length})
+          <div class="other-stores-section">
+            <div class="other-stores-header">
+              <span>💡 Muilla listoilla tai tarjouksissa odottaa (${otherActiveItems.length})</span>
             </div>
-            ${otherActiveItems.map(item => {
-              const globalIdx = appState.items.findIndex(x => x.name === item.name && x.cat === item.cat);
-              const qtyStr = formatQty(item.qty);
-              return `
-                <div class="product-row" style="margin-bottom: 6px;" onclick="markDone(${globalIdx})">
-                  <div class="product-info-inline">
-                    <span class="product-name">${item.name}</span>
-                    <span class="product-cat-tag">(${item.cat})</span>
-                    ${qtyStr ? `<span class="qty-tag">${qtyStr}</span>` : ''}
+            <div class="other-stores-list">
+              ${otherActiveItems.map(item => {
+                const globalIdx = appState.items.indexOf(item);
+                const qtyStr = formatQty(item.qty);
+                return `
+                  <div class="other-store-item" onclick="markDone(${globalIdx})">
+                    <div class="other-store-name">${item.name}</div>
+                    <button class="btn-other-done">Kuittaa täältä ✓</button>
                   </div>
-                  <button class="store-item-btn" style="padding: 4px 8px; font-size: 0.72rem;">Kuittaa täältä ✓</button>
-                </div>
-              `;
-            }).join("")}
+                `;
+              }).join("")}
+            </div>
           </div>
         `;
       }
@@ -2539,18 +2364,9 @@
 
     window.toggleActive = function(index) {
       if (!appState.items[index]) return;
-      const item = appState.items[index];
-      
-      // Jos tuote oli valittuna, poistetaan valinta
-      if (item.active && !item.done) {
-        item.active = false;
-        item.done = false;
-      } else {
-        // Valitaan tuote uudelleen ostoslistalle
-        item.active = true;
-        item.done = false;
-      }
-      
+      const isCurrentlyActive = appState.items[index].active && !appState.items[index].done;
+      appState.items[index].active = !isCurrentlyActive;
+      appState.items[index].done = false;
       pushToCloud();
       render();
     };
@@ -2566,34 +2382,54 @@
       render();
     };
 
+    window.triggerUndo = function() {
+      if (lastCollectedIndex !== null && appState.items[lastCollectedIndex]) {
+        appState.items[lastCollectedIndex].done = false;
+        appState.items[lastCollectedIndex].active = true;
+        pushToCloud();
+        render();
+        lastCollectedIndex = null;
+      }
+      const bar = document.getElementById("undo-bar");
+      if (bar) bar.style.display = "none";
+      if (undoTimer) clearTimeout(undoTimer);
+    };
+
     window.addNewProduct = function() {
       const nameInp = document.getElementById("new-item-name");
       const catSelect = document.getElementById("new-item-cat");
+      const qtyInp = document.getElementById("new-item-qty");
+
       const name = nameInp ? nameInp.value.trim() : "";
       const cat = catSelect ? catSelect.value : "Muut";
+      const qty = qtyInp && qtyInp.value ? Number(qtyInp.value) : 1;
       if (!name) return;
 
-      // Jos käyttäjä kirjoittaa käsin "maito ja leipä ja voi"
-      if (name.includes(" ja ") || name.includes(" sekä ") || name.includes(",")) {
-        processRawTextToShoppingList(name);
-        nameInp.value = "";
-        return;
+      const existing = appState.items.find(i => i.name.toLowerCase() === name.toLowerCase());
+      if (existing) {
+        existing.active = true;
+        existing.done = false;
+        existing.qty = qty;
+      } else {
+        appState.items.unshift({ name, cat, active: true, done: false, qty });
       }
 
-      appState.items.unshift({ name, cat, active: true, done: false, qty: 1 });
-      nameInp.value = "";
+      if (nameInp) nameInp.value = "";
+      if (qtyInp) qtyInp.value = "";
       pushToCloud();
       render();
     };
 
     window.openDeleteModal = function(index) {
       deleteTargetIndex = index;
-      document.getElementById("delete-modal").style.display = "flex";
+      const modal = document.getElementById("delete-modal");
+      if (modal) modal.style.display = "flex";
     };
 
     window.closeDeleteModal = function() {
       deleteTargetIndex = null;
-      document.getElementById("delete-modal").style.display = "none";
+      const modal = document.getElementById("delete-modal");
+      if (modal) modal.style.display = "none";
     };
 
     window.executeDeleteProduct = function() {
@@ -2607,18 +2443,25 @@
 
     window.openQtyModal = function(index) {
       qtyTargetIndex = index;
-      document.getElementById("qty-modal-input").value = appState.items[index].qty || "";
-      document.getElementById("qty-modal").style.display = "flex";
+      const item = appState.items[index];
+      const input = document.getElementById("qty-modal-input");
+      if (input && item) {
+        input.value = item.qty || "";
+      }
+      const modal = document.getElementById("qty-modal");
+      if (modal) modal.style.display = "flex";
     };
 
     window.closeQtyModal = function() {
       qtyTargetIndex = null;
-      document.getElementById("qty-modal").style.display = "none";
+      const modal = document.getElementById("qty-modal");
+      if (modal) modal.style.display = "none";
     };
 
     window.saveQtyModal = function() {
-      if (qtyTargetIndex !== null) {
-        const val = document.getElementById("qty-modal-input").value;
+      if (qtyTargetIndex !== null && appState.items[qtyTargetIndex]) {
+        const input = document.getElementById("qty-modal-input");
+        const val = input ? input.value : "";
         appState.items[qtyTargetIndex].qty = val ? Number(val) : null;
         closeQtyModal();
         pushToCloud();
@@ -2628,58 +2471,23 @@
 
     window.onSearchChange = function(val) {
       searchQuery = val;
-      const clearBtn = document.getElementById("soffa-search-clear");
-      if (clearBtn) {
-        clearBtn.style.display = val ? "flex" : "none";
-      }
-
-      const listContainer = document.getElementById("soffa-categories-container");
-      if (listContainer) {
-        const allCategories = [...new Set(appState.items.map(i => i.cat))];
-        const prismaLayout = STORE_LAYOUTS["prisma_jumbo"] || [];
-        const categories = allCategories.sort((a, b) => {
-          const idxA = prismaLayout.indexOf(a);
-          const idxB = prismaLayout.indexOf(b);
-          if (idxA === -1 && idxB === -1) return a.localeCompare(b);
-          if (idxA === -1) return 1;
-          if (idxB === -1) return -1;
-          return idxA - idxB;
-        });
-
-        const html = buildSoffaCategoriesHtml(categories);
-        listContainer.innerHTML = html || '<div class="empty-state">Ei hakua vastaavia tuotteita</div>';
-      }
+      render();
     };
 
     window.clearSearch = function() {
       searchQuery = "";
-      const inp = document.getElementById("soffa-search-input");
-      if (inp) {
-        inp.value = "";
-        inp.focus();
-      }
-      onSearchChange("");
+      render();
     };
 
     function showUndoBar(label) {
       const bar = document.getElementById("undo-bar");
       const text = document.getElementById("undo-text");
+      if (!bar || !text) return;
       text.innerText = label;
       bar.style.display = "flex";
       if (undoTimer) clearTimeout(undoTimer);
       undoTimer = setTimeout(() => { bar.style.display = "none"; }, 4000);
     }
-
-    window.triggerUndo = function() {
-      if (lastCollectedIndex !== null && appState.items[lastCollectedIndex]) {
-        appState.items[lastCollectedIndex].done = false;
-        appState.items[lastCollectedIndex].active = true;
-        pushToCloud();
-        lastCollectedIndex = null;
-        render();
-      }
-      document.getElementById("undo-bar").style.display = "none";
-    };
 
     window.openFirebaseSettings = function() {
       const modal = document.getElementById("firebase-modal");
@@ -2691,7 +2499,8 @@
     };
 
     window.closeFirebaseSettings = function() {
-      document.getElementById("firebase-modal").style.display = "none";
+      const modal = document.getElementById("firebase-modal");
+      if (modal) modal.style.display = "none";
     };
 
     window.saveGeminiKey = function() {
@@ -2706,524 +2515,6 @@
       }
       closeFirebaseSettings();
     };
-
-    /* ==========================================
-       ÄLYKÄS TUOTEKUVATUNNISTUS (GEMINI VISION)
-       Jääkaappikuvat ja WhatsApp-kuvat
-       ========================================== */
-    window.triggerProductImageCapture = function() {
-      const fileInput = document.getElementById("vision-file-input");
-      if (fileInput) {
-        fileInput.value = "";
-        fileInput.click();
-      }
-    };
-
-    window.closeVisionModal = function() {
-      document.getElementById("vision-modal").style.display = "none";
-    };
-
-    async function handleProductImageSelected(e) {
-      const file = e.target.files && e.target.files[0];
-      if (!file) return;
-
-      const modal = document.getElementById("vision-modal");
-      const previewCont = document.getElementById("vision-preview-container");
-      const previewImg = document.getElementById("vision-preview-img");
-      const statusBox = document.getElementById("vision-status-box");
-      const statusText = document.getElementById("vision-status-text");
-      const resultFields = document.getElementById("vision-result-fields");
-      const btnAccept = document.getElementById("btn-vision-accept");
-      const nameInput = document.getElementById("vision-item-name");
-      const qtyInput = document.getElementById("vision-item-qty");
-      const catSelect = document.getElementById("vision-item-cat");
-
-      modal.style.display = "flex";
-      previewCont.style.display = "none";
-      resultFields.style.display = "none";
-      statusBox.style.display = "flex";
-      statusText.innerText = "Käsitellään kuvaa ja analysoidaan tuotetta...";
-      btnAccept.disabled = true;
-
-      // Popukoidaan kategoriat alasvetovalikkoon
-      catSelect.innerHTML = STANDARD_CATEGORIES.map(c => `<option value="${c}">${c}</option>`).join("");
-
-      try {
-        const { base64Data, dataUrl } = await convertAndCompressImage(file);
-        previewImg.src = dataUrl;
-        previewCont.style.display = "block";
-
-        const apiKey = localStorage.getItem("corsia_gemini_api_key") || "";
-
-        if (apiKey) {
-          statusText.innerText = "Tunnistetaan tuotetta ja brändiä (Gemini AI)...";
-          const identified = await identifyProductWithGemini(base64Data, apiKey);
-
-          nameInput.value = identified.name || "Tuntematon tuote";
-          qtyInput.value = identified.qty || 1;
-          const matchedCat = resolveStandardCategory(identified.category, identified.name);
-          catSelect.value = matchedCat;
-
-          statusBox.style.display = "none";
-          resultFields.style.display = "block";
-          btnAccept.disabled = false;
-        } else {
-          // Varajärjestelmä (OCR), jos käyttäjä ei ole vielä asettanut omaa Gemini-avainta
-          statusText.innerText = "Gemini API -avain puuttuu (Asetukset). Luetaan teksti paikallisesti...";
-          
-          if (typeof Tesseract === "undefined") {
-            throw new Error("Tesseract.js ei saatavilla eikä Gemini API -avainta ole asetettu.");
-          }
-
-          const worker = await Tesseract.createWorker("fin", 1);
-          const { data: { text } } = await worker.recognize(dataUrl);
-          await worker.terminate();
-
-          const lines = text.split("\n").map(l => l.trim()).filter(l => l.length >= 3);
-          const bestGuess = lines.length > 0 ? lines[0] : "Tuote kuvasta";
-          
-          nameInput.value = bestGuess;
-          qtyInput.value = 1;
-          catSelect.value = resolveStandardCategory("Muut", bestGuess);
-
-          statusBox.style.display = "none";
-          resultFields.style.display = "block";
-          btnAccept.disabled = false;
-        }
-      } catch (err) {
-        console.error("Tuotekuvatunnistus epäonnistui:", err);
-        statusBox.style.display = "flex";
-        statusText.innerText = "Tunnistus epäonnistui: " + (err.message || "Tuntematon virhe");
-        btnAccept.disabled = true;
-      }
-    }
-
-    async function identifyProductWithGemini(base64Jpeg, apiKey) {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-
-      const promptText = `
-        Toimi suomalaisen ruokakauppasovelluksen konenäkömoottorina.
-        Katso kuvaa, joka on otettu jääkaapista, ruokakaapista tai WhatsApp-viestistä.
-        Tunnista kuvassa keskeisin elintarvike tai kauppatuote mahdollisimman tarkasti:
-        1. Tuotteen nimi ja brändi (esim. "Valio Oivariini vähemmän suolaa", "Oatly Barista Kaurajuoma", "Felix Ketsuppi", "Fazer Puikula Täysjyväruis").
-        2. Kategoria jokin näistä: ${STANDARD_CATEGORIES.join(", ")}.
-        3. Arvioitu määrä kappaleina (oletus 1).
-
-        Palauta VAIN ja AINOASTAAN JSON-muodossa ilman markdown-koodiblokkeja:
-        {"name": "Brändi ja tuotteen nimi", "category": "Kategoria", "qty": 1}
-      `;
-
-      const response = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{
-            parts: [
-              { text: promptText },
-              { inlineData: { mimeType: "image/jpeg", data: base64Jpeg } }
-            ]
-          }],
-          generationConfig: {
-            temperature: 0.1,
-            responseMimeType: "application/json"
-          }
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`Gemini API vastasi koodilla ${response.status}`);
-      }
-
-      const resData = await response.json();
-      const rawJson = resData.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!rawJson) throw new Error("Tyhjä vastaus tekoälyltä");
-
-      return JSON.parse(rawJson);
-    }
-
-    function convertAndCompressImage(file) {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = function(evt) {
-          const img = new Image();
-          img.onload = function() {
-            const canvas = document.createElement("canvas");
-            const maxDim = 1000;
-            let width = img.width;
-            let height = img.height;
-
-            if (width > maxDim || height > maxDim) {
-              if (width > height) {
-                height = Math.round((height * maxDim) / width);
-                width = maxDim;
-              } else {
-                width = Math.round((width * maxDim) / height);
-                height = maxDim;
-              }
-            }
-
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext("2d");
-            ctx.drawImage(img, 0, 0, width, height);
-
-            const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
-            const base64Data = dataUrl.split(",")[1];
-            resolve({ base64Data, dataUrl });
-          };
-          img.onerror = reject;
-          img.src = evt.target.result;
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-    }
-
-    window.executeVisionAccept = function() {
-      const nameInput = document.getElementById("vision-item-name");
-      const qtyInput = document.getElementById("vision-item-qty");
-      const catSelect = document.getElementById("vision-item-cat");
-
-      const name = nameInput ? nameInput.value.trim() : "";
-      const cat = catSelect ? catSelect.value : "Muut";
-      const qty = qtyInput && qtyInput.value ? Number(qtyInput.value) : 1;
-
-      if (!name) return;
-
-      const lower = name.toLowerCase();
-      const existing = appState.items.find(i => i.name.toLowerCase() === lower);
-
-      if (existing) {
-        existing.active = true;
-        existing.done = false;
-        existing.qty = qty;
-      } else {
-        appState.items.unshift({
-          name: name,
-          cat: resolveStandardCategory(cat, name),
-          active: true,
-          done: false,
-          qty: qty
-        });
-      }
-
-      pushToCloud();
-      render();
-      closeVisionModal();
-      showUndoBar(`📷 Lisätty listalle: ${name}`);
-    };
-
-    window.handleWhatsAppImport = function() {
-      document.getElementById("wa-modal").style.display = "flex";
-    };
-
-    window.closeWaModal = function() {
-      document.getElementById("wa-modal").style.display = "none";
-    };
-
-    window.executeWaImport = function() {
-      const inp = document.getElementById("wa-text-input");
-      const val = inp ? inp.value : "";
-      if (val) {
-        processRawTextToShoppingList(val);
-      }
-      closeWaModal();
-    };
-
-    /* Kamera ja OCR -toiminnallisuudet */
-    window.triggerCameraCapture = function() {
-      const fileInput = document.getElementById("camera-file-input");
-      if (fileInput) {
-        fileInput.value = "";
-        fileInput.click();
-      }
-    };
-
-    window.closeOcrModal = function() {
-      document.getElementById("ocr-modal").style.display = "none";
-    };
-
-    window.executeOcrImport = function() {
-      const area = document.getElementById("ocr-text-result");
-      const val = area ? area.value : "";
-      if (val) {
-        processRawTextToShoppingList(val);
-      }
-      closeOcrModal();
-    };
-
-    async function handleImageFileSelected(e) {
-      const file = e.target.files && e.target.files[0];
-      if (!file) return;
-
-      const modal = document.getElementById("ocr-modal");
-      const statusBox = document.getElementById("ocr-status-box");
-      const statusText = document.getElementById("ocr-status-text");
-      const resultArea = document.getElementById("ocr-text-result");
-      const btnAccept = document.getElementById("btn-ocr-accept");
-
-      modal.style.display = "flex";
-      statusBox.style.display = "flex";
-      btnAccept.disabled = true;
-      resultArea.value = "";
-      statusText.innerText = "Valmistellaan kuvaa ja ladataan OCR-moottoria...";
-
-      try {
-        const processedImageBlob = await preprocessImageForOcr(file);
-
-        statusText.innerText = "Tunnistetaan tekstiä...";
-
-        if (typeof Tesseract === "undefined") {
-          throw new Error("Tesseract.js ei latautunut verkkoyhteyden vuoksi.");
-        }
-
-        const worker = await Tesseract.createWorker("fin", 1, {
-          logger: m => {
-            if (m.status === "recognizing text") {
-              const pct = Math.round((m.progress || 0) * 100);
-              statusText.innerText = `Luetaan tekstiä... ${pct}%`;
-            }
-          }
-        });
-
-        const { data: { text } } = await worker.recognize(processedImageBlob);
-        await worker.terminate();
-
-        statusBox.style.display = "none";
-        btnAccept.disabled = false;
-
-        const cleanedLines = text
-          .split("\n")
-          .map(l => l.replace(/[^a-zA-Z0-9åäöÅÄÖ\s\-\,\.\(\)]/g, "").trim())
-          .filter(l => l.length >= 2);
-
-        resultArea.value = cleanedLines.join("\n");
-
-        if (cleanedLines.length === 0) {
-          statusBox.style.display = "flex";
-          statusText.innerText = "Kuvasta ei löytynyt selkeää tekstiä. Voit kirjoittaa käsin.";
-        }
-      } catch (err) {
-        console.error("OCR virhe:", err);
-        statusBox.style.display = "flex";
-        statusText.innerText = "Virhe tunnistuksessa: " + (err.message || "Tuntematon virhe");
-        btnAccept.disabled = false;
-      }
-    }
-
-    function preprocessImageForOcr(file) {
-      return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onload = function(evt) {
-          const img = new Image();
-          img.onload = function() {
-            const canvas = document.createElement("canvas");
-            const maxDimension = 1600;
-            let width = img.width;
-            let height = img.height;
-
-            if (width > maxDimension || height > maxDimension) {
-              if (width > height) {
-                height = Math.round((height * maxDimension) / width);
-                width = maxDimension;
-              } else {
-                width = Math.round((width * maxDimension) / height);
-                height = maxDimension;
-              }
-            }
-
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext("2d");
-            ctx.drawImage(img, 0, 0, width, height);
-
-            const imgData = ctx.getImageData(0, 0, width, height);
-            const data = imgData.data;
-
-            const factor = 1.3;
-            for (let i = 0; i < data.length; i += 4) {
-              const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-              const highContrast = Math.min(255, Math.max(0, factor * (gray - 128) + 128));
-              data[i] = highContrast;
-              data[i + 1] = highContrast;
-              data[i + 2] = highContrast;
-            }
-            ctx.putImageData(imgData, 0, 0);
-
-            canvas.toBlob(resolve, "image/jpeg", 0.9);
-          };
-          img.src = evt.target.result;
-        };
-        reader.readAsDataURL(file);
-      });
-    }
-
-    /* Puheentunnistus ja "ja"-sanalla luetteleminen */
-    window.startDictation = function() {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (!SpeechRecognition) {
-        showUndoBar("Selaimesi ei tue puhesanelua (toimii mm. Chromessa ja Safarissa).");
-        return;
-      }
-
-      const micBtn = document.getElementById("btn-mic");
-      if (micBtn && micBtn.classList.contains("recording")) {
-        return;
-      }
-
-      const recognition = new SpeechRecognition();
-      recognition.lang = "fi-FI";
-      recognition.interimResults = false;
-      recognition.maxAlternatives = 1;
-
-      recognition.onstart = function() {
-        if (micBtn) micBtn.classList.add("recording");
-        showUndoBar("🎤 Sanele vapaasti: esim. 'maito ja kaksi leipää ja lohi'");
-      };
-
-      recognition.onresult = function(event) {
-        const transcript = event.results[0][0].transcript;
-        if (transcript) {
-          processRawTextToShoppingList(transcript);
-        }
-      };
-
-      recognition.onerror = function(event) {
-        showUndoBar("Sanelu keskeytyi (" + (event.error || "virhe") + ")");
-        if (micBtn) micBtn.classList.remove("recording");
-      };
-
-      recognition.onend = function() {
-        if (micBtn) micBtn.classList.remove("recording");
-      };
-
-      try {
-        recognition.start();
-      } catch (err) {
-        showUndoBar("Mikrofonin käynnistys epäonnistui.");
-      }
-    };
-
-    // Sanalliset lukusanat numeroiksi puhetta varten
-    const WORD_TO_NUM = {
-      "yksi": 1, "yhden": 1, "yhtä": 1,
-      "kaksi": 2, "kahta": 2, "kahden": 2,
-      "kolme": 3, "kolmea": 3,
-      "neljä": 4, "neljää": 4,
-      "viisi": 5, "viittä": 5,
-      "kuusi": 6, "kuutta": 6,
-      "seitsemän": 7, "kahdeksan": 8, "yhdeksän": 9, "kymmenen": 10
-    };
-
-    /* Keskitetty älykäs tekstin käsittelijä (Sanelu, WA, Kamera) */
-    function processRawTextToShoppingList(rawText) {
-      if (!rawText) return;
-
-      // 1. Esipuhdistus ja puhekielen aloitussanojen karsinta
-      let cleanText = rawText
-        .replace(/^(muista(pa)?\s+ostaa|osta|tuo|hae|lisää|kauppalappu:?|kauppaan:?)\s+/i, "")
-        .replace(/\b(ole hyvä ja|voisitko hakea|viitsitkö ostaa)\b/gi, "")
-        .trim();
-
-      // Korvataan puheessa sanotut lukusanat numeroiksi
-      Object.keys(WORD_TO_NUM).forEach(word => {
-        const reg = new RegExp(`\\b${word}\\b`, "gi");
-        cleanText = cleanText.replace(reg, WORD_TO_NUM[word]);
-      });
-
-      // 2. Pilkonta "ja"-, "sekä"-, "tai"-, pilkku- ja rivinvaihtokohdista
-      const chunks = cleanText
-        .split(/(?:\s+(?:ja|sekä|tai|\+|ynnä)\s+|[\n,\r\t;]+)/i)
-        .map(c => c.trim())
-        .filter(c => c.length >= 2);
-
-      let count = 0;
-
-      chunks.forEach(chunk => {
-        let line = chunk.replace(/^[-*•–—\d+\.)]+\s*/, "").trim();
-        if (line.length < 2) return;
-
-        // Etsitään mahdollinen määrä (esim. "2 maitoa", "500g jauhelihaa", "3 kpl kurkkua")
-        let parsedQty = 1;
-        const numMatch = line.match(/^(\d+)\s*(kpl|g|kg|prk|purkkia|pkt|pussia|litraa|l)?\s*(.*)$/i) ||
-                         line.match(/^(.*?)\s*(\d+)\s*(kpl|g|kg|prk|purkkia|pkt|pussia|litraa|l)?$/i);
-
-        let itemName = line;
-
-        if (numMatch) {
-          const num = parseInt(numMatch[1] || numMatch[2], 10);
-          const unit = (numMatch[2] || numMatch[3] || "").toLowerCase();
-          const remainder = (numMatch[3] || numMatch[1] || "").trim();
-
-          if (!isNaN(num) && num > 0) {
-            parsedQty = unit.startsWith("kg") ? num * 1000 : num;
-            if (remainder && remainder.length >= 2) {
-              itemName = remainder;
-            }
-          }
-        }
-
-        // Siistitään tuotteen nimi
-        itemName = itemName
-          .replace(/^(kpl|purkki|purkkia|paketti|pakettia|litra|litraa|kilo|kiloa)\s+/i, "")
-          .replace(/[()]/g, "")
-          .trim();
-
-        if (itemName.length < 2) return;
-
-        const lowerItem = itemName.toLowerCase();
-
-        // Etsitään vastaako Corsian tunnettua tuotekatalogia
-        let matchedCatalog = null;
-        if (lowerItem.includes("maito")) {
-          matchedCatalog = appState.items.find(i => i.name.includes("Laktoositon kevyt (sininen)")) || appState.items.find(i => i.name.includes("MAITO:"));
-        } else if (lowerItem.includes("lohi")) {
-          matchedCatalog = appState.items.find(i => i.name === "Lohi (tuore)");
-        } else if (lowerItem.includes("kurkku")) {
-          matchedCatalog = appState.items.find(i => i.name === "Kurkku");
-        } else if (lowerItem.includes("banaani")) {
-          matchedCatalog = appState.items.find(i => i.name === "Banaani");
-        } else if (lowerItem.includes("jauheliha")) {
-          matchedCatalog = appState.items.find(i => i.name === "Jauheliha");
-        } else if (lowerItem.includes("voi") && !lowerItem.includes("leipä")) {
-          matchedCatalog = appState.items.find(i => i.name === "VOI: Voi");
-        } else if (lowerItem.includes("muna")) {
-          matchedCatalog = appState.items.find(i => i.name === "MUNA: Kananmunat");
-        } else {
-          matchedCatalog = appState.items.find(i => {
-            const rawCatName = i.name.toLowerCase().replace(/^[a-zåäö]+:\s*/i, "");
-            return rawCatName === lowerItem || lowerItem.includes(rawCatName) || rawCatName.includes(lowerItem);
-          });
-        }
-
-        if (matchedCatalog) {
-          matchedCatalog.active = true;
-          matchedCatalog.done = false;
-          matchedCatalog.qty = parsedQty;
-        } else {
-          // Luodaan uusi tuote ja tunnistetaan kategoria automaattisesti
-          const formattedTitle = itemName.charAt(0).toUpperCase() + itemName.slice(1);
-          const assignedCat = resolveStandardCategory("Muut", itemName);
-
-          appState.items.unshift({
-            name: formattedTitle,
-            cat: assignedCat,
-            active: true,
-            done: false,
-            qty: parsedQty
-          });
-        }
-        count++;
-      });
-
-      if (count > 0) {
-        pushToCloud();
-        render();
-        showUndoBar(`Lisätty ${count} tuotetta ostoslistalle!`);
-      } else {
-        showUndoBar("Puheesta ei tunnistettu tuotteita.");
-      }
-    }
 
     window.addEventListener("DOMContentLoaded", initData);
   </script>
