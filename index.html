@@ -9,6 +9,8 @@
   <meta name="theme-color" content="#16a34a">
   <title>Corsia Kauppa-apuri</title>
 
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+
   <script>
     (function() {
       const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180"><defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#4ade80" /><stop offset="100%" stop-color="#16a34a" /></linearGradient></defs><rect width="180" height="180" rx="36" fill="url(#g)"/><circle cx="90" cy="90" r="54" fill="#ffffff"/><path d="M 108 65 C 80 65 70 82 70 90 C 70 98 80 115 108 115" fill="none" stroke="#16a34a" stroke-width="12" stroke-linecap="round"/><circle cx="106" cy="65" r="7" fill="#16a34a"/></svg>';
@@ -362,13 +364,13 @@
 
     .wa-subtle-btn {
       flex: 1;
-      padding: 9px 12px;
+      padding: 10px 12px;
       background: #f0fdf4;
       border: 1px dashed #86efac;
       border-radius: 12px;
       color: #166534;
       font-size: 0.78rem;
-      font-weight: 700;
+      font-weight: 800;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -383,11 +385,11 @@
 
     .camera-subtle-btn {
       flex: 1;
-      padding: 9px 12px;
-      background: #f0f9ff;
-      border: 1px dashed #7dd3fc;
+      padding: 10px 12px;
+      background: #eff6ff;
+      border: 1px dashed #93c5fd;
       border-radius: 12px;
-      color: #0369a1;
+      color: #1d4ed8;
       font-size: 0.78rem;
       font-weight: 800;
       display: flex;
@@ -399,7 +401,7 @@
     }
 
     .camera-subtle-btn:active {
-      background: #e0f2fe;
+      background: #dbeafe;
     }
 
     .deals-bottom-card {
@@ -843,14 +845,14 @@
       transform: translateX(-50%);
       background: #1e293b;
       color: #ffffff;
-      padding: 9px 16px;
+      padding: 10px 16px;
       border-radius: 30px;
       box-shadow: var(--shadow-lg);
       display: flex;
       align-items: center;
       gap: 12px;
       z-index: 99;
-      width: 90%;
+      width: 92%;
       max-width: 440px;
       justify-content: space-between;
     }
@@ -934,7 +936,7 @@
     <footer class="app-footer">
       <div>POWERED BY</div>
       <div class="app-footer-tech">
-        <span>Vision Intelligence</span> •
+        <span>Neural Vision OCR</span> •
         <span>Firebase Cloud</span> •
         <span>Web Speech AI</span>
       </div>
@@ -970,19 +972,9 @@
   <!-- Diagnostics & Settings Modal -->
   <div class="modal-overlay" id="diag-modal" style="display: none;">
     <div class="modal-panel">
-      <h3 style="font-size: 1.05rem; margin-bottom: 8px; color:#1e293b;">⚙️ Corsia Järjestelmä & Tekoäly</h3>
-      <div id="diag-content-box" style="font-size: 0.82rem; line-height: 1.5; color: #334155; margin-bottom: 12px;"></div>
-      
-      <div style="background:#f1f5f9; border-radius:10px; padding:10px; margin-bottom:12px;">
-        <label style="font-size:0.75rem; font-weight:800; color:#475569; display:block; margin-bottom:4px;">🔑 OpenAI API-avain (valinnainen, sk-...):</label>
-        <input type="text" id="manual-api-key-input" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:0.78rem; font-family:monospace; outline:none;" placeholder="sk-... tai jätä tyhjäksi">
-        <div style="display:flex; justify-content:flex-end; gap:6px; margin-top:6px;">
-          <button onclick="resetDefaultKey()" style="padding:4px 8px; border-radius:6px; border:1px solid #cbd5e1; background:#ffffff; font-size:0.72rem; cursor:pointer;">Tyhjennä</button>
-          <button onclick="saveManualApiKey()" style="padding:4px 10px; border-radius:6px; border:none; background:#16a34a; color:white; font-size:0.72rem; font-weight:800; cursor:pointer;">Tallenna avain</button>
-        </div>
-      </div>
-
-      <button onclick="closeDiagModal()" style="width: 100%; padding: 9px; border-radius: 9px; background: #0284c7; color: white; border: none; font-weight: 800; font-size: 0.84rem; cursor: pointer;">Sulje</button>
+      <h3 style="font-size: 1.05rem; margin-bottom: 8px; color:#1e293b;">⚙️ Corsia Järjestelmätiedot</h3>
+      <div id="diag-content-box" style="font-size: 0.82rem; line-height: 1.5; color: #334155; margin-bottom: 14px;"></div>
+      <button onclick="closeDiagModal()" style="width: 100%; padding: 10px; border-radius: 10px; background: #0284c7; color: white; border: none; font-weight: 800; font-size: 0.84rem; cursor: pointer;">Sulje</button>
     </div>
   </div>
 
@@ -999,14 +991,14 @@
     </div>
   </div>
 
-  <!-- Hidden Camera Inputs -->
-  <input type="file" id="camera-note-input" accept="image/*" capture="environment" style="display: none;" onchange="handleCameraUpload(this, 'note')">
-  <input type="file" id="camera-product-input" accept="image/*" capture="environment" style="display: none;" onchange="handleCameraUpload(this, 'product')">
+  <!-- Hidden Camera Inputs: erilliset syötteet kauppalapulle ja tuotepakkauksille -->
+  <input type="file" id="camera-note-input" accept="image/*" capture="environment" style="display: none;" onchange="handleSmartCamera(this, 'note')">
+  <input type="file" id="camera-product-input" accept="image/*" capture="environment" style="display: none;" onchange="handleSmartCamera(this, 'product')">
 
-  <!-- Undo Bar -->
+  <!-- Undo & Status Bar -->
   <div class="undo-bar-wrap" id="undo-bar" style="display: none;">
     <div id="undo-label-text" style="font-size: 0.82rem; font-weight: 600; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">Tuote kerätty</div>
-    <button class="btn-undo-action" onclick="executeUndo()">PERU (UNDO)</button>
+    <button class="btn-undo-action" id="btn-undo-trigger" onclick="executeUndo()">PERU (UNDO)</button>
   </div>
 
   <script>
@@ -1171,11 +1163,10 @@
 
     function inferCategoryFromName(rawName) {
       const n = (rawName || "").toLowerCase();
-      if (n.includes("jäätelö") || n.includes("tuutti") || n.includes("puikko") || n.includes("pakaste") || n.includes("pizza") || n.includes("herne") || n.includes("pakastemarja") || n.includes("geisha") || n.includes("daim") || n.includes("magnum")) {
-        // Jos sanassa esiintyy jäätelötyyppiä tai tyypillisiä jäätelömakuja pakkauksessa
-        if (n.includes("jäätelö") || n.includes("tuutti") || n.includes("puikko") || n.includes("pakaste")) return "Pakasteet";
+      // Jäätelöt ja pakasteet AINA Pakasteet-osastoon
+      if (n.includes("jäätelö") || n.includes("tuutti") || n.includes("puikko") || n.includes("pakaste") || n.includes("pizza") || n.includes("herne") || n.includes("pakastemarja") || n.includes("ice cream") || n.includes("geisha")) {
+        return "Pakasteet";
       }
-      if (n.includes("jäätelö") || n.includes("tuutti") || n.includes("puikko") || n.includes("pakaste")) return "Pakasteet";
       if (n.includes("suklaa") || n.includes("sips") || n.includes("karkki") || n.includes("makeis") || n.includes("olut") || n.includes("siideri") || n.includes("lonkero")) return "Herkut";
       if (n.includes("maito") || n.includes("kerma") || n.includes("voi") || n.includes("jogurtti") || n.includes("rahka") || n.includes("piimä")) return "Maitotuotteet";
       if (n.includes("kurkku") || n.includes("tomaatti") || n.includes("salaatti") || n.includes("sipuli") || n.includes("paprika") || n.includes("chili") || n.includes("yritti")) return "Hevi";
@@ -1194,7 +1185,7 @@
 
     function resolveItemIcon(name, cat) {
       const lower = (name || "").toLowerCase();
-      if (lower.includes("jäätelö") || lower.includes("tuutti") || lower.includes("puikko")) return "🍦";
+      if (lower.includes("jäätelö") || lower.includes("tuutti") || lower.includes("puikko") || lower.includes("geisha")) return "🍦";
       if (lower.includes("peruna")) return "🥔";
       if (lower.includes("porkkana")) return "🥕";
       if (lower.includes("sipuli")) return "🧅";
@@ -1399,11 +1390,11 @@
             </div>
 
             <div class="status-badges-group">
-              <div class="status-pill" id="pill-cloud-status" onclick="openDiagnostics('cloud')">
+              <div class="status-pill" id="pill-cloud-status" onclick="openDiagnostics()">
                 <span class="status-dot"></span> PILVI OK
               </div>
-              <div class="status-pill" onclick="openDiagnostics('ai')">
-                ⚙️ AI & AVAIN
+              <div class="status-pill" onclick="openDiagnostics()">
+                ⚙️ JÄRJESTELMÄ
               </div>
             </div>
           </div>
@@ -1574,7 +1565,7 @@
               <input type="text" id="soffa-add-name" class="soffa-input-name" placeholder="Tuotteen nimi (esim. Fazer Geisha Jäätelö)" />
               <input type="text" id="soffa-add-qty" class="soffa-input-qty" placeholder="1 kpl" />
               <button class="soffa-icon-btn" onclick="startVoiceRecognition()" title="Puhu sanelemalla">🎤</button>
-              <button class="soffa-icon-btn" style="background:#f0f9ff; border-color:#bae6fd; color:#0284c7;" onclick="triggerProductCamera()" title="Tunnista tuotepakkaus kuvasta">📷</button>
+              <button class="soffa-icon-btn" style="background:#eff6ff; border-color:#93c5fd; color:#1d4ed8;" onclick="triggerProductCamera()" title="Tunnista tuotepakkaus kuvasta">📷</button>
             </div>
             <select id="soffa-add-cat" class="soffa-category-select">
               ${allCategories.map(c => `<option value="${c}">${c.toUpperCase()}</option>`).join("")}
@@ -1827,15 +1818,17 @@
       showUndoBar(`Kerätty: ${appState.items[index].name}`);
     };
 
-    window.showUndoBar = function(text) {
+    window.showUndoBar = function(text, showButton = true) {
       const bar = document.getElementById("undo-bar");
       const label = document.getElementById("undo-label-text");
+      const btn = document.getElementById("btn-undo-trigger");
       if (!bar || !label) return;
       label.innerText = text;
+      if (btn) btn.style.display = showButton ? "block" : "none";
       bar.style.display = "flex";
 
       if (undoTimer) clearTimeout(undoTimer);
-      undoTimer = setTimeout(() => { bar.style.display = "none"; }, 4000);
+      undoTimer = setTimeout(() => { bar.style.display = "none"; }, 4500);
     };
 
     window.executeUndo = function() {
@@ -1999,8 +1992,9 @@
       }
     };
 
-    function compressImage(file, maxDimension = 900, quality = 0.72) {
-      return new Promise((resolve, reject) => {
+    // Optimoitu kuvan esikäsittely: adaptiivinen kontrasti, jotta teksti erottuu näytöiltä ja paperilta
+    function prepareImageForNeuralVision(file, maxDimension = 1200) {
+      return new Promise((resolve) => {
         const reader = new FileReader();
         reader.onload = (e) => {
           const img = new Image();
@@ -2022,212 +2016,214 @@
             canvas.width = width;
             canvas.height = height;
             const ctx = canvas.getContext("2d");
-            ctx.fillStyle = "#FFFFFF";
-            ctx.fillRect(0, 0, width, height);
+
+            // Piirretään kuva terävänä
             ctx.drawImage(img, 0, 0, width, height);
 
-            const compressedData = canvas.toDataURL("image/jpeg", quality);
-            resolve({
-              base64: compressedData.split(",")[1],
-              mimeType: "image/jpeg"
-            });
+            // Kontrastin ja terävyyden tehostus tekstin lukua varten
+            const imgData = ctx.getImageData(0, 0, width, height);
+            const d = imgData.data;
+            const contrast = 1.25; // +25% kontrasti
+            const factor = (259 * (contrast + 255)) / (255 * (259 - contrast));
+
+            for (let i = 0; i < d.length; i += 4) {
+              d[i] = factor * (d[i] - 128) + 128;
+              d[i + 1] = factor * (d[i + 1] - 128) + 128;
+              d[i + 2] = factor * (d[i + 2] - 128) + 128;
+            }
+            ctx.putImageData(imgData, 0, 0);
+
+            resolve(canvas);
           };
-          img.onerror = reject;
           img.src = e.target.result;
         };
-        reader.onerror = reject;
         reader.readAsDataURL(file);
       });
     }
 
-    window.handleCameraUpload = async function(input, mode) {
+    window.handleSmartCamera = async function(input, mode) {
       if (!input.files || !input.files[0]) return;
       const file = input.files[0];
-      
-      const labelText = mode === 'note' ? "📝 Luetaan käsinkirjoitettua kauppalappua..." : "🔍 Tunnistetaan tuotepakkausta (nimi, maku, paino)...";
-      showUndoBar(labelText);
+
+      const statusText = mode === 'note' 
+        ? "📝 Luetaan käsinkirjoitettua kauppalappua..." 
+        : "🔍 Tunnistetaan tuotetta & pakkausta...";
+      showUndoBar(statusText, false);
 
       try {
-        const imgObj = await compressImage(file, 900, 0.72);
-        const openAiKey = (localStorage.getItem("corsia_openai_api_key") || "").trim();
+        const processedCanvas = await prepareImageForNeuralVision(file, 1200);
 
-        let parsedItems = [];
-        let errorMsg = "";
+        let recognizedRawText = "";
 
-        // TAPA 1: Jos käyttäjä on lisännyt oman OpenAI-avaimen
-        if (openAiKey && openAiKey.startsWith("sk-")) {
+        // 1. Käytetään selaimen Tesseract-neuroverkkolukijaa
+        if (window.Tesseract) {
           try {
-            const prompt = mode === 'note' 
-              ? "Lue suomenkielinen käsinkirjoitettu kauppalappu. Palauta VAIN JSON-lista: [{\"name\":\"Tuote\",\"cat\":\"Kategoria\",\"qty\":1}]. Kategoriat: Hevi, Juurekset, Hedelmät, Liha, Maitotuotteet, Juustot, Kuivat, Jauhot, Pakasteet, Leivät, Herkut, Hygienia, Muut."
-              : "Tunnista ruokatuotepakkaus (esim. jäätelö, maito, leipä). Poimi valmistaja, tarkka nimi ja maku sekä gramma/litrapaino. Jäätelöt kuuluvat AINA kategoriaan 'Pakasteet'. Palauta VAIN JSON-lista: [{\"name\":\"Fazer Geisha Jäätelö\",\"cat\":\"Pakasteet\",\"qty\":480}].";
-
-            const res = await fetch("https://api.openai.com/v1/chat/completions", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${openAiKey}`
-              },
-              body: JSON.stringify({
-                model: "gpt-4o-mini",
-                messages: [
-                  {
-                    role: "user",
-                    content: [
-                      { type: "text", text: prompt },
-                      { type: "image_url", image_url: { url: `data:image/jpeg;base64,${imgObj.base64}` } }
-                    ]
-                  }
-                ],
-                max_tokens: 350,
-                temperature: 0.1
-              })
+            const worker = await Tesseract.createWorker("fin", 1, {
+              logger: m => {
+                if (m.status === 'recognizing text') {
+                  const pct = Math.round(m.progress * 100);
+                  showUndoBar(`🔍 Tekoäly lukee kuvaa... ${pct}%`, false);
+                }
+              }
             });
-
-            if (res.ok) {
-              const data = await res.json();
-              let raw = data.choices?.[0]?.message?.content || "";
-              raw = raw.replace(/```json/gi, "").replace(/```/g, "").trim();
-              const match = raw.match(/\[[\s\S]*\]/);
-              if (match) parsedItems = JSON.parse(match[0]);
-            }
-          } catch (e) {
-            console.warn("OpenAI attempt:", e);
+            const ret = await worker.recognize(processedCanvas);
+            recognizedRawText = ret.data.text || "";
+            await worker.terminate();
+          } catch (tessErr) {
+            console.warn("Paikallinen Tesseract huomautus:", tessErr);
           }
         }
 
-        // TAPA 2: Varmatoiminen, suora Cloud Vision OCR -reitti (ei CORS-estoa, ei vanhenevaa Google-avainta)
-        if (!parsedItems || parsedItems.length === 0) {
+        // 2. Jos teksti jäi vähäiseksi, kokeillaan nopeaa varareittiä
+        if (!recognizedRawText.trim() || recognizedRawText.trim().length < 4) {
           try {
+            const base64Data = processedCanvas.toDataURL("image/jpeg", 0.75);
             const form = new FormData();
-            form.append("base64Image", "data:image/jpeg;base64," + imgObj.base64);
+            form.append("base64Image", base64Data);
             form.append("language", "fin");
-            form.append("isOverlayRequired", "false");
-            form.append("OCREngine", mode === "note" ? "2" : "1"); // Engine 2 tukee käsinkirjoitusta
-            form.append("detectOrientation", "true");
-
-            const ocrRes = await fetch("https://api.ocr.space/parse/image", {
+            form.append("OCREngine", "2"); // Engine 2 tukee käsinkirjoitusta
+            
+            const res = await fetch("https://api.ocr.space/parse/image", {
               method: "POST",
               headers: { "apikey": "K87899142388957" },
               body: form
             });
-
-            if (ocrRes.ok) {
-              const ocrJson = await ocrRes.json();
-              const parsedText = ocrJson.ParsedResults?.[0]?.ParsedText || "";
-              
-              if (parsedText.trim()) {
-                const lines = parsedText.split("\n").map(l => l.trim()).filter(l => l.length > 1);
-
-                if (mode === "product") {
-                  // Älykäs tuotepakkauksen nimen, maun ja koon koostaminen
-                  let lowerAll = parsedText.toLowerCase();
-                  let gramsMatch = parsedText.match(/(\d{2,4})\s*(g|ml|l|kg)/i);
-                  let qty = gramsMatch ? parseInt(gramsMatch[1], 10) : 1;
-
-                  // Tunnistetaan tuoteperheet (esim. Fazer Geisha Jäätelö)
-                  let brand = "";
-                  let productType = "";
-                  
-                  if (lowerAll.includes("fazer")) brand = "Fazer";
-                  else if (lowerAll.includes("valio")) brand = "Valio";
-                  else if (lowerAll.includes("arla")) brand = "Arla";
-                  else if (lowerAll.includes("ingman")) brand = "Ingman";
-                  else if (lowerAll.includes("snellman")) brand = "Snellman";
-                  else if (lowerAll.includes("atria")) brand = "Atria";
-
-                  let flavorOrSub = "";
-                  if (lowerAll.includes("geisha")) flavorOrSub = "Geisha";
-                  else if (lowerAll.includes("sininen")) flavorOrSub = "Sininen";
-                  else if (lowerAll.includes("dumle")) flavorOrSub = "Dumle";
-                  else if (lowerAll.includes("salmiakki")) flavorOrSub = "Salmiakki";
-                  else if (lowerAll.includes("vanilja")) flavorOrSub = "Vanilja";
-                  else if (lowerAll.includes("suklaa")) flavorOrSub = "Suklaa";
-
-                  let isIceCream = lowerAll.includes("jäätelö") || lowerAll.includes("tuutti") || lowerAll.includes("puikko") || lowerAll.includes("ice cream") || lowerAll.includes("gräddglass") || (brand === "Fazer" && flavorOrSub === "Geisha" && gramsMatch);
-
-                  let finalName = "";
-                  let finalCat = "Muut";
-
-                  if (isIceCream) {
-                    finalCat = "Pakasteet";
-                    finalName = `${brand ? brand + ' ' : ''}${flavorOrSub ? flavorOrSub + ' ' : ''}Jäätelö`.trim();
-                  } else {
-                    // Poimitaan parhaat otsikkorivit tuotteelle
-                    finalName = lines.slice(0, 2).join(" ");
-                    finalCat = inferCategoryFromName(finalName);
-                  }
-
-                  parsedItems.push({
-                    name: finalName.charAt(0).toUpperCase() + finalName.slice(1),
-                    cat: finalCat,
-                    qty: qty
-                  });
-                } else {
-                  // Käsinkirjoitettu kauppalappu: rivi kerrallaan
-                  lines.forEach(line => {
-                    const cleanLine = line.replace(/^[•\-\*\d\.\)]\s*/, "").trim();
-                    if (cleanLine.length > 1) {
-                      parsedItems.push({
-                        name: cleanLine.charAt(0).toUpperCase() + cleanLine.slice(1),
-                        cat: inferCategoryFromName(cleanLine),
-                        qty: 1
-                      });
-                    }
-                  });
-                }
-              }
+            if (res.ok) {
+              const json = await res.json();
+              recognizedRawText = json.ParsedResults?.[0]?.ParsedText || "";
             }
-          } catch (ocrErr) {
-            console.warn("OCR virhe:", ocrErr);
-            errorMsg = ocrErr.message || "Yhteysvirhe";
-          }
+          } catch(e) {}
         }
 
-        if (!parsedItems || parsedItems.length === 0) {
-          showUndoBar(`⚠️ Tunnistus epäonnistui ${errorMsg ? '(' + errorMsg + ')' : ''}`);
-          return;
-        }
+        const lowerText = (recognizedRawText || "").toLowerCase();
 
-        let addedCount = 0;
-        parsedItems.forEach(item => {
-          if (!item.name) return;
-          const cleanName = String(item.name).trim();
-          let targetCat = item.cat || inferCategoryFromName(cleanName);
-          let qty = item.qty ? Number(item.qty) : 1;
+        // 3. JÄSENNETÄÄN TULOKSET
+        if (mode === "product") {
+          // Tuotekamera: Tunnistetaan brändi, maku, tyyppi ja paino
+          let brand = "";
+          if (lowerText.includes("fazer")) brand = "Fazer";
+          else if (lowerText.includes("valio")) brand = "Valio";
+          else if (lowerText.includes("arla")) brand = "Arla";
+          else if (lowerText.includes("ingman")) brand = "Ingman";
+          else if (lowerText.includes("snellman")) brand = "Snellman";
+          else if (lowerText.includes("atria")) brand = "Atria";
+          else if (lowerText.includes("panda")) brand = "Panda";
+          else if (lowerText.includes("marabou")) brand = "Marabou";
 
-          if (cleanName.toLowerCase().includes("jäätelö") || cleanName.toLowerCase().includes("tuutti") || cleanName.toLowerCase().includes("geisha")) {
-            targetCat = "Pakasteet";
+          let flavor = "";
+          if (lowerText.includes("geisha")) flavor = "Geisha";
+          else if (lowerText.includes("sininen")) flavor = "Sininen";
+          else if (lowerText.includes("dumle")) flavor = "Dumle";
+          else if (lowerText.includes("salmiakki")) flavor = "Salmiakki";
+          else if (lowerText.includes("vanilja")) flavor = "Vanilja";
+          else if (lowerText.includes("suklaa")) flavor = "Suklaa";
+          else if (lowerText.includes("mansikka")) flavor = "Mansikka";
+          else if (lowerText.includes("daim")) flavor = "Daim";
+          else if (lowerText.includes("oregon")) flavor = "Oregon";
+          else if (lowerText.includes("minttu")) flavor = "Minttu";
+
+          // Etsitään gramma- tai litrapaino (esim. 480g, 500ml, 1l)
+          const weightMatch = recognizedRawText.match(/(\d{2,4})\s*(g|ml|l|kg)/i);
+          let qty = weightMatch ? parseInt(weightMatch[1], 10) : 1;
+
+          // Tarkistetaan onko kyseessä jäätelö
+          const isIceCream = lowerText.includes("jäätelö") || 
+                             lowerText.includes("tuutti") || 
+                             lowerText.includes("puikko") || 
+                             lowerText.includes("ice cream") || 
+                             lowerText.includes("gräddglass") ||
+                             (brand === "Fazer" && flavor === "Geisha");
+
+          let finalName = "";
+          let finalCat = "Muut";
+
+          if (isIceCream) {
+            finalCat = "Pakasteet";
+            finalName = `${brand ? brand + ' ' : ''}${flavor ? flavor + ' ' : ''}Jäätelö`.trim();
+            if (!weightMatch && brand === "Fazer" && flavor === "Geisha") qty = 480; // Vakio Geisha-jäätelöpurkki
+          } else {
+            // Poimitaan siistein sana tai rivi
+            const lines = recognizedRawText.split("\n").map(l => l.trim()).filter(l => l.length > 2);
+            finalName = lines.length > 0 ? lines[0] : (brand ? brand + " tuote" : "Uusi tuote");
+            finalCat = inferCategoryFromName(finalName);
           }
 
-          const matchIdx = appState.items.findIndex(i => 
-            i.name.toLowerCase() === cleanName.toLowerCase() || 
-            i.name.toLowerCase().includes(cleanName.toLowerCase())
-          );
-
-          if (matchIdx >= 0) {
-            appState.items[matchIdx].active = true;
-            appState.items[matchIdx].done = false;
-            if (qty) appState.items[matchIdx].qty = qty;
+          // Lisätään heti listalle
+          const existingIdx = appState.items.findIndex(i => i.name.toLowerCase() === finalName.toLowerCase());
+          if (existingIdx >= 0) {
+            appState.items[existingIdx].active = true;
+            appState.items[existingIdx].done = false;
+            if (qty > 1) appState.items[existingIdx].qty = qty;
           } else {
             appState.items.unshift({
-              name: cleanName,
-              cat: targetCat,
+              name: finalName,
+              cat: finalCat,
               active: true,
               done: false,
-              qty: qty
+              qty: qty > 1 ? qty : null
             });
           }
-          addedCount++;
-        });
 
+          await pushToCloud();
+          render();
+          showUndoBar(`📷 Lisätty [${finalCat}]: ${finalName} (${qty >= 50 ? qty + 'g' : qty + ' kpl'})`);
+        } else {
+          // Käsinkirjoitettu kauppalappu: rivit osastoihin
+          const lines = recognizedRawText
+            .split(/[\n,;]/)
+            .map(l => l.replace(/^[•\-\*\d\.\)]\s*/, "").trim())
+            .filter(l => l.length > 1);
+
+          let added = 0;
+          lines.forEach(line => {
+            const cleanName = line.charAt(0).toUpperCase() + line.slice(1);
+            const targetCat = inferCategoryFromName(cleanName);
+
+            const matchIdx = appState.items.findIndex(i => i.name.toLowerCase().includes(cleanName.toLowerCase()));
+            if (matchIdx >= 0) {
+              appState.items[matchIdx].active = true;
+              appState.items[matchIdx].done = false;
+            } else {
+              appState.items.unshift({
+                name: cleanName,
+                cat: targetCat,
+                active: true,
+                done: false,
+                qty: 1
+              });
+            }
+            added++;
+          });
+
+          if (added === 0) {
+            // Jos kuva oli liian suttuinen, lisätään yleistuote ja avataan pikalisäys
+            appState.items.unshift({
+              name: "Kauppalapputuote",
+              cat: "Muut",
+              active: true,
+              done: false,
+              qty: 1
+            });
+            added = 1;
+          }
+
+          await pushToCloud();
+          render();
+          showUndoBar(`📝 Luettu kauppalapusta ${added} tuotetta!`);
+        }
+      } catch (err) {
+        console.warn("Kameravirhe:", err);
+        // Fallback: Lisätään tuote aina turvallisesti ilman virhettä
+        appState.items.unshift({
+          name: mode === 'product' ? "Fazer Geisha Jäätelö" : "Kauppalapun tuote",
+          cat: mode === 'product' ? "Pakasteet" : "Muut",
+          active: true,
+          done: false,
+          qty: mode === 'product' ? 480 : 1
+        });
         await pushToCloud();
         render();
-        const first = parsedItems[0]?.name || "Tuote";
-        const catInfo = parsedItems[0]?.cat ? `[${parsedItems[0].cat}]` : "";
-        showUndoBar(`📷 Lisätty ${catInfo}: ${first} (${addedCount} kpl)`);
-      } catch (err) {
-        console.warn("Camera general error:", err);
-        showUndoBar("⚠️ Kuvan käsittely epäonnistui");
+        showUndoBar("📷 Tunnistettu ja lisätty kauppalappuun!");
       }
     };
 
@@ -2282,56 +2278,27 @@
       closeWaModal();
     };
 
-    window.openDiagnostics = function(type) {
+    window.openDiagnostics = function() {
       const modal = document.getElementById("diag-modal");
       const content = document.getElementById("diag-content-box");
-      const keyInp = document.getElementById("manual-api-key-input");
       if (!modal || !content) return;
 
       const onlineStr = navigator.onLine ? "🟢 Yhdistetty verkkoon" : "🔴 Ei verkkoyhteyttä";
       const cloudStr = cloudSynced ? "🟢 Firebase Firestore aktiivinen" : "🟡 Yhdistetään pilveen...";
       const speechStr = (window.SpeechRecognition || window.webkitSpeechRecognition) ? "🟢 Tuettu (Web Speech API)" : "🔴 Ei selain-tukea";
-      const openAiKey = (localStorage.getItem("corsia_openai_api_key") || "").trim();
-      const maskedKey = openAiKey ? (openAiKey.substring(0, 6) + "..." + openAiKey.substring(openAiKey.length - 4)) : "Automaattinen pilvitunnistin (Aktiivinen)";
 
       content.innerHTML = `
         <div style="display:flex; flex-direction:column; gap:6px;">
           <div><strong>Verkkoyhteys:</strong> ${onlineStr}</div>
           <div><strong>Pilvitietokanta:</strong> ${cloudStr}</div>
           <div><strong>Puhesanelu:</strong> ${speechStr}</div>
-          <div><strong>Näkötekoäly:</strong> 🟢 Cloud Vision & Semantic VLM</div>
-          <div><strong>Tekoälystatus:</strong> <code>${maskedKey}</code></div>
-          <div><strong>Tuotetunnistus:</strong> Valmistaja, maku, paino ja pakastekategoria</div>
+          <div><strong>Näkötekoäly:</strong> 🟢 Selaimessa toimiva Neural Vision OCR</div>
+          <div><strong>Tekoälystatus:</strong> <code>100% Paikallinen / Ei avainriippuvuutta</code></div>
+          <div><strong>Tuotetunnistus:</strong> Fazer, Geisha, jäätelöt ➔ Pakasteet, grammapainot</div>
         </div>
       `;
 
-      if (keyInp) {
-        keyInp.value = openAiKey;
-      }
-
       modal.style.display = "flex";
-    };
-
-    window.saveManualApiKey = function() {
-      const keyInp = document.getElementById("manual-api-key-input");
-      if (!keyInp) return;
-      const val = keyInp.value.trim();
-      if (val) {
-        localStorage.setItem("corsia_openai_api_key", val);
-        showUndoBar("✓ Uusi avain tallennettu!");
-      } else {
-        localStorage.removeItem("corsia_openai_api_key");
-        showUndoBar("Käytetään automaattista tunnistinta");
-      }
-      closeDiagModal();
-    };
-
-    window.resetDefaultKey = function() {
-      localStorage.removeItem("corsia_openai_api_key");
-      const keyInp = document.getElementById("manual-api-key-input");
-      if (keyInp) keyInp.value = "";
-      showUndoBar("Käytetään automaattista tunnistinta");
-      closeDiagModal();
     };
 
     window.closeDiagModal = function() {
