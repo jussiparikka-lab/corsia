@@ -78,7 +78,7 @@
     .hero-banner {
       background: linear-gradient(145deg, #16a34a 0%, #15803d 100%);
       color: #ffffff;
-      padding: 16px 16px 20px;
+      padding: 14px 16px 16px;
       border-bottom-left-radius: 20px;
       border-bottom-right-radius: 20px;
       position: relative;
@@ -89,7 +89,7 @@
       justify-content: space-between;
       align-items: center;
       gap: 8px;
-      margin-bottom: 12px;
+      margin-bottom: 10px;
     }
 
     .brand-logo-wrap {
@@ -153,10 +153,10 @@
     }
 
     .hero-headline {
-      font-size: 1.28rem;
+      font-size: 1.25rem;
       font-weight: 800;
       letter-spacing: -0.3px;
-      margin-bottom: 6px;
+      margin-bottom: 5px;
     }
 
     .hero-counter-tag {
@@ -233,7 +233,7 @@
       gap: 12px;
       cursor: pointer;
       box-shadow: var(--shadow-sm);
-      margin-bottom: 24px;
+      margin-bottom: 22px;
       transition: transform 0.12s ease;
     }
 
@@ -299,7 +299,7 @@
       display: flex;
       flex-direction: column;
       gap: 8px;
-      margin-bottom: 22px;
+      margin-bottom: 20px;
     }
 
     .store-card {
@@ -355,7 +355,16 @@
       font-size: 1.1rem;
     }
 
-    /* Subtle WhatsApp Bar */
+    /* Subtle WhatsApp Bar & Camera */
+    .subtle-actions-group {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin: 10px auto 18px;
+      width: fit-content;
+    }
+
     .wa-subtle-btn {
       padding: 6px 14px;
       background: #f0fdf4;
@@ -395,16 +404,7 @@
       transform: scale(0.95);
     }
 
-    .subtle-actions-group {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      margin: 10px auto 20px;
-      width: fit-content;
-    }
-
-    /* Deals bottom box with flame emoji */
+    /* Deals bottom box */
     .deals-bottom-card {
       background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
       border: 1.5px solid #fed7aa;
@@ -415,7 +415,7 @@
       gap: 12px;
       cursor: pointer;
       box-shadow: var(--shadow-sm);
-      margin-top: 14px;
+      margin-top: 12px;
       transition: transform 0.12s ease;
     }
 
@@ -531,9 +531,9 @@
     }
 
     .soffa-input-qty {
-      width: 58px;
+      width: 54px;
       flex-shrink: 0;
-      padding: 9px 6px;
+      padding: 9px 4px;
       border-radius: 9px;
       border: 1px solid var(--border);
       font-size: 0.82rem;
@@ -1590,7 +1590,9 @@
       let contentHtml = "";
 
       layout.forEach(cat => {
-        const catItems = uncollected.filter(i => i.cat === cat);
+        const catItems = uncollected
+          .filter(i => i.cat === cat)
+          .sort((a, b) => a.name.localeCompare(b.name, 'fi'));
         if (catItems.length === 0) return;
 
         const rows = catItems.map(item => {
@@ -2054,10 +2056,6 @@ Kategoriat (mainCat): Liha, Hevi, Maitotuotteet, Juustot, Kuivat, Einekset, Herk
         });
 
         const apiKey = localStorage.getItem("corsia_gemini_api_key") || "";
-        if (!apiKey) {
-          showUndoBar("Huom: Tallenna Gemini API -avain asetuksista parasta tarkkuutta varten.");
-        }
-
         const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
 
         const payload = {
