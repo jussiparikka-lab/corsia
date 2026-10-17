@@ -968,14 +968,6 @@
     <div class="modal-panel">
       <h3 style="font-size: 1.05rem; margin-bottom: 8px;">⚙️ Corsia Järjestelmätila</h3>
       <div id="diag-content-box" style="font-size: 0.82rem; line-height: 1.5; color: #334155; margin-bottom: 14px;"></div>
-      <div style="margin-bottom: 12px; padding: 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;">
-        <label style="font-size: 0.76rem; font-weight: 800; color: #475569; display: block; margin-bottom: 4px;">🔑 Valinnainen Gemini API-avain:</label>
-        <div style="display: flex; gap: 6px;">
-          <input type="password" id="diag-gemini-key-input" placeholder="Syötä AI Studio API-avain..." style="flex: 1; padding: 7px 9px; font-size: 0.8rem; border: 1px solid #cbd5e1; border-radius: 8px; outline: none;">
-          <button onclick="saveGeminiApiKey()" style="padding: 7px 12px; background: #16a34a; color: white; border: none; border-radius: 8px; font-weight: 800; font-size: 0.78rem; cursor: pointer;">Tallenna</button>
-        </div>
-        <div style="font-size: 0.68rem; color: #64748b; margin-top: 4px;">Kuvantunnistus ja sanelu toimivat automaattisesti. Voit tarvittaessa vaihtaa avaimen tästä.</div>
-      </div>
       <button onclick="closeDiagModal()" style="width: 100%; padding: 9px; border-radius: 9px; background: #0284c7; color: white; border: none; font-weight: 800; font-size: 0.84rem; cursor: pointer;">Sulje</button>
     </div>
   </div>
@@ -1709,7 +1701,7 @@
       if (label) label.innerText = "Haetaan...";
       if (statusBox) {
         statusBox.style.display = "block";
-        statusBox.innerText = "Tutkitaan verkkohaulla Tammiston & Jumbon tämänhetkisiä tarjouksia...";
+        statusBox.innerText = "Tutkitaan Tammiston & Jumbon tämänhetkisiä tarjouksia...";
       }
 
       const now = new Date();
@@ -1750,7 +1742,7 @@
           }
         }
       } catch (e) {
-        console.warn("Gemini Deals Search fallback triggered:", e);
+        console.warn("Deals fetch note:", e);
       }
 
       if (!appState.deals || appState.deals.length === 0 || appState.deals === DAILY_DEALS) {
@@ -2094,11 +2086,10 @@
         const compressed = await compressImageForVision(file, 1000, 0.75);
         const apiKey = getEffectiveGeminiKey();
         let parsedProducts = [];
-        let apiSucceeded = false;
 
         const promptText = `Tunnista tästä kuvasta tuotteet ja määrät. 
 Kuvassa voi olla joko:
-1. Fyysinen tuote tai pakkaus (esim. kaljatölkki, olut, maito, leipäpussi, karkki). Jos kuvassa on olut tai tölkki, nimeä se esim "Oluttölkki" tai sen merkillä ja laita kategoriaan "Herkut".
+1. Fyysinen tuote tai pakkaus (esim. kaljatölkki, olut, maito, leipäpussi, karkki).
 2. Käsinkirjoitettu kauppalappu tai tulostettu kuitti.
 
 Kategoriat: Hevi, Juurekset, Hedelmät, Liha, Leikkeleet, Einekset, Vegaaniset, Maitotuotteet, Juustot, Kuivat, Kuivat (mutta märät), Jauhot, Aasia / Texmex, Pakasteet, Leivät, Herkut, Hygienia, Apteekki, IKEA, Rautakauppa, Muut.
@@ -2146,27 +2137,18 @@ Palauta AINOASTAAN JSON ilman markdownia:
                 const arr = JSON.parse(raw);
                 if (Array.isArray(arr) && arr.length > 0) {
                   parsedProducts = arr;
-                  apiSucceeded = true;
                   break;
                 }
               }
             } catch (netErr) {
-              console.warn("Gemini attempt failed:", netErr);
+              console.warn("Gemini attempt note:", netErr);
             }
           }
         }
 
-        if (!apiSucceeded || parsedProducts.length === 0) {
-          const fileName = (file.name || "").toLowerCase();
-          let fallbackName = "Olut (tölkki)";
-          let fallbackCat = "Herkut";
-
-          if (fileName.includes("milk") || fileName.includes("maito")) {
-            fallbackName = "Maito";
-            fallbackCat = "Maitotuotteet";
-          }
-
-          parsedProducts = [{ name: fallbackName, cat: fallbackCat, qty: 1 }];
+        if (!parsedProducts || parsedProducts.length === 0) {
+          showUndoBar("⚠️ Kuvaa ei voitu tunnistaa, yritä uudelleen.");
+          return;
         }
 
         let addedCount = 0;
@@ -2204,14 +2186,6 @@ Palauta AINOASTAAN JSON ilman markdownia:
       } catch (err) {
         console.warn("Kuvankäsittelyvirhe:", err);
         showUndoBar("⚠️ Kuvan käsittely epäonnistui");
-      }
-    };
-
-    window.saveGeminiApiKey = function() {
-      const input = document.getElementById("diag-gemini-key-input");
-      if (input && input.value.trim()) {
-        localStorage.setItem("corsia_gemini_api_key", input.value.trim());
-        showUndoBar("🔑 API-avain tallennettu!");
       }
     };
 
@@ -2253,10 +2227,6 @@ Palauta AINOASTAAN JSON ilman markdownia:
           <div><strong>Reittioptimointi:</strong> Prisma Jumbo & K-Citymarketit</div>
         </div>
       `;
-      const keyInput = document.getElementById("diag-gemini-key-input");
-      if (keyInput) {
-        keyInput.value = localStorage.getItem("corsia_gemini_api_key") || "";
-      }
       modal.style.display = "flex";
     };
 
