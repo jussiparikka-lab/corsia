@@ -359,13 +359,16 @@
 
     .soffa-input-row {
       display: flex;
-      gap: 8px;
+      gap: 6px;
       margin-bottom: 8px;
+      align-items: center;
+      width: 100%;
     }
 
     .soffa-input-text {
       flex: 1;
-      padding: 10px 14px;
+      min-width: 0;
+      padding: 9px 10px;
       border-radius: 12px;
       border: 1px solid #cbd5e1;
       background: #ffffff;
@@ -375,32 +378,34 @@
     }
 
     .soffa-input-qty {
-      width: 76px;
-      padding: 10px 8px;
+      width: 56px;
+      flex-shrink: 0;
+      padding: 9px 4px;
       text-align: center;
       border-radius: 12px;
       border: 1px solid #cbd5e1;
       background: #ffffff;
-      font-size: 0.86rem;
+      font-size: 0.84rem;
       font-family: inherit;
       outline: none;
       font-weight: 600;
     }
 
     .soffa-icon-btn {
-      width: 42px;
-      height: 42px;
+      width: 38px;
+      height: 38px;
       border-radius: 12px;
       border: 1px solid #cbd5e1;
       background: #ffffff;
       color: #334155;
-      font-size: 1.05rem;
+      font-size: 1rem;
       display: flex;
       align-items: center;
       justify-content: center;
       cursor: pointer;
       flex-shrink: 0;
       transition: all 0.15s ease;
+      padding: 0;
     }
 
     .soffa-icon-btn:active {
