@@ -930,7 +930,7 @@
     <footer class="app-footer">
       <div>POWERED BY</div>
       <div class="app-footer-tech">
-        <span>Gemini 3 Vision</span> •
+        <span>Gemini Vision AI</span> •
         <span>Firebase Cloud</span> •
         <span>Web Speech AI</span>
       </div>
@@ -1458,7 +1458,7 @@
             <div class="wa-subtle-btn" onclick="openWaModal()">
               <span>💬 Tuo WhatsApp-lista</span>
             </div>
-            <div class="camera-subtle-btn" onclick="triggerCameraInput()" title="Skannaa käsinkirjoitettu kauppalappu tai kuitti">
+            <div class="camera-subtle-btn" onclick="triggerCameraInput()" title="Skannaa tuote, kuitti tai lappu">
               📷
             </div>
           </div>
@@ -1544,7 +1544,7 @@
               <input type="text" id="soffa-add-name" class="soffa-input-name" placeholder="Tuotteen nimi (esim. Kauramaito)" />
               <input type="text" id="soffa-add-qty" class="soffa-input-qty" placeholder="1 kpl" />
               <button class="soffa-icon-btn" onclick="startVoiceRecognition()" title="Puhu sanelemalla">🎤</button>
-              <button class="soffa-icon-btn" onclick="triggerCameraInput()" title="Skannaa kuitti tai lappu">📷</button>
+              <button class="soffa-icon-btn" onclick="triggerCameraInput()" title="Skannaa tuote, kuitti tai lappu">📷</button>
             </div>
             <select id="soffa-add-cat" class="soffa-category-select">
               ${allCategories.map(c => `<option value="${c}">${c.toUpperCase()}</option>`).join("")}
@@ -1721,12 +1721,11 @@
         const apiKey = getEffectiveGeminiKey();
         if (apiKey) {
           const prompt = "Hae Vantaan Tammiston ja Jumbon K-Citymarketin ja Prisman tämän viikon parhaat tarjoukset (lohi, liha, kahvi jne.). Palauta VAIN JSON-lista: [{\"id\":\"d1\",\"cat\":\"Kategoria\",\"name\":\"Tuote\",\"price\":\"Hinta\",\"store\":\"Kauppa\",\"mainCat\":\"Liha\"}]";
-          const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`, {
+          const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              contents: [{ parts: [{ text: prompt }] }],
-              tools: [{ google_search: {} }]
+              contents: [{ parts: [{ text: prompt }] }]
             })
           });
           if (res.ok) {
@@ -2025,7 +2024,8 @@
       }
     };
 
-    function compressImageForVision(file, maxDimension = 1000, quality = 0.75) {
+    // KUVAN OPTIMOINTI JA KEVENNYS GEMINI-ANALYYSIÄ VARTEN
+    function compressImageForVision(file, maxDimension = 800, quality = 0.65) {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = (readerEvent) => {
@@ -2048,11 +2048,14 @@
             canvas.width = width;
             canvas.height = height;
             const ctx = canvas.getContext("2d");
+            
+            ctx.fillStyle = "#FFFFFF";
+            ctx.fillRect(0, 0, width, height);
             ctx.drawImage(img, 0, 0, width, height);
 
             const compressedBase64 = canvas.toDataURL("image/jpeg", quality);
             const cleanBase64 = compressedBase64.split(",")[1];
-            resolve({ base64: cleanBase64, mimeType: "image/jpeg", canvas: canvas });
+            resolve({ base64: cleanBase64, mimeType: "image/jpeg" });
           };
           img.onerror = reject;
           img.src = readerEvent.target.result;
@@ -2064,38 +2067,41 @@
 
     function categorizeProductName(rawName) {
       const n = (rawName || "").toLowerCase();
-      if (n.includes("olut") || n.includes("kalja") || n.includes("koff") || n.includes("karhu") || n.includes("siideri") || n.includes("lonkero") || n.includes("sips") || n.includes("suklaa")) return "Herkut";
+      if (n.includes("olut") || n.includes("kalja") || n.includes("koff") || n.includes("karhu") || n.includes("siideri") || n.includes("lonkero") || n.includes("sips") || n.includes("suklaa") || n.includes("karkki")) return "Herkut";
       if (n.includes("maito") || n.includes("kerma") || n.includes("voi") || n.includes("jogurtti") || n.includes("rahka")) return "Maitotuotteet";
       if (n.includes("kurkku") || n.includes("tomaatti") || n.includes("salaatti") || n.includes("sipuli") || n.includes("paprika") || n.includes("chili")) return "Hevi";
       if (n.includes("peruna") || n.includes("porkkana") || n.includes("juures")) return "Juurekset";
       if (n.includes("banaani") || n.includes("omena") || n.includes("appelsiini") || n.includes("avokado")) return "Hedelmät";
-      if (n.includes("jauheliha") || n.includes("kana") || n.includes("lohi") || n.includes("kala") || n.includes("pihvi")) return "Liha";
-      if (n.includes("leipä") || n.includes("ruis") || n.includes("paahto")) return "Leivät";
+      if (n.includes("jauheliha") || n.includes("kana") || n.includes("lohi") || n.includes("kala") || n.includes("pihvi") || n.includes("liha")) return "Liha";
+      if (n.includes("leipä") || n.includes("ruis") || n.includes("paahto") || n.includes("sämpylä")) return "Leivät";
       if (n.includes("juusto") || n.includes("oltermanni")) return "Juustot";
       if (n.includes("pasta") || n.includes("riisi") || n.includes("kahvi") || n.includes("jauho")) return "Kuivat";
-      if (n.includes("wc") || n.includes("paperi") || n.includes("pesu") || n.includes("shampoo")) return "Hygienia";
+      if (n.includes("wc") || n.includes("paperi") || n.includes("pesu") || n.includes("shampoo") || n.includes("saippua")) return "Hygienia";
       return "Muut";
     }
 
     window.handleReceiptImage = async function(input) {
       if (!input.files || !input.files[0]) return;
       const file = input.files[0];
-      showUndoBar("📷 Tunnistetaan kuvaa tekoälyllä...");
+      showUndoBar("📷 Tiivistetään kuvaa & haistellaan tekoälyllä...");
 
       try {
-        const compressed = await compressImageForVision(file, 1000, 0.75);
+        // Pienennetään iso kamerakuva kevyeen 800px muotoon viiveen minimoimiseksi
+        const compressed = await compressImageForVision(file, 800, 0.65);
         const apiKey = getEffectiveGeminiKey();
         let parsedProducts = [];
 
-        const promptText = `Tunnista tästä kuvasta tuotteet ja määrät. 
-Kuvassa voi olla joko:
-1. Fyysinen tuote tai pakkaus (esim. kaljatölkki, olut, maito, leipäpussi, karkki).
-2. Käsinkirjoitettu kauppalappu tai tulostettu kuitti.
+        const promptText = `Tunnista tästä kuvasta tuotteet ja niiden määrät selkeällä suomen kielellä.
+Kuvassa voi olla:
+- Fyysinen tuote tai pakkaus kotona/sohvalla (esim. Oluttölkki, kahvipaketti, leipä, maitotölkki).
+- Käsinkirjoitettu muistilappu tai painettu kauppakuitti.
 
-Kategoriat: Hevi, Juurekset, Hedelmät, Liha, Leikkeleet, Einekset, Vegaaniset, Maitotuotteet, Juustot, Kuivat, Kuivat (mutta märät), Jauhot, Aasia / Texmex, Pakasteet, Leivät, Herkut, Hygienia, Apteekki, IKEA, Rautakauppa, Muut.
+Päättelyohje: Jos kuvassa on esine/tuote, päätteles sen selkeä nimi (esim. "Karhu olut", "Kauramaito", "Banaani").
 
-Palauta AINOASTAAN JSON ilman markdownia:
-[{"name": "Tuotenimi", "cat": "Kategoria", "qty": 1}]`;
+Sallitut kategoriat: Hevi, Juurekset, Hedelmät, Liha, Leikkeleet, Einekset, Vegaaniset, Maitotuotteet, Juustot, Kuivat, Kuivat (mutta märät), Jauhot, Aasia / Texmex, Pakasteet, Leivät, Herkut, Hygienia, Apteekki, IKEA, Rautakauppa, Muut.
+
+Palauta AINOASTAAN puhas JSON-taulukko ilman markdownia tai muuta tekstiä:
+[{"name": "Tuotteen nimi", "cat": "Kategoria", "qty": 1}]`;
 
         let lastHttpError = "";
 
@@ -2113,18 +2119,18 @@ Palauta AINOASTAAN JSON ilman markdownia:
                 }
               ]
             }],
-            generationConfig: { temperature: 0.1 }
+            generationConfig: { 
+              temperature: 0.1,
+              responseMimeType: "application/json"
+            }
           };
 
-          const endpoints = [
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
-            `https://aiplatform.googleapis.com/v1/publishers/google/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`
-          ];
+          // Käytetään Gemini Native -endpointtia puhtaasti x-goog-api-key -otsakkeella ilman tupla-autentikointia
+          const models = ["gemini-1.5-flash", "gemini-2.5-flash"];
 
-          for (const url of endpoints) {
+          for (const model of models) {
             try {
-              const res = await fetch(url, {
+              const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
                 method: "POST",
                 headers: {
                   "Content-Type": "application/json",
@@ -2230,7 +2236,7 @@ Palauta AINOASTAAN JSON ilman markdownia:
           <div><strong>Verkkoyhteys:</strong> ${onlineStr}</div>
           <div><strong>Pilvitietokanta:</strong> ${cloudStr}</div>
           <div><strong>Puhesanelu:</strong> ${speechStr}</div>
-          <div><strong>Tekoälymoottori:</strong> 🟢 Gemini 3 Flash Vision</div>
+          <div><strong>Tekoälymoottori:</strong> 🟢 Gemini Vision AI</div>
           <div><strong>API-tila:</strong> ${hasKey}</div>
           <div><strong>Tuotekatalogi:</strong> 150+ vakioartikkelia</div>
           <div><strong>Reittioptimointi:</strong> Prisma Jumbo & K-Citymarketit</div>
