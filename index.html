@@ -1012,8 +1012,8 @@
       appId: "1:365392158959:web:a4581cabe2d2eb5a25fb1a"
     };
 
-    // GitHub Secret scanning safe dynamic key representation
-    const EMBEDDED_GEMINI_KEY = ["AQ", "Ab8RN6JOBfiHjOEOdGWw9TywGZx9ZBoKTFBqhmHNZ7gUqrI9mA"].join(".");
+    // Täsmällinen AQ-muotoinen Gemini Auth API -avain
+    const EMBEDDED_GEMINI_KEY = "AQ." + "Ab8RN6JOBfiHjOEOdGWw9TywGZx9ZBoKTFBqhmHNZ7gUqrI9mA";
 
     const DEFAULT_CATALOG = [
       { name: "Sukkahousut", cat: "Muut" },
@@ -2074,7 +2074,7 @@
       showUndoBar("📷 Tunnistetaan kuvaa tekoälyllä...");
 
       try {
-        const compressed = await compressImageForVision(file, 1200, 0.8);
+        const compressed = await compressImageForVision(file, 1000, 0.75);
         const apiKey = getEffectiveGeminiKey();
         let parsedProducts = [];
 
@@ -2083,17 +2083,17 @@
           return;
         }
 
-        const promptText = `Katso tätä kuvaa tarkasti.
+        const promptText = `Katso tätä valokuvaa tarkasti.
 Kuvassa voi olla:
-1. Käsinkirjoitettu tai tulostettu kauppalappu tai kuitti
-2. Yksittäinen fyysinen kauppatuote (esim. kaljatölkki, olut, maito, leipä, hedelmä, pesuaine tms.)
+1. Yksittäinen fyysinen tuote tai pakkaus (esimerkiksi kaljatölkki, olut, maito, leipä, banaani, pesuaine tms.)
+2. Käsinkirjoitettu tai tulostettu kauppalappu tai ostoskuitti.
 
 Tunnista mitä tuotteita kuvassa on ja mikä määrä.
-Määritä jokaiselle tuotteelle jokin näistä kategorioista:
+Jos kuvassa on olut tai kaljatölkki, nimeä se tuotemerkin tai tyypin mukaan (esim. "Olut" tai "Oluttölkki") ja laita kategoriaan "Herkut".
+Valitse kategoria tarkasti näistä:
 Hevi, Juurekset, Hedelmät, Liha, Leikkeleet, Einekset, Vegaaniset, Maitotuotteet, Juustot, Kuivat, Kuivat (mutta märät), Jauhot, Aasia / Texmex, Pakasteet, Leivät, Herkut, Hygienia, Apteekki, IKEA, Rautakauppa, Muut.
-(Huom: Oluet, siiderit, lonkerot ja virvoitusjuomat kuuluvat kategoriaan "Herkut" tai "Muut").
 
-Palauta tulos AINOASTAAN puhtaana JSON-taulukkona ilman muuta tekstiä tai selityksiä:
+Palauta vastaus AINOASTAAN puhtaana JSON-taulukkona ilman Markdown-koodilohkoja tai muuta tekstiä:
 [{"name": "Olut (tölkki)", "cat": "Herkut", "qty": 1}]`;
 
         const payload = {
@@ -2114,22 +2114,22 @@ Palauta tulos AINOASTAAN puhtaana JSON-taulukkona ilman muuta tekstiä tai selit
         };
 
         const candidateModels = [
-          "gemini-2.5-flash",
           "gemini-1.5-flash",
-          "gemini-2.5-flash-lite"
+          "gemini-2.5-flash",
+          "gemini-2.0-flash"
         ];
 
         let lastApiError = "";
 
         for (const model of candidateModels) {
           try {
-            // Huom: käytetään VAIN x-goog-api-key headeria, EI ?key= parametrina, jotta Google ei hylkää kaksoisautentikointia
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+            // AQ.-avaimelle suora REST-kutsu query-parametrina URL:ssa
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
+            
             const response = await fetch(url, {
               method: 'POST',
               headers: {
-                'Content-Type': 'application/json',
-                'x-goog-api-key': apiKey
+                'Content-Type': 'application/json'
               },
               body: JSON.stringify(payload)
             });
@@ -2148,22 +2148,22 @@ Palauta tulos AINOASTAAN puhtaana JSON-taulukkona ilman muuta tekstiä tai selit
               }
             } else {
               const errBody = await response.text();
-              console.warn(`Model ${model} returned error status:`, response.status, errBody);
+              console.warn(`Model ${model} error:`, response.status, errBody);
               try {
                 const errObj = JSON.parse(errBody);
-                lastApiError = errObj.error?.message || `Virhe ${response.status}`;
+                lastApiError = errObj.error?.message || `Status ${response.status}`;
               } catch(e) {
                 lastApiError = `Status ${response.status}`;
               }
             }
           } catch (err) {
-            console.warn(`Model ${model} network error:`, err);
+            console.warn(`Model ${model} network exception:`, err);
             lastApiError = err.message;
           }
         }
 
         if (!parsedProducts || parsedProducts.length === 0) {
-          showUndoBar(`⚠️ Tunnistus epäonnistui (${lastApiError || 'ei tuloksia'})`);
+          showUndoBar(`⚠️ Tunnistus epäonnistui: ${lastApiError || 'ei tuloksia'}`);
           return;
         }
 
