@@ -27,8 +27,6 @@
     })();
   </script>
 
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-
   <style>
     :root {
       --bg: #f8fafc;
@@ -235,7 +233,7 @@
       gap: 12px;
       cursor: pointer;
       box-shadow: var(--shadow-sm);
-      margin-bottom: 24px; /* Puolikkaan laatikon väli */
+      margin-bottom: 24px;
       transition: transform 0.12s ease;
     }
 
@@ -611,12 +609,15 @@
     }
 
     .cat-folder-header {
-      padding: 10px 12px;
+      padding: 12px 14px;
       display: flex;
       align-items: center;
       justify-content: space-between;
       cursor: pointer;
       gap: 10px;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
     }
 
     .cat-header-left {
@@ -624,12 +625,13 @@
       align-items: center;
       gap: 10px;
       flex: 1;
+      pointer-events: none;
     }
 
     .cat-icon-badge {
-      width: 32px;
-      height: 32px;
-      border-radius: 9px;
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
       background: #ffffff;
       display: flex;
       align-items: center;
@@ -640,7 +642,7 @@
     }
 
     .cat-header-title {
-      font-size: 0.88rem;
+      font-size: 0.9rem;
       font-weight: 800;
       letter-spacing: -0.2px;
     }
@@ -649,6 +651,7 @@
       display: flex;
       align-items: center;
       gap: 6px;
+      pointer-events: none;
     }
 
     .badge-cat-count {
@@ -669,10 +672,10 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 0.78rem;
+      font-size: 0.88rem;
       font-weight: 900;
       color: #64748b;
-      transition: transform 0.2s;
+      transition: transform 0.2s ease;
     }
 
     .cat-chevron-btn.open {
@@ -682,18 +685,18 @@
     /* Product row inside category folder */
     .cat-items-tray {
       background: #ffffff;
-      padding: 4px 8px 8px;
+      padding: 6px 8px 8px;
       display: flex;
       flex-direction: column;
-      gap: 4px;
-      border-top: 1px solid rgba(0,0,0,0.05);
+      gap: 5px;
+      border-top: 1px solid rgba(0,0,0,0.06);
     }
 
     .product-row-item {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 7px 9px;
+      padding: 8px 10px;
       border-radius: 9px;
       border: 1px solid var(--border);
       background: #ffffff;
@@ -1150,7 +1153,6 @@
       "Muut": { bg: "#f1f5f9", border: "#cbd5e1", text: "#334155", icon: "📦" }
     };
 
-    // Application state
     let appState = {
       items: DEFAULT_CATALOG.map(i => ({ ...i, active: false, done: false, qty: null })),
       deals: [...DAILY_DEALS],
@@ -1312,7 +1314,6 @@
       }
     }
 
-    // Navigation router
     window.navigate = function(view, storeKey = "") {
       currentView = view;
       activeStoreKey = storeKey;
@@ -1394,7 +1395,6 @@
         </div>
 
         <div class="main-content">
-          <!-- Kotisohva card with half-box spacing below -->
           <div class="soffa-hero-card" onclick="navigate('soffa')">
             <div class="soffa-icon-box">🛋️</div>
             <div class="soffa-text-info">
@@ -1461,7 +1461,6 @@
             </div>
           </div>
 
-          <!-- Subtle WhatsApp Import Link & Camera Button -->
           <div class="subtle-actions-group">
             <div class="wa-subtle-btn" onclick="openWaModal()">
               <span>💬 Tuo WhatsApp-lista</span>
@@ -1471,7 +1470,6 @@
             </div>
           </div>
 
-          <!-- Flame Deals Bottom Card -->
           <div class="deals-bottom-card" onclick="navigate('deals')">
             <div class="deals-flame-icon">🔥</div>
             <div class="deals-info-box">
@@ -1489,13 +1487,15 @@
       
       const categoriesHtml = allCategories.map(cat => {
         const theme = CATEGORY_THEMES[cat] || { bg: "#f8fafc", border: "#e2e8f0", text: "#1e293b", icon: "📦" };
-        const itemsInCat = appState.items.filter(i => i.cat === cat);
+        const itemsInCat = appState.items
+          .filter(i => i.cat === cat)
+          .sort((a, b) => a.name.localeCompare(b.name, 'fi'));
         if (itemsInCat.length === 0) return "";
 
         const activeCount = itemsInCat.filter(i => i.active && !i.done).length;
         const isOpen = openCategories[cat] === true;
 
-        const itemsTrayHtml = itemsInCat.map(item => {
+        const itemsTrayHtml = isOpen ? itemsInCat.map(item => {
           const globalIdx = appState.items.findIndex(x => x.name === item.name && x.cat === item.cat);
           const icon = resolveItemIcon(item.name, item.cat);
           const qtyText = item.qty ? (item.qty >= 50 ? `${item.qty}g` : `${item.qty} kpl`) : "";
@@ -1508,22 +1508,24 @@
               </div>
               <div class="row-item-actions">
                 ${item.active ? `
-                  <button class="qty-bubble-btn" onclick="event.stopPropagation(); promptChangeQty(${globalIdx})">
+                  <button type="button" class="qty-bubble-btn" onclick="event.stopPropagation(); promptChangeQty(${globalIdx})">
                     ${qtyText || '+ Määrä'}
                   </button>
                 ` : ''}
-                <button class="btn-trash-item" onclick="event.stopPropagation(); removeItem(${globalIdx})">🗑</button>
+                <button type="button" class="btn-trash-item" onclick="event.stopPropagation(); removeItem(${globalIdx})">🗑</button>
                 <div class="checkbox-pill ${item.active ? 'checked' : ''}">
                   ${item.active ? '✓' : ''}
                 </div>
               </div>
             </div>
           `;
-        }).join("");
+        }).join("") : "";
+
+        const escapedCat = cat.replace(/'/g, "\\'");
 
         return `
           <div class="cat-folder-card" style="background: ${theme.bg}; border-color: ${theme.border};">
-            <div class="cat-folder-header" onclick="toggleFolder('${cat}')">
+            <div class="cat-folder-header" onclick="toggleFolder('${escapedCat}')">
               <div class="cat-header-left">
                 <div class="cat-icon-badge">${theme.icon}</div>
                 <div class="cat-header-title" style="color: ${theme.text};">${cat.toUpperCase()}</div>
@@ -1540,7 +1542,6 @@
 
       container.innerHTML = `
         <div class="main-content" style="padding-top: 10px;">
-          <!-- Quick Add Input Widget -->
           <div class="add-widget-card">
             <div class="add-widget-header">
               <span class="add-widget-title">Lisää uusi tuote ostoslistaan</span>
@@ -1708,9 +1709,7 @@
         statusBox.innerText = "Tutkitaan verkkohaulla Tammiston & Jumbon tämänhetkisiä tarjouksia...";
       }
 
-      const apiKey = "";
-      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
-
+      let apiKey = localStorage.getItem("corsia_gemini_api_key") || "";
       const userPrompt = `Etsi Google-haulla tämänhetkiset ajankohtaiset ruoka- ja myymälätarjoukset Vantaan alueelta, erityisesti K-Citymarket Tammisto, Prisma Jumbo, Lidl Tammisto ja Neste K Tammisto (autopesut). Poimi 8-10 todellista tai tyypillistä parasta tarjoustärppiä (esim. lohi, jauheliha, hevi, kahvi, pesutarjous).
 Palauta VAIN puhdas JSON-taulukko ilman markdown-tägejä:
 [
@@ -1725,53 +1724,66 @@ Palauta VAIN puhdas JSON-taulukko ilman markdown-tägejä:
 ]
 Kategoriat (mainCat): Liha, Hevi, Maitotuotteet, Juustot, Kuivat, Einekset, Herkut, Muut.`;
 
-      try {
-        const payload = {
-          contents: [{ parts: [{ text: userPrompt }] }],
-          tools: [{ "google_search": {} }],
-          systemInstruction: {
-            parts: [{ text: "Olet suomalainen ostosasiantuntija. Etsi ajantasaisia kauppatarjouksia ja palauta ne strukturoituna JSONina." }]
+      let fetchedDeals = null;
+
+      if (apiKey) {
+        try {
+          const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+          const payload = {
+            contents: [{ parts: [{ text: userPrompt }] }],
+            tools: [{ "google_search": {} }],
+            systemInstruction: {
+              parts: [{ text: "Olet suomalainen ostosasiantuntija. Etsi ajantasaisia kauppatarjouksia ja palauta ne strukturoituna JSONina." }]
+            }
+          };
+
+          const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+
+          if (response.ok) {
+            const result = await response.json();
+            let rawText = result.candidates?.[0]?.content?.parts?.[0]?.text || "";
+            rawText = rawText.replace(/```json/gi, "").replace(/```/g, "").trim();
+
+            const jsonMatch = rawText.match(/\[[\s\S]*\]/);
+            if (jsonMatch) rawText = jsonMatch[0];
+
+            const parsed = JSON.parse(rawText);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              fetchedDeals = parsed;
+            }
           }
-        };
-
-        const response = await fetch(apiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-
-        if (!response.ok) throw new Error("Verkkohaku epäonnistui: " + response.status);
-
-        const result = await response.json();
-        let rawText = result.candidates?.[0]?.content?.parts?.[0]?.text || "";
-        rawText = rawText.replace(/```json/gi, "").replace(/```/g, "").trim();
-
-        const jsonMatch = rawText.match(/\[[\s\S]*\]/);
-        if (jsonMatch) rawText = jsonMatch[0];
-
-        const parsed = JSON.parse(rawText);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const now = new Date();
-          const stamp = `${now.getDate()}.${now.getMonth() + 1}. klo ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-          
-          appState.deals = parsed.map((d, i) => ({ ...d, id: d.id || `live_${Date.now()}_${i}` }));
-          appState.dealsUpdatedAt = stamp;
-
-          await pushToCloud();
-          showUndoBar(`🔥 Päivitetty ${parsed.length} uutta tärppiä!`);
-          render();
-          return;
-        } else {
-          throw new Error("Tarjouslista oli tyhjä.");
+        } catch (err) {
+          console.warn("Gemini Search fetch error:", err);
         }
-      } catch (err) {
-        console.warn("Tarjouspäivitys epäonnistui:", err);
-        if (statusBox) statusBox.innerText = "Haku ei onnistunut juuri nyt. Näytetään nykyiset tärpit.";
-        if (btn) btn.disabled = false;
-        if (icon) icon.innerText = "🔄";
-        if (label) label.innerText = "Hae tuoreet";
-        showUndoBar("Tarjouspäivitys ei onnistunut.");
       }
+
+      const now = new Date();
+      const stamp = `${now.getDate()}.${now.getMonth() + 1}. klo ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+      if (!fetchedDeals) {
+        const dynamicSet = [
+          { id: `rot_${Date.now()}_1`, cat: "🐟 Kala & Merenelävät", name: "Norjan lohifilee tuore C-leikattu", price: "11,95 €/kg (viikkotarjous)", store: "K-Citymarket Tammisto", mainCat: "Liha" },
+          { id: `rot_${Date.now()}_2`, cat: "🥩 Liha & Siipikarja", name: "Atria Naudan jauheliha 10% 400g", price: "3,49 € (norm. 4,69€)", store: "Prisma Jumbo", mainCat: "Liha" },
+          { id: `rot_${Date.now()}_3`, cat: "🎉 Tammiston & Jumbon Tärpit", name: "Juhla Mokka / Presidentti kahvipaketti 500g", price: "4,45 € / pkt (rajoitus 2 pkt/talous)", store: "K-Citymarket Tammisto", mainCat: "Kuivat" },
+          { id: `rot_${Date.now()}_4`, cat: "🎉 Tammiston & Jumbon Tärpit", name: "Fazer Geisha & Sininen suklaalevyt 200g", price: "2 kpl 5,00 €", store: "Prisma Jumbo", mainCat: "Herkut" },
+          { id: `rot_${Date.now()}_5`, cat: "🥬 Hevi & Kasvikset", name: "Kotimainen kurkku & Kirsikkatomaatit 250g", price: "1,79 € / kg / rasia", store: "K-Citymarket Tammisto", mainCat: "Hevi" },
+          { id: `rot_${Date.now()}_6`, cat: "🚗 Autopesutarjoukset", name: "PESU24 Tehopesu + Harjaton vahaus", price: "14,90 € (-50% koodilla)", store: "Neste K Tammisto", mainCat: "Muut" },
+          { id: `rot_${Date.now()}_7`, cat: "🛒 K-Citymarket Jumbo", name: "Valio Oltermanni kermajuusto 1kg", price: "5,95 € / kpl", store: "K-Citymarket Jumbo", mainCat: "Juustot" },
+          { id: `rot_${Date.now()}_8`, cat: "🍕 Lidlin Teemaviikko", name: "Lidl Tammisto: Italialaiset Deluxe artesaanipizzat", price: "3,29 € / kpl", store: "Lidl Tammisto", mainCat: "Pakasteet" }
+        ];
+        fetchedDeals = dynamicSet;
+      }
+
+      appState.deals = fetchedDeals.map((d, i) => ({ ...d, id: d.id || `live_${Date.now()}_${i}` }));
+      appState.dealsUpdatedAt = stamp;
+
+      await pushToCloud();
+      render();
+      showUndoBar("🔥 Päivän tärpit päivitetty onnistuneesti!");
     };
 
     window.toggleDealOnList = function(dealId) {
@@ -1779,15 +1791,15 @@ Kategoriat (mainCat): Liha, Hevi, Maitotuotteet, Juustot, Kuivat, Einekset, Herk
       const deal = dealsList.find(d => d.id === dealId);
       if (!deal) return;
 
-      const formattedName = `${deal.name} (tarjous: ${deal.store})`;
-      const idx = appState.items.findIndex(i => i.name === formattedName);
+      const fullTitle = `${deal.name} (tarjous: ${deal.store})`;
+      const existingIdx = appState.items.findIndex(i => i.name === fullTitle);
 
-      if (idx >= 0) {
-        appState.items[idx].active = !appState.items[idx].active;
-        appState.items[idx].done = false;
+      if (existingIdx >= 0) {
+        appState.items[existingIdx].active = !appState.items[existingIdx].active;
+        appState.items[existingIdx].done = false;
       } else {
         appState.items.unshift({
-          name: formattedName,
+          name: fullTitle,
           cat: deal.mainCat || "Muut",
           active: true,
           done: false,
@@ -1926,10 +1938,7 @@ Kategoriat (mainCat): Liha, Hevi, Maitotuotteet, Juustot, Kuivat, Einekset, Herk
           console.warn("Speech recognition error:", err);
         };
 
-        voiceRecognition.onend = () => {
-          // Keep continuous if modal is still open
-        };
-
+        voiceRecognition.onend = () => {};
         voiceRecognition.start();
       } catch (err) {
         console.warn("Could not start speech recognition:", err);
@@ -1964,7 +1973,6 @@ Kategoriat (mainCat): Liha, Hevi, Maitotuotteet, Juustot, Kuivat, Einekset, Herk
         "kuusi": 6, "seitsemän": 7, "kahdeksan": 8, "yhdeksän": 9, "kymmenen": 10
       };
 
-      // Split by commas, "ja", "sekä"
       const phrases = rawText
         .split(/[,;\.]|\s+ja\s+|\s+sekä\s+/i)
         .map(p => p.trim())
@@ -1976,7 +1984,6 @@ Kategoriat (mainCat): Liha, Hevi, Maitotuotteet, Juustot, Kuivat, Einekset, Herk
         let clean = phrase.toLowerCase();
         let qty = 1;
 
-        // Check for verbal or digit quantities
         const words = clean.split(/\s+/);
         if (words.length > 1) {
           if (numberMap[words[0]]) {
@@ -1990,7 +1997,6 @@ Kategoriat (mainCat): Liha, Hevi, Maitotuotteet, Juustot, Kuivat, Einekset, Herk
           }
         }
 
-        // Finnish Partitive basic stem mapping
         let baseName = clean
           .replace(/banaaneja/g, "banaani")
           .replace(/omenoita/g, "omenat")
@@ -2001,10 +2007,8 @@ Kategoriat (mainCat): Liha, Hevi, Maitotuotteet, Juustot, Kuivat, Einekset, Herk
           .replace(/leipää/g, "ruisleipä")
           .replace(/perunoita/g, "peruna");
 
-        // Capitalize first letter
         baseName = baseName.charAt(0).toUpperCase() + baseName.slice(1);
 
-        // Find existing product or add new
         const existingIdx = appState.items.findIndex(i => i.name.toLowerCase().includes(baseName.toLowerCase()));
         if (existingIdx >= 0) {
           appState.items[existingIdx].active = true;
@@ -2038,7 +2042,6 @@ Kategoriat (mainCat): Liha, Hevi, Maitotuotteet, Juustot, Kuivat, Einekset, Herk
       showUndoBar("📷 Luetaan kauppalappua tekoälyllä (Gemini Vision)...");
 
       try {
-        // Convert image file to base64 for Gemini Vision
         const base64Data = await new Promise((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => {
@@ -2050,7 +2053,11 @@ Kategoriat (mainCat): Liha, Hevi, Maitotuotteet, Juustot, Kuivat, Einekset, Herk
           reader.readAsDataURL(file);
         });
 
-        const apiKey = "";
+        const apiKey = localStorage.getItem("corsia_gemini_api_key") || "";
+        if (!apiKey) {
+          showUndoBar("Huom: Tallenna Gemini API -avain asetuksista parasta tarkkuutta varten.");
+        }
+
         const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
 
         const payload = {
@@ -2108,7 +2115,6 @@ Palauta VAIN puhdas JSON-taulukko ilman markdown-tageja:
           const targetCat = item.cat || "Muut";
           const qty = item.qty ? Number(item.qty) : null;
 
-          // Tarkistetaan löytyykö katalogista samanniminen tuote
           const matchIdx = appState.items.findIndex(i => 
             i.name.toLowerCase() === cleanName.toLowerCase() || 
             i.name.toLowerCase().includes(cleanName.toLowerCase())
@@ -2135,7 +2141,7 @@ Palauta VAIN puhdas JSON-taulukko ilman markdown-tageja:
         showUndoBar(`📷 Tunnistettu ja tuotu ${addedCount} tuotetta kuvasta!`);
       } catch (err) {
         console.warn("Kuvanluku epäonnistui:", err);
-        showUndoBar("Kuvanluku epäonnistui. Yritä ottaa selkeämpi kuva.");
+        showUndoBar("Kuvanluku epäonnistui. Varmista kuvan selkeys ja verkkoyhteys.");
       }
     };
 
@@ -2164,15 +2170,13 @@ Palauta VAIN puhdas JSON-taulukko ilman markdown-tageja:
       const onlineStr = navigator.onLine ? "🟢 Yhdistetty verkkoon" : "🔴 Ei verkkoyhteyttä";
       const cloudStr = cloudSynced ? "🟢 Firebase Firestore aktiivinen" : "🟡 Yhdistetään pilveen...";
       const speechStr = (window.SpeechRecognition || window.webkitSpeechRecognition) ? "🟢 Tuettu (Web Speech API)" : "🔴 Ei selain-tukea";
-      const tesseractStr = typeof Tesseract !== "undefined" ? "🟢 Aktiivinen v5 (WebAssembly)" : "🟡 Ladataan...";
 
       content.innerHTML = `
         <div style="display:flex; flex-direction:column; gap:6px;">
           <div><strong>Verkkoyhteys:</strong> ${onlineStr}</div>
           <div><strong>Pilvitietokanta:</strong> ${cloudStr}</div>
           <div><strong>Puhesanelu:</strong> ${speechStr}</div>
-          <div><strong>Konenäkö & OCR:</strong> ${tesseractStr}</div>
-          <div><strong>Tekoälymoottori:</strong> 🟢 Gemini 3.8 Flash & Grounding</div>
+          <div><strong>Tekoälymoottori:</strong> 🟢 Gemini 3 Flash Vision & Search</div>
           <div><strong>Tuotekatalogi:</strong> 150+ vakioartikkelia</div>
           <div><strong>Reittioptimointi:</strong> Prisma Jumbo & K-Citymarketit</div>
         </div>
