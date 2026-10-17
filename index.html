@@ -2324,10 +2324,12 @@
 
     window.markDone = function(index) {
       if (!appState.items[index]) return;
-      appState.items[index].done = true;
+      const item = appState.items[index];
+      item.done = true;
+      item.active = false;
       lastCollectedIndex = index;
       pushToCloud();
-      showUndoBar(`Kerätty: ${appState.items[index].name}`);
+      showUndoBar(`Kerätty: ${item.name}`);
       render();
     };
 
@@ -2438,6 +2440,7 @@
     window.triggerUndo = function() {
       if (lastCollectedIndex !== null && appState.items[lastCollectedIndex]) {
         appState.items[lastCollectedIndex].done = false;
+        appState.items[lastCollectedIndex].active = true;
         pushToCloud();
         lastCollectedIndex = null;
         render();
