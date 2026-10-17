@@ -2071,79 +2071,94 @@
     window.handleReceiptImage = async function(input) {
       if (!input.files || !input.files[0]) return;
       const file = input.files[0];
-      showUndoBar("📷 Luetaan kauppalappua...");
+      showUndoBar("📷 Tunnistetaan kuvaa tekoälyllä...");
 
       try {
         const compressed = await compressImageForVision(file, 1200, 0.8);
         const apiKey = getEffectiveGeminiKey();
         let parsedProducts = [];
 
-        if (apiKey) {
-          const payload = {
-            contents: [{
-              parts: [
-                {
-                  text: `Lue tämä kuva, jossa on kauppalappu tai kuitti.
-Tunnista KAIKKI ostettavat tuotteet ja määrät. Jäsennä kuhunkin tuotteeseen sopiva kategoria:
+        if (!apiKey) {
+          showUndoBar("⚠️ Gemini API-avain puuttuu!");
+          return;
+        }
+
+        const promptText = `Katso tätä kuvaa tarkasti.
+Kuvassa voi olla:
+1. Käsinkirjoitettu tai tulostettu kauppalappu tai kuitti
+2. Yksittäinen fyysinen kauppatuote (esim. kaljatölkki, olut, maito, leipä, hedelmä, pesuaine tms.)
+
+Tunnista mitä tuotteita kuvassa on ja mikä määrä.
+Määritä jokaiselle tuotteelle jokin näistä kategorioista:
 Hevi, Juurekset, Hedelmät, Liha, Leikkeleet, Einekset, Vegaaniset, Maitotuotteet, Juustot, Kuivat, Kuivat (mutta märät), Jauhot, Aasia / Texmex, Pakasteet, Leivät, Herkut, Hygienia, Apteekki, IKEA, Rautakauppa, Muut.
-Palauta tulos VAIN puhtaana JSON-taulukkona:
-[{"name":"Maito","cat":"Maitotuotteet","qty":2}]`
-                },
-                {
-                  inlineData: {
-                    mimeType: compressed.mimeType,
-                    data: compressed.base64
-                  }
-                }
-              ]
-            }]
-          };
+(Huom: Oluet, siiderit, lonkerot ja virvoitusjuomat kuuluvat kategoriaan "Herkut" tai "Muut").
 
-          // Kokeillaan molempia toimivia malleja sekä x-goog-api-key -otsikolla että parametrilla
-          const candidateModels = [
-            "gemini-2.5-flash",
-            "gemini-2.0-flash"
-          ];
+Palauta tulos AINOASTAAN puhtaana JSON-taulukkona ilman muuta tekstiä tai selityksiä:
+[{"name": "Olut (tölkki)", "cat": "Herkut", "qty": 1}]`;
 
-          for (const model of candidateModels) {
-            try {
-              const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-              const response = await fetch(url, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'x-goog-api-key': apiKey
-                },
-                body: JSON.stringify(payload)
-              });
-
-              if (response.ok) {
-                const result = await response.json();
-                let rawText = result.candidates?.[0]?.content?.parts?.[0]?.text || "";
-                rawText = rawText.replace(/```json/gi, "").replace(/```/g, "").trim();
-                const jsonMatch = rawText.match(/\[[\s\S]*\]/);
-                if (jsonMatch) {
-                  const arr = JSON.parse(jsonMatch[0]);
-                  if (Array.isArray(arr) && arr.length > 0) {
-                    parsedProducts = arr;
-                    break;
-                  }
+        const payload = {
+          contents: [{
+            parts: [
+              { text: promptText },
+              {
+                inlineData: {
+                  mimeType: compressed.mimeType,
+                  data: compressed.base64
                 }
               }
-            } catch (err) {
-              console.warn(`Model ${model} try error:`, err);
+            ]
+          }],
+          generationConfig: {
+            temperature: 0.1
+          }
+        };
+
+        const candidateModels = [
+          "gemini-2.5-flash",
+          "gemini-1.5-flash",
+          "gemini-2.5-flash-lite"
+        ];
+
+        let lastApiError = "";
+
+        for (const model of candidateModels) {
+          try {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+            const response = await fetch(url, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-goog-api-key': apiKey
+              },
+              body: JSON.stringify(payload)
+            });
+
+            if (response.ok) {
+              const result = await response.json();
+              let rawText = result.candidates?.[0]?.content?.parts?.[0]?.text || "";
+              rawText = rawText.replace(/```json/gi, "").replace(/```/g, "").trim();
+              const jsonMatch = rawText.match(/\[[\s\S]*\]/);
+              if (jsonMatch) {
+                const arr = JSON.parse(jsonMatch[0]);
+                if (Array.isArray(arr) && arr.length > 0) {
+                  parsedProducts = arr;
+                  break;
+                }
+              }
+            } else {
+              const errBody = await response.text();
+              console.warn(`Model ${model} returned error status:`, response.status, errBody);
+              lastApiError = `Status ${response.status}`;
             }
+          } catch (err) {
+            console.warn(`Model ${model} network error:`, err);
+            lastApiError = err.message;
           }
         }
 
-        // Jos suora API ei palauttanut mitään, kokeillaan vikasietoista tunnistusta
         if (!parsedProducts || parsedProducts.length === 0) {
-          // Etsitään oletuslistasta yleisimmät perusostokset jotka usein esiintyvät lapuilla
-          parsedProducts = [
-            { name: "Maito", cat: "Maitotuotteet", qty: 2 },
-            { name: "Banaani", cat: "Hedelmät", qty: 1 },
-            { name: "Kahvi", cat: "Kuivat", qty: 1 }
-          ];
+          showUndoBar(`⚠️ Tunnistus epäonnistui (${lastApiError || 'ei tuloksia'})`);
+          return;
         }
 
         let addedCount = 0;
@@ -2176,10 +2191,11 @@ Palauta tulos VAIN puhtaana JSON-taulukkona:
 
         await pushToCloud();
         render();
-        showUndoBar(`📷 Tunnistettu ja tuotu ${addedCount} tuotetta lapusta!`);
+        const firstItem = parsedProducts[0]?.name || "Tuote";
+        showUndoBar(`📷 Lisätty: ${firstItem} (${addedCount} kpl)`);
       } catch (err) {
         console.warn("Kuvanluku virhe:", err);
-        showUndoBar("⚠️ Kuvanluku epäonnistui, yritä uudelleen");
+        showUndoBar("⚠️ Kuvan käsittely epäonnistui");
       }
     };
 
