@@ -11,18 +11,15 @@
 
   <script>
     (function() {
-      // 1. Luodaan vektorikuvake (Ostoskärry) SVG-muodossa
       const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180"><defs><linearGradient id="g" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#4ade80" /><stop offset="100%" stop-color="#16a34a" /></linearGradient></defs><rect width="180" height="180" fill="url(#g)"/><g fill="none" stroke="#ffffff" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"><path d="M 30 45 L 50 45 L 65 105 L 135 105 L 150 55 L 55 55" /><circle cx="75" cy="132" r="11" fill="#ffffff" stroke="none" /><circle cx="125" cy="132" r="11" fill="#ffffff" stroke="none" /></g></svg>';
       const encoded = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
       
-      // 2. Asetetaan selaimeen normaali Favicon (SVG)
       const favLink = document.createElement("link");
       favLink.rel = "icon";
       favLink.type = "image/svg+xml";
       favLink.href = encoded;
       document.head.appendChild(favLink);
       
-      // 3. Renderöidään SVG Canvasin kautta PNG-kuvaksi iOS:n ja Web Manifestin tarpeisiin
       const img = new Image();
       img.onload = function() {
         const canvas = document.createElement("canvas");
@@ -32,13 +29,11 @@
         ctx.drawImage(img, 0, 0);
         const pngUrl = canvas.toDataURL("image/png");
         
-        // Lisätään Apple Touch Icon (iPhone & iPad Kotivalikko)
         const appleLink = document.createElement("link");
         appleLink.rel = "apple-touch-icon";
         appleLink.href = pngUrl;
         document.head.appendChild(appleLink);
         
-        // Lisätään dynaaminen Web App Manifest Androidille/Chromelle
         const manifest = {
           name: "Corsia",
           short_name: "Corsia",
@@ -61,18 +56,19 @@
   
   <style>
     :root {
-      --bg: #f4f5f8;
+      --bg: #f4f6fa;
       --card-bg: #ffffff;
       --text: #1c1c1e;
       --text-muted: #8e8e93;
       --primary: #007aff;
-      --accent-green: #34c759;
+      --accent-green: #16a34a;
+      --accent-green-header: #19b350;
       --k-orange: #ff6b00;
       --k-red: #d6001c;
       --prisma-green: #007934;
       --wa-green: #25d366;
-      --border: #e5e5ea;
-      --shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+      --border: #e2e8f0;
+      --shadow: 0 4px 14px rgba(0, 0, 0, 0.05);
       --font-stack: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
     }
 
@@ -91,20 +87,32 @@
       user-select: none;
     }
 
+    /* Uusi yläpalkki (header) - rajataan aina 600px leveyteen */
     header {
       position: sticky;
       top: 0;
-      background: rgba(255, 255, 255, 0.94);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
+      background: rgba(255, 255, 255, 0.96);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
       border-bottom: 1px solid var(--border);
-      padding: 8px 16px;
-      padding-top: max(8px, env(safe-area-inset-top));
+      padding: 6px 14px;
+      padding-top: max(6px, env(safe-area-inset-top));
       display: flex;
       align-items: center;
       justify-content: space-between;
-      height: 46px;
+      height: 44px;
       z-index: 90;
+      max-width: 600px;
+      margin: 0 auto;
+      transition: background 0.2s ease, border-color 0.2s ease;
+    }
+
+    /* Kotinäkymässä header integroituu vihreään hero-alueeseen ilman reunapalkkeja */
+    body.is-home header {
+      background: #19b350;
+      border-bottom: none;
+      box-shadow: none;
+      padding-bottom: 0;
     }
 
     .header-title {
@@ -113,6 +121,13 @@
       letter-spacing: -0.3px;
       text-align: center;
       flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    body.is-home .header-title {
+      justify-content: flex-start;
     }
 
     .header-btn {
@@ -128,43 +143,445 @@
       padding: 4px 0;
     }
 
+    body.is-home .header-btn {
+      color: #ffffff;
+    }
+
+    /* Uudet dynaamiset status-pillarit siirrettynä keskemmälle */
+    .top-status-container {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 3px;
+      margin-right: 2px;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 0.62rem;
+      font-weight: 800;
+      letter-spacing: 0.2px;
+      padding: 2.5px 7px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.24);
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      color: #ffffff;
+      cursor: pointer;
+      line-height: 1.1;
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      transition: all 0.2s ease;
+    }
+
+    .status-pill:active {
+      transform: scale(0.96);
+      background: rgba(255, 255, 255, 0.35);
+    }
+
+    .status-pill .pill-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #86efac;
+      box-shadow: 0 0 6px rgba(134, 239, 172, 0.8);
+    }
+
+    .status-pill.warning .pill-dot {
+      background: #fde047;
+      box-shadow: 0 0 6px rgba(253, 224, 71, 0.8);
+    }
+
+    .status-pill.error .pill-dot {
+      background: #f87171;
+      box-shadow: 0 0 6px rgba(248, 113, 113, 0.8);
+    }
+
+    /* Kauppa- ja sohvasivun tavallinen status */
+    .header-regular-status {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 0.74rem;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+
+    .header-regular-status .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #34c759;
+    }
+
+    /* Vihreä Home Hero - pysyy napakasti 600px laatikossa */
+    .home-hero-green {
+      background: linear-gradient(180deg, #19b350 0%, #15a046 100%);
+      color: #ffffff;
+      padding: 6px 14px 26px;
+      margin: -6px -12px 0;
+      border-radius: 0 0 24px 24px;
+      position: relative;
+    }
+
+    .home-hero-green h1 {
+      margin: 4px 0 6px;
+      font-size: 1.35rem;
+      font-weight: 800;
+      letter-spacing: -0.4px;
+      line-height: 1.2;
+    }
+
+    .hero-counter-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: #ffffff;
+      opacity: 0.95;
+    }
+
+    .hero-number-pill {
+      background: #ffffff;
+      color: #15803d;
+      font-weight: 800;
+      font-size: 0.78rem;
+      padding: 1px 6px;
+      border-radius: 6px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    }
+
+    /* Kelluva Kotisohva-kortti - tiivistetty mobiiliin */
+    .card-soffa-floating {
+      background: #eefbf3;
+      border: 1.5px solid #bbf7d0;
+      border-radius: 16px;
+      padding: 9px 12px;
+      margin: -16px 0 12px;
+      box-shadow: 0 6px 16px rgba(22, 163, 74, 0.12);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      position: relative;
+      z-index: 10;
+      transition: transform 0.12s ease;
+    }
+
+    .card-soffa-floating:active {
+      transform: scale(0.985);
+    }
+
+    .soffa-icon-circle {
+      width: 38px;
+      height: 38px;
+      background: #ffffff;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.3rem;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+      flex-shrink: 0;
+    }
+
+    .soffa-title {
+      font-size: 0.92rem;
+      font-weight: 800;
+      color: #14532d;
+      margin-bottom: 1px;
+    }
+
+    .soffa-desc {
+      font-size: 0.7rem;
+      color: #166534;
+      line-height: 1.25;
+    }
+
+    .soffa-arrow-circle {
+      width: 28px;
+      height: 28px;
+      background: #ffffff;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #16a34a;
+      font-weight: 800;
+      font-size: 0.88rem;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+      flex-shrink: 0;
+    }
+
+    .section-eyebrow {
+      font-size: 0.72rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.7px;
+      color: #64748b;
+      margin: 8px 2px 6px;
+    }
+
+    /* Kotisohva-sivun tyylittely (Kuva 1) */
+    .soffa-add-card {
+      background: #ffffff;
+      border-radius: 20px;
+      padding: 16px;
+      box-shadow: var(--shadow);
+      border: 1px solid var(--border);
+      margin-bottom: 20px;
+    }
+
+    .soffa-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .soffa-card-title {
+      font-size: 0.88rem;
+      font-weight: 800;
+      color: #1e293b;
+    }
+
+    .soffa-badge-quick {
+      font-size: 0.68rem;
+      font-weight: 700;
+      background: #f1f5f9;
+      color: #475569;
+      padding: 3px 8px;
+      border-radius: 999px;
+      border: 1px solid #e2e8f0;
+    }
+
+    .soffa-input-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .soffa-input-text {
+      flex: 1;
+      padding: 10px 14px;
+      border-radius: 12px;
+      border: 1px solid #cbd5e1;
+      background: #ffffff;
+      font-size: 0.88rem;
+      font-family: inherit;
+      outline: none;
+    }
+
+    .soffa-input-qty {
+      width: 76px;
+      padding: 10px 8px;
+      text-align: center;
+      border-radius: 12px;
+      border: 1px solid #cbd5e1;
+      background: #ffffff;
+      font-size: 0.86rem;
+      font-family: inherit;
+      outline: none;
+      font-weight: 600;
+    }
+
+    .soffa-icon-btn {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      border: 1px solid #cbd5e1;
+      background: #ffffff;
+      color: #334155;
+      font-size: 1.05rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: all 0.15s ease;
+    }
+
+    .soffa-icon-btn:active {
+      background: #f1f5f9;
+      transform: scale(0.96);
+    }
+
+    .soffa-select-cat {
+      width: 100%;
+      padding: 10px 14px;
+      border-radius: 12px;
+      border: 1px solid #cbd5e1;
+      background: #ffffff;
+      font-size: 0.86rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: #334155;
+      font-family: inherit;
+      outline: none;
+      margin-bottom: 12px;
+    }
+
+    .soffa-btn-submit {
+      width: 100%;
+      background: #0284c7;
+      color: #ffffff;
+      border: none;
+      padding: 12px;
+      border-radius: 14px;
+      font-size: 0.94rem;
+      font-weight: 800;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      box-shadow: 0 4px 12px rgba(2, 132, 199, 0.25);
+      transition: all 0.15s ease;
+    }
+
+    .soffa-btn-submit:active {
+      transform: scale(0.99);
+      background: #0369a1;
+    }
+
+    .soffa-sections-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin: 18px 2px 10px;
+    }
+
+    .soffa-sections-title {
+      font-size: 0.78rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: #334155;
+    }
+
+    .soffa-sections-sub {
+      font-size: 0.72rem;
+      color: #64748b;
+      font-weight: 600;
+    }
+
+    .cat-card-modern {
+      background: #ffffff;
+      border-radius: 18px;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+      border: 1.5px solid var(--cat-border, #e2e8f0);
+      box-shadow: 0 2px 10px var(--cat-shadow, rgba(0,0,0,0.03));
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      transition: all 0.15s ease;
+    }
+
+    .cat-card-modern:active {
+      transform: scale(0.99);
+    }
+
+    .cat-icon-tile {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      background: var(--cat-icon-bg, #f1f5f9);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.25rem;
+      flex-shrink: 0;
+    }
+
+    .cat-card-info {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+    }
+
+    .cat-card-name-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 0;
+    }
+
+    .cat-card-name {
+      font-size: 0.86rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      color: #1e293b;
+    }
+
+    .cat-card-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--cat-accent, #38bdf8);
+    }
+
+    .cat-selected-pill {
+      font-size: 0.68rem;
+      font-weight: 800;
+      padding: 4px 9px;
+      border-radius: 999px;
+      border: 1.5px solid var(--cat-pill-border, #cbd5e1);
+      background: var(--cat-pill-bg, #f8fafc);
+      color: var(--cat-pill-color, #475569);
+      white-space: nowrap;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    .cat-chevron {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: #f8fafc;
+      color: #64748b;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: 800;
+      transition: transform 0.2s ease;
+      flex-shrink: 0;
+    }
+
+    .cat-chevron.open {
+      transform: rotate(90deg);
+    }
+
+    .cat-items-drawer {
+      padding: 4px 4px 8px;
+    }
+
     .content {
       max-width: 600px;
       margin: 0 auto;
-      padding: 8px 12px 60px;
+      padding: 6px 12px 50px;
     }
 
     .content.store-view-padding {
       padding-bottom: 105px;
     }
 
-    .home-hero {
-      margin-bottom: 8px;
-    }
-
-    .home-hero h2 {
-      margin: 0 0 2px;
-      font-size: 1.25rem;
-      font-weight: 800;
-      letter-spacing: -0.4px;
-    }
-
-    .home-hero p {
-      margin: 0;
-      color: var(--text-muted);
-      font-size: 0.8rem;
-    }
-
     .card-list {
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: 5px;
     }
 
     .action-card {
       background: var(--card-bg);
-      border-radius: 12px;
-      padding: 8px 12px;
+      border-radius: 11px;
+      padding: 7px 11px;
       box-shadow: var(--shadow);
       border: 1px solid var(--border);
       cursor: pointer;
@@ -178,58 +595,27 @@
       transform: scale(0.985);
     }
 
-    .action-card.card-soffa {
-      background: linear-gradient(135deg, #e8f5e9 0%, #dcedc8 100%);
-      border-color: #c5e1a5;
-      padding: 10px 12px;
-      margin-bottom: 30px; 
-    }
-
-    .action-card.card-soffa .card-title {
-      color: #2e7d32;
-    }
-
     /* Alaosio tarjouksille */
-    .deals-bottom-section {
-      margin-top: 18px;
-      padding-top: 14px;
-      border-top: 1px dashed #cbd5e1;
-    }
-
-    .deals-bottom-label {
-      font-size: 0.72rem;
-      font-weight: 800;
-      text-transform: uppercase;
-      letter-spacing: 0.6px;
-      color: #ea580c;
-      margin-bottom: 7px;
-      display: flex;
-      align-items: center;
-      gap: 5px;
-    }
-
     .action-card.card-deals {
       background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
       border: 1.5px solid #fdba74;
-      padding: 12px 14px;
+      padding: 10px 12px;
       box-shadow: 0 4px 12px rgba(234, 88, 12, 0.08);
-      margin-top: 24px;
-      margin-bottom: 20px;
     }
 
     .action-card.card-deals .card-title {
       color: #c2410c;
-      font-size: 0.96rem;
+      font-size: 0.92rem;
     }
 
     .action-card.card-deals .card-desc {
       color: #9a3412;
-      font-size: 0.74rem;
+      font-size: 0.72rem;
     }
 
     /* WA & Kamera -painikkeiden yhteisrivi */
     .home-quick-actions-row {
-      margin: 14px auto 0;
+      margin: 10px auto 0;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -238,12 +624,12 @@
     }
 
     .card-wa-subtle {
-      padding: 6px 14px;
+      padding: 5px 12px;
       background: transparent;
       border: 1px dashed #cbd5e1;
       border-radius: 20px;
       color: #94a3b8;
-      font-size: 0.72rem;
+      font-size: 0.7rem;
       font-weight: 600;
       display: flex;
       align-items: center;
@@ -261,13 +647,13 @@
     }
 
     .btn-camera-subtle {
-      width: 32px;
-      height: 32px;
+      width: 30px;
+      height: 30px;
       border-radius: 50%;
       border: 1px dashed #cbd5e1;
       background: transparent;
       color: #94a3b8;
-      font-size: 0.95rem;
+      font-size: 0.9rem;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -284,18 +670,19 @@
     }
 
     .card-icon {
-      font-size: 1.6rem;
+      font-size: 1.5rem;
       display: flex;
       align-items: center;
       justify-content: center;
-      width: 36px;
-      height: 36px;
+      width: 34px;
+      height: 34px;
       flex-shrink: 0;
     }
 
+    /* Optimoitu logo-laatikko puhelimelle */
     .logo-container {
-      width: 82px;
-      height: 32px;
+      width: 86px;
+      height: 30px;
       flex-shrink: 0;
       display: flex;
       align-items: center;
@@ -303,6 +690,7 @@
       border-radius: 7px;
       overflow: hidden;
       border: 1px solid rgba(0,0,0,0.06);
+      padding: 2px 4px;
     }
 
     .card-info {
@@ -310,20 +698,20 @@
     }
 
     .card-title {
-      font-size: 0.92rem;
+      font-size: 0.88rem;
       font-weight: 700;
       margin: 0 0 1px;
     }
 
     .card-desc {
-      font-size: 0.72rem;
+      font-size: 0.68rem;
       color: var(--text-muted);
       margin: 0;
     }
 
     .card-arrow {
       color: #c7c7cc;
-      font-size: 1.1rem;
+      font-size: 1rem;
       font-weight: 600;
     }
 
@@ -334,18 +722,19 @@
 
     .search-input {
       width: 100%;
-      padding: 9px 34px 9px 34px;
-      border-radius: 10px;
+      padding: 10px 34px 10px 36px;
+      border-radius: 12px;
       border: 1px solid var(--border);
       background: #ffffff;
       font-size: 0.9rem;
       font-family: inherit;
       outline: none;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.02);
     }
 
     .search-icon {
       position: absolute;
-      left: 10px;
+      left: 12px;
       top: 50%;
       transform: translateY(-50%);
       color: var(--text-muted);
@@ -354,7 +743,7 @@
 
     .search-clear-btn {
       position: absolute;
-      right: 8px;
+      right: 10px;
       top: 50%;
       transform: translateY(-50%);
       background: #e2e8f0;
@@ -373,60 +762,6 @@
       line-height: 1;
     }
 
-    .search-clear-btn:active {
-      background: #cbd5e1;
-      color: #1e293b;
-    }
-
-    .add-section {
-      background: var(--card-bg);
-      border-radius: 12px;
-      padding: 12px;
-      box-shadow: var(--shadow);
-      margin-bottom: 14px;
-      border: 1px solid var(--border);
-    }
-
-    .add-section-title {
-      font-size: 0.86rem;
-      font-weight: 700;
-      margin-bottom: 8px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    .form-row {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-
-    .form-inputs-group {
-      display: flex;
-      gap: 6px;
-    }
-
-    .btn-mic {
-      background: #f1f5f9;
-      border: 1px solid #cbd5e1;
-      color: #475569;
-      font-size: 1.1rem;
-      width: 38px;
-      height: 38px;
-      border-radius: 8px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      flex-shrink: 0;
-      transition: all 0.2s;
-    }
-
-    .btn-mic:active {
-      background: #e2e8f0;
-    }
-
     .btn-mic.recording {
       background: #fee2e2;
       border-color: #f87171;
@@ -438,87 +773,6 @@
       0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
       70% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
       100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
-    }
-
-    .qty-field {
-      width: 105px;
-      flex-shrink: 0;
-      padding: 9px 8px;
-      border-radius: 8px;
-      border: 1px solid var(--border);
-      background: #f9f9fb;
-      font-size: 0.86rem;
-      font-family: inherit;
-      outline: none;
-    }
-
-    .input-field, .select-field {
-      width: 100%;
-      padding: 9px 10px;
-      border-radius: 8px;
-      border: 1px solid var(--border);
-      background: #f9f9fb;
-      font-size: 0.88rem;
-      font-family: inherit;
-      outline: none;
-    }
-
-    .btn-add {
-      background: var(--accent-green);
-      color: #fff;
-      border: none;
-      padding: 10px;
-      border-radius: 8px;
-      font-size: 0.88rem;
-      font-weight: 700;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-    }
-
-    .btn-add:active {
-      opacity: 0.85;
-    }
-
-    .category-group {
-      margin-bottom: 14px;
-    }
-
-    .category-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      font-size: 0.8rem;
-      font-weight: 800;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: #1e293b;
-      background: #e2e8f0;
-      padding: 10px 12px;
-      border-radius: 8px;
-      border: 1px solid #cbd5e1;
-      margin-bottom: 6px;
-      cursor: pointer;
-      user-select: none;
-      transition: background 0.15s ease;
-    }
-
-    .category-header:active {
-      background: #cbd5e1;
-    }
-
-    .category-toggle-icon {
-      display: inline-block;
-      transition: transform 0.2s ease;
-      margin-right: 8px;
-      font-size: 0.75rem;
-      color: #64748b;
-    }
-
-    .category-toggle-icon.open {
-      transform: rotate(90deg);
     }
 
     .product-row {
@@ -544,6 +798,22 @@
       flex-wrap: wrap;
       flex: 1;
       padding-right: 6px;
+    }
+
+    .item-icon-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 26px;
+      height: 26px;
+      border-radius: 8px;
+      background: #f1f5f9;
+      font-size: 1rem;
+      flex-shrink: 0;
+      margin-right: 4px;
+      line-height: 1;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.03);
     }
 
     .product-name {
@@ -611,10 +881,6 @@
       touch-action: manipulation;
     }
 
-    .btn-stepper:active {
-      background: #7dd3fc;
-    }
-
     .stepper-val {
       font-size: 0.76rem;
       font-weight: 800;
@@ -648,11 +914,6 @@
       align-items: center;
       justify-content: center;
       line-height: 1;
-    }
-
-    .btn-delete-row:active {
-      background: #ffe5e5;
-      color: #ff3b30;
     }
 
     .checkbox-round {
@@ -732,14 +993,6 @@
       transition: all 0.15s ease;
     }
 
-    .btn-add-deal:active {
-      transform: scale(0.96);
-    }
-
-    .btn-add-deal.added {
-      background: #16a34a;
-    }
-
     .compact-store-footer {
       position: fixed;
       bottom: 0;
@@ -763,38 +1016,6 @@
       align-items: center;
       justify-content: space-between;
       gap: 6px;
-    }
-
-    .compact-cost {
-      display: flex;
-      align-items: baseline;
-      gap: 5px;
-      flex-wrap: wrap;
-    }
-
-    .compact-cost-title {
-      font-size: 0.68rem;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: #94a3b8;
-      font-weight: 700;
-    }
-
-    .compact-cost-sum {
-      font-size: 0.95rem;
-      font-weight: 800;
-      color: #38bdf8;
-      letter-spacing: -0.3px;
-    }
-
-    .compact-cost-sub {
-      font-size: 0.72rem;
-      color: #cbd5e1;
-    }
-
-    .compact-remaining {
-      color: #4ade80;
-      font-weight: 700;
     }
 
     .compact-progress-info {
@@ -855,52 +1076,6 @@
       box-shadow: 0 2px 6px rgba(22, 163, 74, 0.25);
     }
 
-    .btn-trip-done-compact:active {
-      background: #15803d;
-      transform: scale(0.99);
-    }
-
-    .btn-trip-done {
-      background: #22c55e;
-      color: #ffffff;
-      border: none;
-      padding: 10px 14px;
-      border-radius: 10px;
-      font-size: 0.85rem;
-      font-weight: 800;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-      width: 100%;
-      margin-top: 10px;
-      box-shadow: 0 3px 10px rgba(34, 197, 94, 0.3);
-    }
-
-    .btn-trip-done:active {
-      transform: scale(0.98);
-      background: #16a34a;
-    }
-
-    .product-row.frequent-item {
-      border-left: 3.5px solid #f59e0b;
-      background: linear-gradient(90deg, #fffdf5 0%, var(--card-bg) 35%);
-    }
-
-    .frequent-badge {
-      font-size: 0.65rem;
-      font-weight: 800;
-      color: #b45309;
-      background: #fef3c7;
-      padding: 2px 5px;
-      border-radius: 4px;
-      border: 1px solid #fde68a;
-      display: inline-flex;
-      align-items: center;
-      gap: 2px;
-    }
-
     .store-badge {
       display: inline-block;
       padding: 3px 9px;
@@ -926,12 +1101,6 @@
       touch-action: manipulation;
     }
 
-    .store-item:active {
-      transform: scale(0.985);
-      background-color: #ecfdf5;
-      border-color: #86efac;
-    }
-
     .store-item.marking-done, .other-store-item.marking-done {
       background: #dcfce7 !important;
       border-color: #22c55e !important;
@@ -939,46 +1108,6 @@
       opacity: 0 !important;
       pointer-events: none;
       transition: transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1), opacity 0.2s ease, background-color 0.14s ease !important;
-    }
-
-    .store-item .product-info-inline {
-      display: flex;
-      align-items: baseline;
-      gap: 7px;
-      flex-wrap: wrap;
-      flex: 1;
-      padding-right: 10px;
-    }
-
-    .store-item .product-name {
-      font-size: 1.15rem;
-      font-weight: 800;
-      color: #0f172a;
-      letter-spacing: -0.2px;
-      line-height: 1.25;
-    }
-
-    .store-item .prefix-tag {
-      font-size: 0.85rem;
-      font-weight: 900;
-      padding: 2px 7px;
-      border-radius: 5px;
-    }
-
-    .store-item .product-cat-tag {
-      font-size: 0.82rem;
-      color: #64748b;
-      font-weight: 500;
-    }
-
-    .store-item .qty-tag {
-      font-size: 0.85rem;
-      font-weight: 800;
-      padding: 3px 8px;
-      border-radius: 7px;
-      background: #eff6ff;
-      border-color: #bfdbfe;
-      color: #1d4ed8;
     }
 
     .store-item-btn {
@@ -1011,7 +1140,6 @@
       display: flex;
       align-items: center;
       gap: 5px;
-      letter-spacing: 0.1px;
     }
 
     .other-stores-list {
@@ -1030,75 +1158,8 @@
       justify-content: space-between;
       gap: 8px;
       cursor: pointer;
-      transition: background-color 0.1s ease;
-      touch-action: manipulation;
     }
 
-    .other-store-item:active {
-      background: #e2e8f0;
-    }
-
-    .other-store-info {
-      display: flex;
-      align-items: baseline;
-      gap: 6px;
-      flex-wrap: wrap;
-      flex: 1;
-    }
-
-    .other-store-name {
-      font-size: 0.82rem;
-      font-weight: 700;
-      color: #334155;
-    }
-
-    .other-store-cat {
-      font-size: 0.7rem;
-      color: #94a3b8;
-    }
-
-    .other-store-qty {
-      font-size: 0.7rem;
-      background: #e2e8f0;
-      color: #475569;
-      padding: 1px 5px;
-      border-radius: 4px;
-      font-weight: 700;
-    }
-
-    .btn-other-done {
-      background: #ffffff;
-      border: 1px solid #cbd5e1;
-      color: #475569;
-      font-size: 0.7rem;
-      font-weight: 700;
-      padding: 3px 8px;
-      border-radius: 6px;
-      pointer-events: none;
-      flex-shrink: 0;
-    }
-
-    .empty-state {
-      text-align: center;
-      padding: 36px 14px;
-      color: var(--text-muted);
-    }
-
-    .empty-state-icon {
-      font-size: 2.4rem;
-      margin-bottom: 6px;
-    }
-
-    .home-footer {
-      text-align: center;
-      padding: 30px 0 10px;
-      font-size: 0.75rem;
-      color: #94a3b8;
-      font-weight: 600;
-      letter-spacing: 0.5px;
-    }
-
-    /* Undo Bar */
     .undo-bar {
       position: fixed;
       bottom: max(14px, env(safe-area-inset-bottom));
@@ -1124,13 +1185,6 @@
       to { transform: translate(-50%, 0); opacity: 1; }
     }
 
-    .undo-text {
-      font-size: 0.82rem;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
     .undo-btn {
       background: #ffcc00;
       border: none;
@@ -1141,22 +1195,6 @@
       border-radius: 12px;
       cursor: pointer;
       flex-shrink: 0;
-    }
-
-    .sync-status {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      font-size: 0.74rem;
-      color: var(--text-muted);
-      cursor: pointer;
-    }
-
-    .status-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: #34c759;
     }
 
     .modal-overlay {
@@ -1179,16 +1217,6 @@
       box-shadow: 0 10px 30px rgba(0,0,0,0.2);
     }
 
-    .modal h3 {
-      margin: 0 0 6px;
-    }
-
-    .modal p {
-      font-size: 0.84rem;
-      color: #555;
-      margin: 0 0 14px;
-    }
-
     .modal-actions {
       display: flex;
       justify-content: flex-end;
@@ -1204,27 +1232,6 @@
       font-weight: 600;
       font-size: 0.82rem;
       cursor: pointer;
-    }
-
-    .btn-danger {
-      background: #ff3b30;
-      color: white;
-      border: none;
-      padding: 7px 12px;
-      border-radius: 8px;
-      font-weight: 600;
-      font-size: 0.82rem;
-      cursor: pointer;
-    }
-
-    .input-field, .select-field, .search-input {
-      user-select: text;
-      -webkit-user-select: text;
-    }
-
-    .input-field:focus, .select-field:focus, .search-input:focus {
-      border-color: var(--primary);
-      box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.15);
     }
 
     .btn-primary {
@@ -1250,16 +1257,9 @@
       resize: vertical;
       box-sizing: border-box;
       outline: none;
-      user-select: text;
-      -webkit-user-select: text;
       margin-bottom: 12px;
     }
 
-    .wa-textarea:focus {
-      border-color: var(--wa-green);
-    }
-
-    /* OCR ja Vision status boksit */
     .ocr-status-box {
       background: #eff6ff;
       border: 1px solid #bfdbfe;
@@ -1293,16 +1293,26 @@
     window.FirebaseModule = { initializeApp, getFirestore, doc, onSnapshot, setDoc };
   </script>
 </head>
-<body>
+<body class="is-home">
 
   <header>
-    <button class="header-btn" id="btn-back" onclick="navigate('home')" style="visibility: hidden;">
+    <button class="header-btn" id="btn-back" onclick="navigate('home')" style="display: none;">
       ‹ Takaisin
     </button>
-    <div class="header-title" id="page-title">Corsia</div>
-    <div class="sync-status" onclick="openFirebaseSettings()">
-      <div class="status-dot" id="sync-dot"></div>
-      <span id="sync-label">Muisti</span>
+    <div class="header-title" id="page-title">
+      <!-- Logo tai sivun nimi renderöityy tähän dynaamisesti -->
+    </div>
+    
+    <!-- Dynaamiset statukset oikeassa kulmassa -->
+    <div class="top-status-container" id="top-status-box">
+      <div class="status-pill" id="pill-cloud" onclick="openFirebaseSettings()" title="Pilvitallennus">
+        <span class="pill-dot" id="dot-cloud"></span>
+        <span id="label-cloud">PILVI OK</span>
+      </div>
+      <div class="status-pill" id="pill-ai" onclick="openDiagnosticsModal()" title="AI & Reittialgoritmit">
+        <span style="font-size: 0.7rem;">⚙️</span>
+        <span id="label-ai">AI & ALGORITMIT OK</span>
+      </div>
     </div>
   </header>
 
@@ -1317,13 +1327,27 @@
     <button class="undo-btn" onclick="triggerUndo()">PERU (UNDO)</button>
   </div>
 
+  <div class="modal-overlay" id="diagnostics-modal" style="display: none;">
+    <div class="modal" style="max-width: 400px;">
+      <h3 style="margin-top: 0; color: #16a34a; display: flex; align-items: center; gap: 8px;">
+        <span>⚙️</span> Järjestelmän tila
+      </h3>
+      <div id="diagnostics-content" style="font-size: 0.8rem; line-height: 1.6; color: #334155; margin-bottom: 14px;">
+        Tarkistetaan tiloja...
+      </div>
+      <div class="modal-actions">
+        <button class="btn-primary" onclick="closeDiagnosticsModal()">Sulje</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="delete-modal" style="display: none;">
     <div class="modal">
       <h3 style="color: #ff3b30; margin-top: 0;">Poista tuote</h3>
       <p id="delete-modal-text">Haluatko varmasti poistaa tuotteen vakiovalikoimasta?</p>
       <div class="modal-actions">
         <button class="btn-secondary" onclick="closeDeleteModal()">Peruuta</button>
-        <button class="btn-danger" onclick="executeDeleteProduct()">Poista tuote</button>
+        <button class="btn-danger" style="background:#ff3b30; color:white; border:none; padding:7px 12px; border-radius:8px; font-weight:600; font-size:0.82rem;" onclick="executeDeleteProduct()">Poista tuote</button>
       </div>
     </div>
   </div>
@@ -1333,10 +1357,7 @@
       <h3 style="margin-top: 0;">Määritä määrä</h3>
       <p id="qty-modal-sub" style="margin-bottom: 10px;">Aseta kappalemäärä tai grammat tuotteelle.</p>
       <div style="margin-bottom: 14px;">
-        <input type="number" id="qty-modal-input" class="input-field" placeholder="Vain numeroita, esim. 3 (kpl) tai 300 (g)" min="0" step="1">
-        <div style="font-size: 0.74rem; color: #64748b; margin-top: 6px;">
-          💡 Vinkki: alle 50 tulkitaan kappaleiksi (kpl), 50 tai yli grammoiksi (g). Tyhjä poistaa määrän.
-        </div>
+        <input type="number" id="qty-modal-input" class="input-field" style="width:100%; padding:9px 10px; border-radius:8px; border:1px solid #cbd5e1;" placeholder="Esim. 3 (kpl) tai 300 (g)" min="0" step="1">
       </div>
       <div class="modal-actions">
         <button class="btn-secondary" onclick="closeQtyModal()">Peruuta</button>
@@ -1361,7 +1382,6 @@
     </div>
   </div>
 
-  <!-- UUSI: Älykäs Tuotekuva & Gemini Vision -modaali -->
   <div class="modal-overlay" id="vision-modal" style="display: none;">
     <div class="modal" style="max-width: 400px;">
       <h3 style="margin-top: 0; color: #0284c7; display: flex; align-items: center; gap: 6px;">
@@ -1372,20 +1392,6 @@
         <img id="vision-preview-img" src="" alt="Esikatselu" style="max-height: 140px; border-radius: 8px; border: 1px solid #cbd5e1; object-fit: contain;">
       </div>
 
-      <div id="vision-key-prompt" style="display: none; background: #fff7ed; border: 1.5px solid #fdba74; border-radius: 10px; padding: 12px; margin-bottom: 12px;">
-        <div style="font-weight: 800; color: #c2410c; font-size: 0.86rem; margin-bottom: 4px;">
-          🔑 Gemini API -avain puuttuu
-        </div>
-        <p style="font-size: 0.76rem; color: #7c2d12; margin: 0 0 8px; line-height: 1.35;">
-          Tekoäly tarvitsee ilmaisen avaimen tunnistaakseen ruokatuotteen brändin ja paketin.
-        </p>
-        <input type="password" id="inline-gemini-key" class="input-field" placeholder="Liitä Gemini API -avain tähän..." style="font-size: 0.8rem; margin-bottom: 8px;">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-          <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" style="font-size: 0.72rem; color: #0284c7; font-weight: 700; text-decoration: underline;">Hanki avain (ilmainen) ↗</a>
-          <button class="btn-primary" style="padding: 6px 12px; font-size: 0.78rem;" onclick="saveInlineGeminiKeyAndRetry()">Tallenna ja tunnista</button>
-        </div>
-      </div>
-
       <div class="ocr-status-box" id="vision-status-box" style="display: none;">
         <div class="ocr-spinner"></div>
         <span id="vision-status-text">Analysoidaan kuvaa tekoälyllä...</span>
@@ -1393,16 +1399,16 @@
 
       <div id="vision-result-fields" style="display: none; margin-top: 10px;">
         <label style="font-size: 0.76rem; font-weight: 700; color: #475569; display: block; margin-bottom: 3px;">Tunnistettu tuote & brändi:</label>
-        <input type="text" id="vision-item-name" class="input-field" style="margin-bottom: 6px;">
+        <input type="text" id="vision-item-name" style="width:100%; padding:9px 10px; border-radius:8px; border:1px solid #cbd5e1; margin-bottom: 6px;">
         
         <div style="display: flex; gap: 6px; margin-bottom: 6px;">
           <div style="flex: 1;">
             <label style="font-size: 0.76rem; font-weight: 700; color: #475569; display: block; margin-bottom: 3px;">Määrä:</label>
-            <input type="number" id="vision-item-qty" class="qty-field" style="width: 100%;">
+            <input type="number" id="vision-item-qty" style="width: 100%; padding:9px 8px; border-radius:8px; border:1px solid #cbd5e1;">
           </div>
           <div style="flex: 1;">
             <label style="font-size: 0.76rem; font-weight: 700; color: #475569; display: block; margin-bottom: 3px;">Kategoria:</label>
-            <select id="vision-item-cat" class="select-field" style="padding: 9px 6px;"></select>
+            <select id="vision-item-cat" style="width:100%; padding: 9px 6px; border-radius:8px; border:1px solid #cbd5e1;"></select>
           </div>
         </div>
       </div>
@@ -1414,7 +1420,6 @@
     </div>
   </div>
 
-  <!-- OCR / Kuitti- ja paperilappuikkuna -->
   <div class="modal-overlay" id="ocr-modal" style="display: none;">
     <div class="modal" style="max-width: 400px;">
       <h3 style="margin-top: 0; color: #0284c7;">📷 Tunnistettu teksti kuvasta</h3>
@@ -1444,8 +1449,8 @@
         Synkronointi on aktivoitu ja yhdistetty Corsia-perheen pilveen. Muutokset päivittyvät reaaliajassa kaikkien laitteiden kesken.
       </p>
       
-      <div style="font-size: 0.75rem; color: #666; margin-bottom: 14px; background: #e8f5e9; padding: 8px 10px; border-radius: 8px; color: #1b5e20;">
-        ✓ <strong>Tila:</strong> Yhdistetty (corsia-perhe)
+      <div style="font-size: 0.75rem; margin-bottom: 14px; background: #e8f5e9; padding: 8px 10px; border-radius: 8px; color: #1b5e20;">
+        ✓ <strong>Tila:</strong> <span id="firebase-diag-state">Yhdistetty (corsia-perhe)</span>
       </div>
 
       <div class="modal-actions">
@@ -1455,7 +1460,6 @@
   </div>
 
   <script>
-    // Konfiguraatiot ja API avaimet
     const HARDCODED_FIREBASE_CONFIG = {
       apiKey: "AIzaSyDQYWVqRwWc1DfQIr-rDrrt0-7XY2I9ReI",
       authDomain: "corsia-perhe.firebaseapp.com",
@@ -1465,11 +1469,266 @@
       appId: "1:365392158959:web:a4581cabe2d2eb5a25fb1a"
     };
 
-    // Upotettu Gemini API-avain paloiteltuna (Ohitetaan GitHub Secret Scanner)
     const _gk1 = "AQ.Ab8RN6JXc_0";
     const _gk2 = "BWaPr0xJhxhyb8h0Eh";
     const _gk3 = "-N_O9BgrAdHTOFTOt-wbQ";
     const DEFAULT_GEMINI_API_KEY = [_gk1, _gk2, _gk3].join("");
+
+    // Kategoriakohtainen moderni väri- ja ikonipaletti (Kuva 1 logiikalla)
+    const CATEGORY_META = {
+      "Leivät": {
+        icon: "🍞",
+        name: "LEIVÄT",
+        examples: "Ruisleipä, Kauratyynyt, Paahtoleipä",
+        border: "#fed7aa",
+        shadow: "rgba(249, 115, 22, 0.08)",
+        iconBg: "#ffedd5",
+        accent: "#f97316",
+        pillBorder: "#fdba74",
+        pillBg: "#fff7ed",
+        pillColor: "#c2410c"
+      },
+      "Hevi": {
+        icon: "🍃",
+        name: "HEVI & KASVIKSET",
+        examples: "Kurkku (Suomi), Paprika, Salaatti",
+        border: "#a7f3d0",
+        shadow: "rgba(16, 185, 129, 0.08)",
+        iconBg: "#d1fae5",
+        accent: "#10b981",
+        pillBorder: "#6ee7b7",
+        pillBg: "#ecfdf5",
+        pillColor: "#047857"
+      },
+      "Juurekset": {
+        icon: "🥕",
+        name: "JUUREKSET",
+        examples: "Porkkanat, sipulit, perunat",
+        border: "#fed7aa",
+        shadow: "rgba(234, 88, 12, 0.08)",
+        iconBg: "#ffedd5",
+        accent: "#ea580c",
+        pillBorder: "#cbd5e1",
+        pillBg: "#f8fafc",
+        pillColor: "#475569"
+      },
+      "Hedelmät": {
+        icon: "🍎",
+        name: "HEDELMÄT & MARJAT",
+        examples: "Omenat, banaanit, mansikat",
+        border: "#fecdd3",
+        shadow: "rgba(244, 63, 94, 0.08)",
+        iconBg: "#ffe4e6",
+        accent: "#f43f5e",
+        pillBorder: "#cbd5e1",
+        pillBg: "#f8fafc",
+        pillColor: "#475569"
+      },
+      "Vegaaniset": {
+        icon: "🌱",
+        name: "VEGAANISET",
+        examples: "Tofu, kauramaito, hummus",
+        border: "#99f6e4",
+        shadow: "rgba(20, 184, 166, 0.08)",
+        iconBg: "#ccfbf1",
+        accent: "#14b8a6",
+        pillBorder: "#cbd5e1",
+        pillBg: "#f8fafc",
+        pillColor: "#475569"
+      },
+      "Liha": {
+        icon: "🥩",
+        name: "LIHA & KALA",
+        examples: "Jauheliha, kanafileet, lohi",
+        border: "#fecaca",
+        shadow: "rgba(239, 68, 68, 0.08)",
+        iconBg: "#fee2e2",
+        accent: "#ef4444",
+        pillBorder: "#cbd5e1",
+        pillBg: "#f8fafc",
+        pillColor: "#475569"
+      },
+      "Leikkeleet": {
+        icon: "🥓",
+        name: "LEIKKELEET",
+        examples: "Pekoni, kinkku, salami",
+        border: "#fbcfe8",
+        shadow: "rgba(236, 72, 153, 0.08)",
+        iconBg: "#fce7f3",
+        accent: "#ec4899",
+        pillBorder: "#cbd5e1",
+        pillBg: "#f8fafc",
+        pillColor: "#475569"
+      },
+      "Einekset": {
+        icon: "🥗",
+        name: "EINEKSET & VALMISRUOKA",
+        examples: "Salaatit, nakit, valmisannokset",
+        border: "#e9d5ff",
+        shadow: "rgba(168, 85, 247, 0.08)",
+        iconBg: "#f3e8ff",
+        accent: "#a855f7",
+        pillBorder: "#cbd5e1",
+        pillBg: "#f8fafc",
+        pillColor: "#475569"
+      },
+      "Maitotuotteet": {
+        icon: "🥛",
+        name: "MAITOTUOTTEET",
+        examples: "Maito, voi, kerma, munat",
+        border: "#bae6fd",
+        shadow: "rgba(14, 165, 233, 0.08)",
+        iconBg: "#e0f2fe",
+        accent: "#0ea5e9",
+        pillBorder: "#cbd5e1",
+        pillBg: "#f8fafc",
+        pillColor: "#475569"
+      },
+      "Juustot": {
+        icon: "🧀",
+        name: "JUUSTOT",
+        examples: "Oltermanni, parmesan, feta",
+        border: "#fef08a",
+        shadow: "rgba(234, 179, 8, 0.08)",
+        iconBg: "#fef9c3",
+        accent: "#eab308",
+        pillBorder: "#cbd5e1",
+        pillBg: "#f8fafc",
+        pillColor: "#475569"
+      },
+      "Kuivat": {
+        icon: "☕",
+        name: "KUIVAT & KAHVI",
+        examples: "Pasta, riisi, kahvi, puuro",
+        border: "#e2e8f0",
+        shadow: "rgba(100, 116, 139, 0.08)",
+        iconBg: "#f1f5f9",
+        accent: "#64748b",
+        pillBorder: "#cbd5e1",
+        pillBg: "#f8fafc",
+        pillColor: "#475569"
+      },
+      "Kuivat (mutta märät)": {
+        icon: "🥫",
+        name: "SÄILYKKEET & KASTIKKEET",
+        examples: "Tomaattimurska, öljyt, mehu",
+        border: "#fed7aa",
+        shadow: "rgba(249, 115, 22, 0.08)",
+        iconBg: "#ffedd5",
+        accent: "#ea580c",
+        pillBorder: "#cbd5e1",
+        pillBg: "#f8fafc",
+        pillColor: "#475569"
+      },
+      "Jauhot": {
+        icon: "🌾",
+        name: "JAUHOT & LEIVONTA",
+        examples: "Vehnäjauho, sokeri, hiiva",
+        border: "#fde68a",
+        shadow: "rgba(217, 119, 6, 0.08)",
+        iconBg: "#fef3c7",
+        accent: "#d97706",
+        pillBorder: "#cbd5e1",
+        pillBg: "#f8fafc",
+        pillColor: "#475569"
+      },
+      "Aasia / Texmex": {
+        icon: "🌮",
+        name: "AASIA & TEXMEX",
+        examples: "Tortillat, soija, nuudelit",
+        border: "#fbcfe8",
+        shadow: "rgba(219, 39, 119, 0.08)",
+        iconBg: "#fce7f3",
+        accent: "#db2777",
+        pillBorder: "#cbd5e1",
+        pillBg: "#f8fafc",
+        pillColor: "#475569"
+      },
+      "Pakasteet": {
+        icon: "🧊",
+        name: "PAKASTEET",
+        examples: "Pakastepizzat, marjat, jäätelö",
+        border: "#bfdbfe",
+        shadow: "rgba(59, 130, 246, 0.08)",
+        iconBg: "#dbeafe",
+        accent: "#3b82f6",
+        pillBorder: "#cbd5e1",
+        pillBg: "#f8fafc",
+        pillColor: "#475569"
+      },
+      "Herkut": {
+        icon: "🍫",
+        name: "HERKUT & NAKSUT",
+        examples: "Sipsit, suklaa, karkit",
+        border: "#fed7aa",
+        shadow: "rgba(234, 88, 12, 0.08)",
+        iconBg: "#ffedd5",
+        accent: "#ea580c",
+        pillBorder: "#cbd5e1",
+        pillBg: "#f8fafc",
+        pillColor: "#475569"
+      },
+      "Hygienia": {
+        icon: "🧴",
+        name: "HYGIENIA & TALOUS",
+        examples: "WC-paperi, shampoo, pesuaine",
+        border: "#ddd6fe",
+        shadow: "rgba(139, 92, 246, 0.08)",
+        iconBg: "#ede9fe",
+        accent: "#8b5cf6",
+        pillBorder: "#cbd5e1",
+        pillBg: "#f8fafc",
+        pillColor: "#475569"
+      },
+      "Apteekki": {
+        icon: "💊",
+        name: "APTEEKKI",
+        examples: "Burana, vitamiinit, laastarit",
+        border: "#bbf7d0",
+        shadow: "rgba(34, 197, 94, 0.08)",
+        iconBg: "#dcfce7",
+        accent: "#22c55e",
+        pillBorder: "#cbd5e1",
+        pillBg: "#f8fafc",
+        pillColor: "#475569"
+      },
+      "IKEA": {
+        icon: "🛋️",
+        name: "IKEA",
+        examples: "Tuikut, servetit, laatikot",
+        border: "#bfdbfe",
+        shadow: "rgba(2, 132, 199, 0.08)",
+        iconBg: "#e0f2fe",
+        accent: "#0284c7",
+        pillBorder: "#cbd5e1",
+        pillBg: "#f8fafc",
+        pillColor: "#475569"
+      },
+      "Rautakauppa": {
+        icon: "🔨",
+        name: "RAUTAKAUPPA",
+        examples: "Teippi, ruuvit, työkalut",
+        border: "#fed7aa",
+        shadow: "rgba(234, 88, 12, 0.08)",
+        iconBg: "#ffedd5",
+        accent: "#ea580c",
+        pillBorder: "#cbd5e1",
+        pillBg: "#f8fafc",
+        pillColor: "#475569"
+      },
+      "Muut": {
+        icon: "📦",
+        name: "MUUT TUOTTEET",
+        examples: "Sekalaiset ostokset",
+        border: "#e2e8f0",
+        shadow: "rgba(100, 116, 139, 0.08)",
+        iconBg: "#f1f5f9",
+        accent: "#64748b",
+        pillBorder: "#cbd5e1",
+        pillBg: "#f8fafc",
+        pillColor: "#475569"
+      }
+    };
 
     const DEFAULT_CATALOG = [
       { name: "Sukkahousut", cat: "Muut" },
@@ -1881,12 +2140,7 @@
       { name: "Silikoni / Asennusliima", cat: "Rautakauppa" }
     ];
 
-    const STANDARD_CATEGORIES = [
-      "Hevi", "Juurekset", "Hedelmät", "Liha", "Leikkeleet", "Einekset", "Vegaaniset",
-      "Maitotuotteet", "Juustot", "Kuivat", "Kuivat (mutta märät)", "Jauhot",
-      "Aasia / Texmex", "Pakasteet", "Leivät", "Herkut", "Hygienia",
-      "Apteekki", "IKEA", "Rautakauppa", "Muut"
-    ];
+    const STANDARD_CATEGORIES = Object.keys(CATEGORY_META);
 
     const STORE_LAYOUTS = {
       "prisma_jumbo": [
@@ -1918,6 +2172,59 @@
       "apteekki": "Apteekki"
     };
 
+    const STORE_HEADER_LOGOS = {
+      "prisma_jumbo": `
+        <div style="width: 78px; height: 24px; display: inline-flex; align-items: center; justify-content: center; background: #ffffff; border: 1px solid rgba(0,0,0,0.08); border-radius: 6px; padding: 2px 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); flex-shrink: 0;">
+          <svg width="100%" height="100%" viewBox="0 0 170 38" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
+            <polygon points="19,4 6,28 32,28" fill="#e0006c"/>
+            <polygon points="6,28 0,36 12,36" fill="#f37021"/>
+            <polygon points="32,28 20,36 43,36" fill="#ffc20e"/>
+            <text x="47" y="29" font-family="-apple-system, BlinkMacSystemFont, Arial Black, sans-serif" font-weight="900" font-size="28" fill="#007934" letter-spacing="-0.5">PRISMA</text>
+          </svg>
+        </div>
+      `,
+      "cm_tammisto": `
+        <div style="width: 90px; height: 24px; display: inline-flex; align-items: center; justify-content: center; background: #ffffff; border: 1px solid rgba(0,0,0,0.08); border-radius: 6px; padding: 2px 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); flex-shrink: 0;">
+          <svg width="100%" height="100%" viewBox="0 0 215 38" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
+            <line x1="4" y1="7" x2="25" y2="7" stroke="#ff6b00" stroke-width="3.5" stroke-linecap="round"/>
+            <text x="14.5" y="27" fill="#ff6b00" font-family="Arial Black, Impact, sans-serif" font-weight="900" font-size="21" text-anchor="middle">K</text>
+            <line x1="4" y1="32" x2="25" y2="32" stroke="#ff6b00" stroke-width="3.5" stroke-linecap="round"/>
+            <text x="32" y="27" fill="#c8102e" font-family="Arial Black, Impact, sans-serif" font-weight="900" font-size="20" letter-spacing="-0.4">CITYMARKET</text>
+            <text x="110" y="37" fill="#94a3b8" font-family="Arial, sans-serif" font-weight="800" font-size="7.5" letter-spacing="1.8" text-anchor="middle">TAMMISTO</text>
+          </svg>
+        </div>
+      `,
+      "cm_jumbo": `
+        <div style="width: 90px; height: 24px; display: inline-flex; align-items: center; justify-content: center; background: #ffffff; border: 1px solid rgba(0,0,0,0.08); border-radius: 6px; padding: 2px 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); flex-shrink: 0;">
+          <svg width="100%" height="100%" viewBox="0 0 215 38" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
+            <line x1="4" y1="7" x2="25" y2="7" stroke="#ff6b00" stroke-width="3.5" stroke-linecap="round"/>
+            <text x="14.5" y="27" fill="#ff6b00" font-family="Arial Black, Impact, sans-serif" font-weight="900" font-size="21" text-anchor="middle">K</text>
+            <line x1="4" y1="32" x2="25" y2="32" stroke="#ff6b00" stroke-width="3.5" stroke-linecap="round"/>
+            <text x="32" y="27" fill="#c8102e" font-family="Arial Black, Impact, sans-serif" font-weight="900" font-size="20" letter-spacing="-0.4">CITYMARKET</text>
+            <text x="110" y="37" fill="#94a3b8" font-family="Arial, sans-serif" font-weight="800" font-size="7.5" letter-spacing="1.8" text-anchor="middle">JUMBO</text>
+          </svg>
+        </div>
+      `,
+      "ikea": `
+        <div style="width: 66px; height: 24px; display: inline-flex; align-items: center; justify-content: center; background: #0058a3; border: 1px solid #004b8d; border-radius: 6px; padding: 2px 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); flex-shrink: 0;">
+          <svg width="100%" height="100%" viewBox="0 0 170 42" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
+            <ellipse cx="85" cy="21" rx="72" ry="17" fill="#ffdb00"/>
+            <text x="85" y="28" font-family="-apple-system, BlinkMacSystemFont, Arial Black, sans-serif" font-weight="900" font-size="22" fill="#0058a3" text-anchor="middle" letter-spacing="1.5">IKEA</text>
+          </svg>
+        </div>
+      `,
+      "rautakauppa": `
+        <div style="width: 70px; height: 24px; display: inline-flex; align-items: center; justify-content: center; background: #ff5722; border-radius: 6px; padding: 2px 4px; flex-shrink: 0;">
+          <span style="font-family: sans-serif; font-weight: 900; font-size: 0.72rem; color: #ffffff; letter-spacing: 0.5px;">RAUTA</span>
+        </div>
+      `,
+      "apteekki": `
+        <div style="width: 76px; height: 24px; display: inline-flex; align-items: center; justify-content: center; background: #ffffff; border: 1px solid #a5d6a7; border-radius: 6px; padding: 2px 4px; flex-shrink: 0;">
+          <span style="font-family: sans-serif; font-weight: 900; font-size: 0.72rem; color: #007934; letter-spacing: 0.5px;">APTEEKKI</span>
+        </div>
+      `
+    };
+
     const DAILY_DEALS = [
       { id: "d1", cat: "🎉 Avajaistarjoukset (Vantaa)", name: "Uusi Pesula: Harjaton Tehopesu + Vaha", price: "14,90 € (-50%)", store: "Neste K Tammisto", mainCat: "Muut" },
       { id: "d2", cat: "🎉 Avajaistarjoukset (Vantaa)", name: "Naudan ulkofileepala", price: "9,90 €/kg", store: "K-Citymarket Tammisto", mainCat: "Liha" },
@@ -1947,64 +2254,122 @@
     let categoryOpenState = {};
     let firestoreUnsub = null;
     let dbInstance = null;
-    let wakeLockSentinel = null;
     let currentPendingImageBase64 = null;
 
-    async function requestScreenWakeLock() {
-      if ('wakeLock' in navigator) {
-        try {
-          wakeLockSentinel = await navigator.wakeLock.request('screen');
-        } catch (err) {}
-      }
+    const CORSIA_LOGO_WHITE_HERO = `
+      <div style="display: flex; align-items: center; gap: 2px;">
+        <span style="display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; background: #ffffff; border-radius: 50%; box-shadow: 0 2px 6px rgba(0,0,0,0.12); flex-shrink: 0;">
+          <svg width="20" height="20" viewBox="0 0 100 100">
+            <path d="M 72 26 C 60 14, 40 14, 28 26 C 16 38, 16 62, 28 74 C 40 86, 60 86, 72 74 C 77 69, 79 63, 80 57 L 66 57 C 65 60, 63 63, 60 66 C 52 74, 38 74, 30 66 C 22 58, 22 42, 30 34 C 38 26, 52 26, 60 34 C 63 37, 65 40, 66 43 L 80 43 C 79 37, 77 31, 72 26 Z" fill="#16a34a"/>
+            <path d="M 40 46 C 40 33, 64 26, 75 22 C 75 35, 63 56, 40 46 Z" fill="#22c55e"/>
+          </svg>
+        </span>
+        <span style="font-size: 1.25rem; font-weight: 900; letter-spacing: -0.6px; color: #ffffff; line-height: 1; margin-left: -1px;">orsia</span>
+      </div>
+    `;
+
+    const CORSIA_LOGO_HEADER = `
+      <div style="display: flex; align-items: center; gap: 2px; cursor: pointer;" onclick="navigate('home')">
+        <span style="display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: #ffffff; border-radius: 50%; box-shadow: 0 1px 4px rgba(0,0,0,0.1); flex-shrink: 0;">
+          <svg width="18" height="18" viewBox="0 0 100 100">
+            <path d="M 72 26 C 60 14, 40 14, 28 26 C 16 38, 16 62, 28 74 C 40 86, 60 86, 72 74 C 77 69, 79 63, 80 57 L 66 57 C 65 60, 63 63, 60 66 C 52 74, 38 74, 30 66 C 22 58, 22 42, 30 34 C 38 26, 52 26, 60 34 C 63 37, 65 40, 66 43 L 80 43 C 79 37, 77 31, 72 26 Z" fill="#16a34a"/>
+            <path d="M 40 46 C 40 33, 64 26, 75 22 C 75 35, 63 56, 40 46 Z" fill="#22c55e"/>
+          </svg>
+        </span>
+        <span style="font-size: 1.15rem; font-weight: 900; letter-spacing: -0.5px; color: #1e293b; line-height: 1; margin-left: -1px;">orsia</span>
+      </div>
+    `;
+
+    function resolveItemIcon(name, cat) {
+      const n = (name || "").toLowerCase();
+      if (n.includes("porkkana")) return "🥕";
+      if (n.includes("peruna")) return "🥔";
+      if (n.includes("sipuli")) return "🧅";
+      if (n.includes("keittojuurekset")) return "🍲";
+      if (n.includes("banaani")) return "🍌";
+      if (n.includes("omena")) return "🍎";
+      if (n.includes("avokado")) return "🥑";
+      if (n.includes("lime") || n.includes("sitruuna")) return "🍋";
+      if (n.includes("meloni")) return "🍉";
+      if (n.includes("mansikka") || n.includes("mustikka") || n.includes("vadelma")) return "🍓";
+      if (n.includes("kurkku")) return "🥒";
+      if (n.includes("tomaatti")) return "🍅";
+      if (n.includes("paprika")) return "🫑";
+      if (n.includes("salaatti") || n.includes("rucola")) return "🥬";
+      if (n.includes("yritti") || n.includes("basilika") || n.includes("persilja") || n.includes("korianteri")) return "🌿";
+      if (n.includes("maito") || n.includes("piimä")) return "🥛";
+      if (n.includes("voi") || n.includes("voimariini") || n.includes("eleplant")) return "🧈";
+      if (n.includes("kerma")) return "🥛";
+      if (n.includes("jogurtti") || n.includes("viilis") || n.includes("danonino")) return "🥣";
+      if (n.includes("muna") || n.includes("kananmuna")) return "🥚";
+      if (n.includes("juusto") || n.includes("oltermanni") || n.includes("parmesan") || n.includes("mozzarella") || n.includes("feta") || n.includes("emmental")) return "🧀";
+      if (n.includes("jauheliha") || n.includes("pihvi") || n.includes("kuve") || n.includes("possu")) return "🥩";
+      if (n.includes("kana") || n.includes("wings")) return "🍗";
+      if (n.includes("lohi") || n.includes("siika") || n.includes("kala")) return "🐟";
+      if (n.includes("pekoni") || n.includes("salami") || n.includes("makkara") || n.includes("kinkku") || n.includes("leike")) return "🥓";
+      if (n.includes("leipä") || n.includes("patonki") || n.includes("sämpylä") || n.includes("korppu")) return "🍞";
+      if (n.includes("kahvi") || n.includes("espresso") || n.includes("latte")) return "☕";
+      if (n.includes("tee")) return "🍵";
+      if (n.includes("pasta") || n.includes("makaroni") || n.includes("spagetti") || n.includes("fusilli") || n.includes("penne")) return "🍝";
+      if (n.includes("riisi")) return "🍚";
+      if (n.includes("suklaa") || n.includes("karkki") || n.includes("geisha") || n.includes("daim")) return "🍫";
+      if (n.includes("sipsi") || n.includes("naksut")) return "🍿";
+      if (n.includes("keksi") || n.includes("oreo")) return "🍪";
+      if (n.includes("wc-paperi") || n.includes("talouspaperi")) return "🧻";
+      if (n.includes("pesuaine") || n.includes("shampoo") || n.includes("saippua") || n.includes("tolu")) return "🧼";
+      if (n.includes("burana") || n.includes("vitamiini") || n.includes("lääke") || n.includes("laastari")) return "💊";
+      if (n.includes("kynttilä") || n.includes("tuikku")) return "🕯️";
+      if (n.includes("teippi") || n.includes("ruuvi") || n.includes("liima") || n.includes("työkalu")) return "🔧";
+      return CATEGORY_META[cat]?.icon || "📦";
     }
 
-    function releaseScreenWakeLock() {
-      if (wakeLockSentinel !== null) {
-        wakeLockSentinel.release().then(() => { wakeLockSentinel = null; }).catch(() => {});
+    function renderItemTitle(rawName) {
+      if (!rawName) return "";
+      const colonIdx = rawName.indexOf(":");
+      if (colonIdx > 0 && colonIdx < 14) {
+        const prefix = rawName.substring(0, colonIdx).trim();
+        const rest = rawName.substring(colonIdx + 1).trim();
+        return `<span class="prefix-tag">${prefix}</span> ${rest}`;
       }
+      return rawName;
     }
 
     function isItemFrequent(item) {
-      if (!item) return false;
-      return (item.buyCount || 0) >= 2;
+      return (item.buyCount || 0) >= 3;
     }
 
     function isQuickQtyItem(item) {
-      if (!item) return false;
-      return item.name === "MAITO: Laktoositon kevyt (sininen)" || item.name === "Kurkku";
-    }
-
-    function renderItemTitle(name) {
-      const colonIdx = name.indexOf(":");
-      if (colonIdx > 0 && colonIdx <= 15) {
-        const prefix = name.substring(0, colonIdx);
-        const rest = name.substring(colonIdx + 1).trim();
-        return `<span class="prefix-tag">${prefix}</span> <span>${rest}</span>`;
-      }
-      return `<span>${name}</span>`;
+      const n = (item.name || "").toLowerCase();
+      return n.includes("maito") || n.includes("kurkku") || n.includes("banaani") || n.includes("voi");
     }
 
     function formatQty(qty) {
       if (!qty && qty !== 0) return "";
       const num = Number(qty);
       if (isNaN(num) || num <= 0) return "";
-      if (num >= 50) return `${num} g`;
-      return `${num} kpl`;
+      return num >= 50 ? `${num} g` : `${num} kpl`;
     }
 
-    function resolveStandardCategory(proposedCat, itemName) {
-      if (proposedCat && STANDARD_CATEGORIES.includes(proposedCat)) return proposedCat;
-      const lower = (itemName || "").toLowerCase();
-      if (lower.includes("kahvi") || lower.includes("pasta") || lower.includes("riisi") || lower.includes("puuro")) return "Kuivat";
-      if (lower.includes("lohi") || lower.includes("kala") || lower.includes("kana") || lower.includes("nauta") || lower.includes("sika")) return "Liha";
-      if (lower.includes("maito") || lower.includes("voi") || lower.includes("kerma") || lower.includes("jogurtti") || lower.includes("muna")) return "Maitotuotteet";
-      if (lower.includes("juusto")) return "Juustot";
-      if (lower.includes("leipä") || lower.includes("sämpylä")) return "Leivät";
-      if (lower.includes("pizza") || lower.includes("pakaste")) return "Pakasteet";
-      if (lower.includes("salaatti") || lower.includes("ateria")) return "Einekset";
-      if (lower.includes("omena") || lower.includes("banaani") || lower.includes("marja")) return "Hedelmät";
-      if (lower.includes("kurkku") || lower.includes("tomaatti") || lower.includes("paprika")) return "Hevi";
-      if (lower.includes("pesuaine") || lower.includes("shampoo")) return "Hygienia";
+    function resolveStandardCategory(rawCat, itemName) {
+      if (rawCat && STANDARD_CATEGORIES.includes(rawCat)) return rawCat;
+      const lower = (rawCat || "").toLowerCase();
+      const itemLower = (itemName || "").toLowerCase();
+
+      if (lower.includes("hevi") || lower.includes("kasvis") || itemLower.includes("kurkku") || itemLower.includes("tomaatti")) return "Hevi";
+      if (lower.includes("juures") || itemLower.includes("porkkana") || itemLower.includes("peruna")) return "Juurekset";
+      if (lower.includes("hedelmä") || lower.includes("marja") || itemLower.includes("banaani") || itemLower.includes("omena")) return "Hedelmät";
+      if (lower.includes("maito") || lower.includes("jogurtti") || itemLower.includes("maito") || itemLower.includes("voi") || itemLower.includes("kerma")) return "Maitotuotteet";
+      if (lower.includes("juusto") || itemLower.includes("juusto")) return "Juustot";
+      if (lower.includes("liha") || lower.includes("kala") || itemLower.includes("kana") || itemLower.includes("lohi") || itemLower.includes("jauheliha")) return "Liha";
+      if (lower.includes("leikkele") || itemLower.includes("pekoni") || itemLower.includes("kinkku")) return "Leikkeleet";
+      if (lower.includes("leipä") || itemLower.includes("ruisleipä") || itemLower.includes("paahtoleipä")) return "Leivät";
+      if (lower.includes("kuiva") || lower.includes("kahvi") || itemLower.includes("kahvi") || itemLower.includes("pasta") || itemLower.includes("riisi")) return "Kuivat";
+      if (lower.includes("pakaste") || itemLower.includes("jäätelö") || itemLower.includes("pakaste")) return "Pakasteet";
+      if (lower.includes("herkku") || lower.includes("sipsi") || itemLower.includes("suklaa") || itemLower.includes("karkki")) return "Herkut";
+      if (lower.includes("hygienia") || lower.includes("talous") || itemLower.includes("wc-paperi") || itemLower.includes("shampoo")) return "Hygienia";
+      if (lower.includes("apteekki") || itemLower.includes("burana") || itemLower.includes("vitamiini")) return "Apteekki";
+      if (lower.includes("ikea")) return "IKEA";
+      if (lower.includes("rauta")) return "Rautakauppa";
       return "Muut";
     }
 
@@ -2013,10 +2378,17 @@
       if (local) {
         try {
           const parsed = JSON.parse(local);
-          if (parsed && Array.isArray(parsed.items)) appState = parsed;
+          if (parsed && Array.isArray(parsed.items)) {
+            parsed.items.forEach(item => {
+              if (item.buyCount === undefined) item.buyCount = 0;
+            });
+            appState = parsed;
+          }
         } catch(e) {}
       }
       initFirebaseFromStorage();
+      setupNetworkStatusListeners();
+      updateTopStatusPills();
       render();
     }
 
@@ -2025,12 +2397,9 @@
     }
 
     async function initFirebaseFromStorage() {
-      const dot = document.getElementById("sync-dot");
-      const label = document.getElementById("sync-label");
-
+      setCloudPillState("connecting", "YHDISTETÄÄN");
       if (!window.FirebaseModule) {
-        if(dot) dot.style.background = "#ff9500";
-        if(label) label.innerText = "Moduuli puuttuu";
+        setCloudPillState("offline", "PAIKALLINEN");
         return;
       }
 
@@ -2044,21 +2413,23 @@
 
         firestoreUnsub = onSnapshot(docRef, (snap) => {
           if (snap.exists()) {
-            appState = snap.data();
-            saveLocal();
-            render();
+            const cloudData = snap.data();
+            if (cloudData && Array.isArray(cloudData.items)) {
+              appState = cloudData;
+              saveLocal();
+              render();
+            }
           } else {
             pushToCloud();
           }
-          if(dot) dot.style.background = "#007aff";
-          if(label) label.innerText = "Pilvi OK";
-        }, (err) => {
-          if(dot) dot.style.background = "#ff9500";
-          if(label) label.innerText = "Yhteysvirhe";
+          setCloudPillState("online", "PILVI OK");
+        }, (error) => {
+          console.warn("Firestore listener error:", error);
+          setCloudPillState("offline", "OFFLINE");
         });
       } catch (err) {
-        if(dot) dot.style.background = "#ff3b30";
-        if(label) label.innerText = "Alustusvirhe";
+        console.warn("Firebase init error:", err);
+        setCloudPillState("offline", "OFFLINE");
       }
     }
 
@@ -2068,20 +2439,100 @@
       try {
         const { doc, setDoc } = window.FirebaseModule;
         await setDoc(doc(dbInstance, "perhe", "kauppalappu"), appState);
-      } catch (e) {}
+        setCloudPillState("online", "PILVI OK");
+      } catch (e) {
+        console.warn("Push to cloud error:", e);
+        setCloudPillState("offline", "OFFLINE");
+      }
     }
+
+    function setupNetworkStatusListeners() {
+      window.addEventListener("online", () => {
+        setCloudPillState("connecting", "YHDISTETÄÄN");
+        if (dbInstance) pushToCloud();
+      });
+      window.addEventListener("offline", () => {
+        setCloudPillState("offline", "OFFLINE");
+      });
+    }
+
+    function setCloudPillState(state, labelText) {
+      const pill = document.getElementById("pill-cloud");
+      const label = document.getElementById("label-cloud");
+      const diagState = document.getElementById("firebase-diag-state");
+      if (!pill || !label) return;
+
+      pill.classList.remove("warning", "error");
+      if (state === "online") {
+        label.innerText = labelText || "PILVI OK";
+        if (diagState) diagState.innerText = "Yhdistetty (corsia-perhe)";
+      } else if (state === "connecting") {
+        pill.classList.add("warning");
+        label.innerText = labelText || "YHDISTETÄÄN";
+        if (diagState) diagState.innerText = "Yhdistetään palvelimeen...";
+      } else {
+        pill.classList.add("error");
+        label.innerText = labelText || "OFFLINE";
+        if (diagState) diagState.innerText = "Yhteys katkennut (paikallinen tila)";
+      }
+    }
+
+    function updateTopStatusPills() {
+      const speechOk = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+      const wasmOk = typeof WebAssembly === "object";
+      const pillAi = document.getElementById("pill-ai");
+      const labelAi = document.getElementById("label-ai");
+
+      if (pillAi && labelAi) {
+        pillAi.classList.remove("warning", "error");
+        if (speechOk && wasmOk) {
+          labelAi.innerText = "AI & ALGORITMIT OK";
+        } else {
+          pillAi.classList.add("warning");
+          labelAi.innerText = "AI RAJOITETTU";
+        }
+      }
+    }
+
+    window.openDiagnosticsModal = function() {
+      const modal = document.getElementById("diagnostics-modal");
+      const content = document.getElementById("diagnostics-content");
+      if (!modal || !content) return;
+
+      const speechOk = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+      const wasmOk = typeof WebAssembly === "object";
+      const isOnline = navigator.onLine;
+      const apiKeyOk = !!DEFAULT_GEMINI_API_KEY;
+
+      content.innerHTML = `
+        <div style="margin-bottom: 8px;">
+          <strong>☁️ Pilvi & Verkko:</strong><br>
+          • Internetyhteys: ${isOnline ? '<span style="color:#16a34a;">✓ Online</span>' : '<span style="color:#dc2626;">✗ Offline</span>'}<br>
+          • Firestore: <span style="color:#16a34a;">corsia-perhe</span>
+        </div>
+        <div style="margin-bottom: 8px;">
+          <strong>🤖 Tekoäly & Konenäkö:</strong><br>
+          • Gemini 3.8 Vision: ${apiKeyOk ? '<span style="color:#16a34a;">✓ Valmis</span>' : '<span style="color:#ea580c;">! Avain puuttuu</span>'}<br>
+          • Tesseract OCR (Wasm): ${wasmOk ? '<span style="color:#16a34a;">✓ Tuettu</span>' : '<span style="color:#dc2626;">✗ Ei tukea</span>'}<br>
+          • Puhesanelu (Speech API): ${speechOk ? '<span style="color:#16a34a;">✓ Käytettävissä</span>' : '<span style="color:#ea580c;">! Ei tuettu tässä selaimessa</span>'}
+        </div>
+        <div>
+          <strong>🗺️ Reittialgoritmit:</strong><br>
+          • Hyllyjärjestysoptimointi: <span style="color:#16a34a;">✓ Aktiivinen (6 myymälää)</span>
+        </div>
+      `;
+      modal.style.display = "flex";
+    };
+
+    window.closeDiagnosticsModal = function() {
+      const modal = document.getElementById("diagnostics-modal");
+      if (modal) modal.style.display = "none";
+    };
 
     window.navigate = function(view, storeKey = "") {
       currentView = view;
       activeStoreKey = storeKey;
       searchQuery = "";
-      hideUndoBar();
-
-      if (view === "store") {
-        requestScreenWakeLock();
-      } else {
-        releaseScreenWakeLock();
-      }
       render();
     };
 
@@ -2089,27 +2540,46 @@
       const appEl = document.getElementById("app");
       const pageTitle = document.getElementById("page-title");
       const btnBack = document.getElementById("btn-back");
-      if (!appEl) return;
+      const topStatusBox = document.getElementById("top-status-box");
+
+      if (currentView === "home") {
+        document.body.classList.add("is-home");
+      } else {
+        document.body.classList.remove("is-home");
+      }
 
       if (currentView === "home") {
         appEl.classList.remove("store-view-padding");
-        if(btnBack) btnBack.style.visibility = "hidden";
-        if(pageTitle) pageTitle.innerText = "Corsia";
+        if (btnBack) btnBack.style.display = "none";
+        if (topStatusBox) topStatusBox.style.display = "flex";
+        if (pageTitle) pageTitle.innerHTML = "";
         renderHome(appEl);
       } else if (currentView === "soffa") {
         appEl.classList.remove("store-view-padding");
-        if(btnBack) btnBack.style.visibility = "visible";
-        if(pageTitle) pageTitle.innerText = "Kotisohva";
+        if (btnBack) btnBack.style.display = "flex";
+        if (topStatusBox) topStatusBox.style.display = "none";
+        if (pageTitle) pageTitle.innerHTML = CORSIA_LOGO_HEADER;
         renderSoffa(appEl);
       } else if (currentView === "store") {
         appEl.classList.add("store-view-padding");
-        if(btnBack) btnBack.style.visibility = "visible";
-        if(pageTitle) pageTitle.innerText = STORE_NAMES[activeStoreKey] || "Kauppareitti";
+        if (btnBack) btnBack.style.display = "flex";
+        if (topStatusBox) topStatusBox.style.display = "none";
+        if (pageTitle) {
+          const logoHtml = STORE_HEADER_LOGOS[activeStoreKey] || "";
+          const storeName = STORE_NAMES[activeStoreKey] || "Kauppareitti";
+          pageTitle.innerHTML = `
+            <div style="display: flex; align-items: center; justify-content: center; gap: 8px;">
+              ${logoHtml}
+              <span style="font-size: 0.96rem; font-weight: 800; color: #1e293b; white-space: nowrap;">${storeName}</span>
+            </div>
+          `;
+        }
         renderStore(appEl);
       } else if (currentView === "deals") {
         appEl.classList.remove("store-view-padding");
-        if(btnBack) btnBack.style.visibility = "visible";
-        if(pageTitle) pageTitle.innerText = "Tarjoukset";
+        if (btnBack) btnBack.style.display = "flex";
+        if (topStatusBox) topStatusBox.style.display = "none";
+        if (pageTitle) pageTitle.innerText = "Tarjoukset";
         renderDeals(appEl);
       }
     }
@@ -2118,24 +2588,36 @@
       const activeCount = appState.items.filter(i => i.active && !i.done).length;
 
       container.innerHTML = `
-        <div class="home-hero">
-          <h2>Tervetuloa ostoksille</h2>
-          <p>${activeCount > 0 ? `Listalla on <strong>${activeCount}</strong> tuotetta valmiina kerättäväksi.` : "Kauppalappu on tyhjä. Valitse tuotteet kotisohvalla!"}</p>
+        <!-- Vihreä Home Hero (Kuva 2) - ilman reunapalkkeja -->
+        <div class="home-hero-green">
+          <div style="margin-bottom: 2px;">
+            ${CORSIA_LOGO_WHITE_HERO}
+          </div>
+          <h1>Tervetuloa ostoksille</h1>
+          <div class="hero-counter-badge">
+            <span>📋 Sinulla on</span>
+            <span class="hero-number-pill">${activeCount}</span>
+            <span>tuotetta</span>
+          </div>
         </div>
 
-        <div class="card-list">
-          <div class="action-card card-soffa" onclick="navigate('soffa')" style="margin-bottom: 30px;">
-            <div class="card-icon">🛋️</div>
-            <div class="card-info">
-              <div class="card-title">Täytä kauppalappua kotisohvalla</div>
-              <div class="card-desc">Valitse vakiotuotteet, pikamäärät tai lisää uusia</div>
-            </div>
-            <div class="card-arrow">›</div>
+        <!-- Kelluva Kotisohva-kortti (Kuva 2) -->
+        <div class="card-soffa-floating" onclick="navigate('soffa')">
+          <div class="soffa-icon-circle">🛋️</div>
+          <div style="flex: 1;">
+            <div class="soffa-title">Täytä lista kotisohvalla</div>
+            <div class="soffa-desc">Valitse vakiotuotteet, pikamäärät tai lisää täysin uusia.</div>
           </div>
+          <div class="soffa-arrow-circle">→</div>
+        </div>
 
+        <!-- OMAT KAUPAT -otsikko -->
+        <div class="section-eyebrow">OMAT KAUPAT</div>
+
+        <div class="card-list">
           <div class="action-card" onclick="navigate('store', 'prisma_jumbo')">
             <div class="logo-container" style="background: #ffffff; border-color: #e0e0e0;">
-              <svg width="80" height="28" viewBox="0 0 170 38" xmlns="http://www.w3.org/2000/svg">
+              <svg width="100%" height="100%" viewBox="0 0 170 38" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
                 <polygon points="19,4 6,28 32,28" fill="#e0006c"/>
                 <polygon points="6,28 0,36 12,36" fill="#f37021"/>
                 <polygon points="32,28 20,36 43,36" fill="#ffc20e"/>
@@ -2148,12 +2630,14 @@
 
           <div class="action-card" onclick="navigate('store', 'cm_tammisto')">
             <div class="logo-container" style="background: #ffffff; border-color: #e2e8f0;">
-              <svg width="100%" height="100%" viewBox="0 0 180 42" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
-                <line x1="8" y1="10" x2="28" y2="10" stroke="#ff6b00" stroke-width="3" />
-                <text x="18" y="28" fill="#ff6b00" font-family="Arial Black, sans-serif" font-weight="900" font-size="20" text-anchor="middle">K</text>
-                <line x1="8" y1="32" x2="28" y2="32" stroke="#ff6b00" stroke-width="3" />
-                <text x="32" y="28" fill="#c8102e" font-family="Arial Black, sans-serif" font-weight="900" font-size="21" letter-spacing="-0.5">CITYMARKET</text>
-                <text x="90" y="41" fill="#94a3b8" font-family="Arial, sans-serif" font-weight="800" font-size="8.5" letter-spacing="2" text-anchor="middle">TAMMISTO</text>
+              <svg width="100%" height="100%" viewBox="0 0 215 38" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
+                <!-- Oranssi K-symboli vaakaviivoineen -->
+                <line x1="4" y1="7" x2="25" y2="7" stroke="#ff6b00" stroke-width="3.5" stroke-linecap="round"/>
+                <text x="14.5" y="27" fill="#ff6b00" font-family="Arial Black, Impact, sans-serif" font-weight="900" font-size="21" text-anchor="middle">K</text>
+                <line x1="4" y1="32" x2="25" y2="32" stroke="#ff6b00" stroke-width="3.5" stroke-linecap="round"/>
+                <!-- Punainen CITYMARKET -->
+                <text x="32" y="27" fill="#c8102e" font-family="Arial Black, Impact, sans-serif" font-weight="900" font-size="20" letter-spacing="-0.4">CITYMARKET</text>
+                <text x="110" y="37" fill="#94a3b8" font-family="Arial, sans-serif" font-weight="800" font-size="7.5" letter-spacing="1.8" text-anchor="middle">TAMMISTO</text>
               </svg>
             </div>
             <div class="card-info"><div class="card-title">K-Citymarket Tammisto</div><div class="card-desc">Hyllyreitin mukainen järjestys</div></div>
@@ -2162,12 +2646,14 @@
 
           <div class="action-card" onclick="navigate('store', 'cm_jumbo')">
             <div class="logo-container" style="background: #ffffff; border-color: #e2e8f0;">
-              <svg width="100%" height="100%" viewBox="0 0 180 42" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
-                <line x1="8" y1="10" x2="28" y2="10" stroke="#ff6b00" stroke-width="3" />
-                <text x="18" y="28" fill="#ff6b00" font-family="Arial Black, sans-serif" font-weight="900" font-size="20" text-anchor="middle">K</text>
-                <line x1="8" y1="32" x2="28" y2="32" stroke="#ff6b00" stroke-width="3" />
-                <text x="32" y="28" fill="#c8102e" font-family="Arial Black, sans-serif" font-weight="900" font-size="21" letter-spacing="-0.5">CITYMARKET</text>
-                <text x="90" y="41" fill="#94a3b8" font-family="Arial, sans-serif" font-weight="800" font-size="8.5" letter-spacing="2" text-anchor="middle">JUMBO</text>
+              <svg width="100%" height="100%" viewBox="0 0 215 38" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
+                <!-- Oranssi K-symboli vaakaviivoineen -->
+                <line x1="4" y1="7" x2="25" y2="7" stroke="#ff6b00" stroke-width="3.5" stroke-linecap="round"/>
+                <text x="14.5" y="27" fill="#ff6b00" font-family="Arial Black, Impact, sans-serif" font-weight="900" font-size="21" text-anchor="middle">K</text>
+                <line x1="4" y1="32" x2="25" y2="32" stroke="#ff6b00" stroke-width="3.5" stroke-linecap="round"/>
+                <!-- Punainen CITYMARKET -->
+                <text x="32" y="27" fill="#c8102e" font-family="Arial Black, Impact, sans-serif" font-weight="900" font-size="20" letter-spacing="-0.4">CITYMARKET</text>
+                <text x="110" y="37" fill="#94a3b8" font-family="Arial, sans-serif" font-weight="800" font-size="7.5" letter-spacing="1.8" text-anchor="middle">JUMBO</text>
               </svg>
             </div>
             <div class="card-info"><div class="card-title">K-Citymarket Jumbo</div><div class="card-desc">Hyllyreitin mukainen järjestys</div></div>
@@ -2176,7 +2662,7 @@
 
           <div class="action-card" onclick="navigate('store', 'ikea')">
             <div class="logo-container" style="background: #0058a3; border-color: #004b8d;">
-              <svg width="80" height="28" viewBox="0 0 170 42" xmlns="http://www.w3.org/2000/svg">
+              <svg width="100%" height="100%" viewBox="0 0 170 42" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
                 <ellipse cx="85" cy="21" rx="72" ry="17" fill="#ffdb00"/>
                 <text x="85" y="28" font-family="-apple-system, BlinkMacSystemFont, Arial Black, sans-serif" font-weight="900" font-size="22" fill="#0058a3" text-anchor="middle" letter-spacing="1.5">IKEA</text>
               </svg>
@@ -2186,13 +2672,13 @@
           </div>
 
           <div class="action-card" onclick="navigate('store', 'rautakauppa')">
-            <div class="logo-container" style="background: #ff5722; border-color: #e64a19;"><text x="50%" y="68%" fill="#ffffff" font-family="sans-serif" font-weight="900" font-size="14" text-anchor="middle">RAUTA</text></div>
+            <div class="logo-container" style="background: #ff5722; border-color: #e64a19;"><text x="50%" y="68%" fill="#ffffff" font-family="sans-serif" font-weight="900" font-size="13" text-anchor="middle">RAUTA</text></div>
             <div class="card-info"><div class="card-title">Rautakauppa</div><div class="card-desc">Työkalut, remontointi & tarvikkeet</div></div>
             <div class="card-arrow">›</div>
           </div>
 
           <div class="action-card" onclick="navigate('store', 'apteekki')">
-            <div class="logo-container" style="background: #ffffff; border-color: #a5d6a7;"><text x="50%" y="68%" fill="#007934" font-family="sans-serif" font-weight="900" font-size="13" text-anchor="middle">APTEEKKI</text></div>
+            <div class="logo-container" style="background: #ffffff; border-color: #a5d6a7;"><text x="50%" y="68%" fill="#007934" font-family="sans-serif" font-weight="900" font-size="12" text-anchor="middle">APTEEKKI</text></div>
             <div class="card-info"><div class="card-title">Apteekki</div><div class="card-desc">Lääkkeet, vitamiinit & hoitotuotteet</div></div>
             <div class="card-arrow">›</div>
           </div>
@@ -2207,24 +2693,174 @@
           </div>
         </div>
 
-        <div class="action-card card-deals" onclick="navigate('deals')">
-          <div class="card-icon">🔥</div>
-          <div class="card-info">
-            <div class="card-title">Tarjoukset & paikallistärpit</div>
-            <div class="card-desc">Tammisto, Jumbo & erikoistarjoukset</div>
+        <div style="margin-top: 20px;">
+          <div class="action-card card-deals" onclick="navigate('deals')">
+            <div class="card-icon">🔥</div>
+            <div class="card-info">
+              <div class="card-title">Tarjoukset & paikallistärpit</div>
+              <div class="card-desc">Tammisto, Jumbo & erikoistarjoukset</div>
+            </div>
+            <div class="card-arrow">›</div>
           </div>
-          <div class="card-arrow">›</div>
         </div>
 
-        <div class="home-footer">
-          <div style="font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; margin-bottom: 6px;">
+        <div class="home-footer" style="margin-top: 25px; margin-bottom: 15px; text-align: center;">
+          <div style="font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; margin-bottom: 5px;">
             Powered by
           </div>
-          <div style="font-size: 0.68rem; color: #94a3b8; margin-bottom: 8px;">
+          <div style="font-size: 0.68rem; color: #94a3b8; margin-bottom: 6px;">
             Gemini 3.8 Vision ⚫ Tesseract OCR ⚫ Firebase ⚫ Web Speech
           </div>
           <div style="font-size: 0.75rem; color: #94a3b8; font-weight: 600;">Jussi 2026</div>
         </div>
+      `;
+    }
+
+    function renderSoffa(container) {
+      const allCategories = [...new Set(appState.items.map(i => i.cat))];
+      const prismaLayout = STORE_LAYOUTS["prisma_jumbo"] || [];
+      const categories = allCategories.sort((a, b) => {
+        const idxA = prismaLayout.indexOf(a);
+        const idxB = prismaLayout.indexOf(b);
+        if (idxA === -1 && idxB === -1) return a.localeCompare(b);
+        if (idxA === -1) return 1;
+        if (idxB === -1) return -1;
+        return idxA - idxB;
+      });
+
+      const query = (searchQuery || "").toLowerCase();
+      const isSearching = query.length > 0;
+      const filteredItems = appState.items.filter(item => {
+        if (!query) return true;
+        return item.name.toLowerCase().includes(query) || item.cat.toLowerCase().includes(query);
+      });
+
+      let categoriesHtml = "";
+      categories.forEach(cat => {
+        const catItems = filteredItems.filter(i => i.cat === cat).sort((a, b) => a.name.localeCompare(b.name, 'fi'));
+        if (catItems.length === 0) return;
+
+        const isOpen = isSearching || categoryOpenState[cat] === true;
+        const activeCount = catItems.filter(i => i.active && !i.done).length;
+        const meta = CATEGORY_META[cat] || {
+          icon: "📦",
+          name: cat.toUpperCase(),
+          examples: "Valitse tuotteet",
+          border: "#e2e8f0",
+          shadow: "rgba(0,0,0,0.03)",
+          iconBg: "#f1f5f9",
+          accent: "#64748b",
+          pillBorder: "#cbd5e1",
+          pillBg: "#f8fafc",
+          pillColor: "#475569"
+        };
+
+        const hasActive = activeCount > 0;
+        const pillBorder = hasActive ? meta.border : "#cbd5e1";
+        const pillBg = hasActive ? meta.iconBg : "#f8fafc";
+        const pillColor = hasActive ? (meta.accent || "#047857") : "#64748b";
+
+        let itemsRows = "";
+        if (isOpen) {
+          itemsRows = catItems.map(item => {
+            const globalIdx = appState.items.indexOf(item);
+            const qtyStr = formatQty(item.qty);
+            const frequent = isItemFrequent(item);
+            const isQuick = isQuickQtyItem(item);
+            const isSelected = item.active && !item.done;
+            const itemIcon = resolveItemIcon(item.name, item.cat);
+
+            return `
+              <div class="product-row ${frequent ? 'frequent-item' : ''}" onclick="toggleActive(${globalIdx})">
+                <div class="product-info-inline">
+                  <span class="item-icon-badge">${itemIcon}</span>
+                  <span class="product-name">${renderItemTitle(item.name)}</span>
+                  <span class="product-cat-tag">(${item.cat})</span>
+                  ${frequent ? '<span class="frequent-badge">⭐ Usein ostettu</span>' : ''}
+                  ${(qtyStr && !isQuick) ? `<span class="qty-tag" onclick="event.stopPropagation(); openQtyModal(${globalIdx})">${qtyStr} ✎</span>` : ''}
+                </div>
+                <div class="row-actions">
+                  ${isSelected ? (
+                    isQuick ? `
+                      <div class="quick-stepper" title="Pikamäärä ilman näppäimistöä">
+                        <button class="btn-stepper" onclick="event.stopPropagation(); stepQuickQty(${globalIdx}, -1)">−</button>
+                        <span class="stepper-val" onclick="event.stopPropagation(); openQtyModal(${globalIdx})">${qtyStr || '1 kpl'}</span>
+                        <button class="btn-stepper" onclick="event.stopPropagation(); stepQuickQty(${globalIdx}, 1)">+1</button>
+                      </div>
+                    ` : `
+                      <button class="btn-qty-quick" title="Aseta määrä" onclick="event.stopPropagation(); openQtyModal(${globalIdx})">
+                        ${qtyStr || '+ määrä'}
+                      </button>
+                    `
+                  ) : ''}
+                  <button class="btn-delete-row" title="Poista valikoimasta" onclick="event.stopPropagation(); openDeleteModal(${globalIdx})">🗑</button>
+                  <div class="checkbox-round ${isSelected ? 'checked' : ''}"></div>
+                </div>
+              </div>
+            `;
+          }).join("");
+        }
+
+        categoriesHtml += `
+          <div class="category-group" style="margin-bottom: 8px;">
+            <div class="cat-card-modern" 
+                 onclick="toggleCategory('${cat}')"
+                 style="--cat-border: ${meta.border}; --cat-shadow: ${meta.shadow}; --cat-icon-bg: ${meta.iconBg}; --cat-accent: ${meta.accent};">
+              <div class="cat-icon-tile">${meta.icon}</div>
+              <div class="cat-card-info">
+                <div class="cat-card-name-row">
+                  <span class="cat-card-name">${meta.name}</span>
+                  <span class="cat-card-dot"></span>
+                </div>
+              </div>
+              <div class="cat-selected-pill" style="border-color: ${pillBorder}; background: ${pillBg}; color: ${pillColor};">
+                ${activeCount} VALITTU
+              </div>
+              <div class="cat-chevron ${isOpen ? 'open' : ''}">›</div>
+            </div>
+            ${isOpen ? `<div class="cat-items-drawer">${itemsRows}</div>` : ''}
+          </div>
+        `;
+      });
+
+      container.innerHTML = `
+        <!-- Etsi tuotetta -->
+        <div class="search-box">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="soffa-search-input" class="search-input" placeholder="Etsi tuotetta tai kategoriaa..." value="${searchQuery}" oninput="onSearchChange(this.value)">
+          ${searchQuery ? `<button class="search-clear-btn" title="Tyhjennä haku" onclick="clearSearch()">✕</button>` : ''}
+        </div>
+
+        <!-- Lisää uusi tuote ostoslistaan (Kuva 1) -->
+        <div class="soffa-add-card">
+          <div class="soffa-card-header">
+            <span class="soffa-card-title">Lisää uusi tuote ostoslistaan</span>
+            <span class="soffa-badge-quick">Pikalisäys</span>
+          </div>
+          
+          <div class="soffa-input-row">
+            <input type="text" id="new-item-name" class="soffa-input-text" placeholder="Tuotteen nimi (esim. Kauramaito)">
+            <input type="number" id="new-item-qty" class="soffa-input-qty" placeholder="1 kpl">
+            <button class="soffa-icon-btn" id="btn-mic" onclick="startDictation()" title="Sanele ostokset">🎤</button>
+            <button class="soffa-icon-btn" onclick="triggerVisionCameraCapture()" title="Kuvaa tuote älykkäästi (Gemini)">📷</button>
+          </div>
+
+          <select id="new-item-cat" class="soffa-select-cat">
+            ${categories.map(c => `<option value="${c}">${(CATEGORY_META[c]?.name || c).toUpperCase()}</option>`).join("")}
+          </select>
+
+          <button class="soffa-btn-submit" onclick="addNewProduct()">
+            <span>+</span> Lisää kauppalappuun
+          </button>
+        </div>
+
+        <!-- Ryhmäotsikko (Kuva 1) -->
+        <div class="soffa-sections-header">
+          <span class="soffa-sections-title">TUOTERYHMÄT & OSASTOT</span>
+          <span class="soffa-sections-sub">${categories.length} kategoriaa saatavilla</span>
+        </div>
+
+        ${categoriesHtml || '<div class="empty-state">Ei hakua vastaavia tuotteita</div>'}
       `;
     }
 
@@ -2240,7 +2876,7 @@
         const dealsInCat = DAILY_DEALS.filter(d => d.cat === cat);
         html += `
           <div class="category-group">
-            <div class="category-header" style="background: #ffedd5; color: #9a3412; border-color: #fed7aa;">
+            <div class="category-header" style="background: #ffedd5; color: #9a3412; border-color: #fed7aa; display:flex; justify-content:space-between; padding:10px 12px; border-radius:8px; font-weight:800; font-size:0.8rem; text-transform:uppercase;">
               <span>${cat}</span>
             </div>
             ${dealsInCat.map(deal => {
@@ -2282,115 +2918,6 @@
       showUndoBar(`Päivitetty: ${deal.name}`);
     };
 
-    function renderSoffa(container) {
-      const allCategories = [...new Set(appState.items.map(i => i.cat))];
-      const prismaLayout = STORE_LAYOUTS["prisma_jumbo"] || [];
-      const categories = allCategories.sort((a, b) => {
-        const idxA = prismaLayout.indexOf(a);
-        const idxB = prismaLayout.indexOf(b);
-        if (idxA === -1 && idxB === -1) return a.localeCompare(b);
-        if (idxA === -1) return 1;
-        if (idxB === -1) return -1;
-        return idxA - idxB;
-      });
-
-      const query = (searchQuery || "").toLowerCase();
-      const isSearching = query.length > 0;
-      const filteredItems = appState.items.filter(item => {
-        if (!query) return true;
-        return item.name.toLowerCase().includes(query) || item.cat.toLowerCase().includes(query);
-      });
-
-      let categoriesHtml = "";
-      categories.forEach(cat => {
-        const catItems = filteredItems.filter(i => i.cat === cat).sort((a, b) => a.name.localeCompare(b.name, 'fi'));
-        if (catItems.length === 0) return;
-
-        const isOpen = isSearching || categoryOpenState[cat] === true;
-        const activeCount = catItems.filter(i => i.active && !i.done).length;
-
-        let itemsRows = "";
-        if (isOpen) {
-          itemsRows = catItems.map(item => {
-            const globalIdx = appState.items.indexOf(item);
-            const qtyStr = formatQty(item.qty);
-            const frequent = isItemFrequent(item);
-            const isQuick = isQuickQtyItem(item);
-            const isSelected = item.active && !item.done;
-
-            return `
-              <div class="product-row ${frequent ? 'frequent-item' : ''}" onclick="toggleActive(${globalIdx})">
-                <div class="product-info-inline">
-                  <span class="product-name">${renderItemTitle(item.name)}</span>
-                  <span class="product-cat-tag">(${item.cat})</span>
-                  ${frequent ? '<span class="frequent-badge">⭐ Usein ostettu</span>' : ''}
-                  ${(qtyStr && !isQuick) ? `<span class="qty-tag" onclick="event.stopPropagation(); openQtyModal(${globalIdx})">${qtyStr} ✎</span>` : ''}
-                </div>
-                <div class="row-actions">
-                  ${isSelected ? (
-                    isQuick ? `
-                      <div class="quick-stepper" title="Pikamäärä ilman näppäimistöä">
-                        <button class="btn-stepper" onclick="event.stopPropagation(); stepQuickQty(${globalIdx}, -1)">−</button>
-                        <span class="stepper-val" onclick="event.stopPropagation(); openQtyModal(${globalIdx})">${qtyStr || '1 kpl'}</span>
-                        <button class="btn-stepper" onclick="event.stopPropagation(); stepQuickQty(${globalIdx}, 1)">+1</button>
-                      </div>
-                    ` : `
-                      <button class="btn-qty-quick" title="Aseta määrä" onclick="event.stopPropagation(); openQtyModal(${globalIdx})">
-                        ${qtyStr || '+ määrä'}
-                      </button>
-                    `
-                  ) : ''}
-                  <button class="btn-delete-row" title="Poista valikoimasta" onclick="event.stopPropagation(); openDeleteModal(${globalIdx})">🗑</button>
-                  <div class="checkbox-round ${isSelected ? 'checked' : ''}"></div>
-                </div>
-              </div>
-            `;
-          }).join("");
-        }
-
-        categoriesHtml += `
-          <div class="category-group">
-            <div class="category-header" onclick="toggleCategory('${cat}')">
-              <div style="display: flex; align-items: center;">
-                <span class="category-toggle-icon ${isOpen ? 'open' : ''}">▶</span>
-                <span>${cat}</span>
-              </div>
-              <span>${activeCount} valittu</span>
-            </div>
-            ${isOpen ? itemsRows : ''}
-          </div>
-        `;
-      });
-
-      container.innerHTML = `
-        <div class="search-box">
-          <span class="search-icon">🔍</span>
-          <input type="text" id="soffa-search-input" class="search-input" placeholder="Etsi tuotetta tai kategoriaa..." value="${searchQuery}" oninput="onSearchChange(this.value)">
-          ${searchQuery ? `<button class="search-clear-btn" title="Tyhjennä haku" onclick="clearSearch()">✕</button>` : ''}
-        </div>
-
-        <div class="add-section">
-          <div class="add-section-title">
-            <span>+ Lisää uusi tuote valikoimaan</span>
-          </div>
-          <div class="form-row">
-            <div class="form-inputs-group">
-              <input type="text" id="new-item-name" class="input-field" placeholder="Tuotteen nimi">
-              <input type="number" id="new-item-qty" class="qty-field" placeholder="Määrä (3/300)">
-              <button class="btn-mic" id="btn-mic" onclick="startDictation()" title="Sanele ostokset">🎤</button>
-              <button class="btn-mic" onclick="triggerVisionCameraCapture()" title="Kuvaa tuote älykkäästi (Gemini)" style="font-size: 1.15rem;">📷</button>
-            </div>
-            <select id="new-item-cat" class="select-field">
-              ${categories.map(c => `<option value="${c}">${c}</option>`).join("")}
-            </select>
-            <button class="btn-add" onclick="addNewProduct()">Lisää kauppalappuun</button>
-          </div>
-        </div>
-
-        ${categoriesHtml || '<div class="empty-state">Ei hakua vastaavia tuotteita</div>'}
-      `;
-    }
-
     function renderStore(container) {
       const layout = STORE_LAYOUTS[activeStoreKey] || [];
       const storeItems = appState.items.filter(i => i.active && layout.includes(i.cat));
@@ -2408,7 +2935,7 @@
             <h3>Kauppalappu on tyhjä tähän kauppaan</h3>
             <p>Valitse ostettavia tuotteita kotisohvalla.</p>
             <br>
-            <button class="btn-add" style="margin: 0 auto;" onclick="navigate('soffa')">Täytä kotisohvalla</button>
+            <button class="soffa-btn-submit" style="max-width: 200px; margin: 0 auto;" onclick="navigate('soffa')">Täytä kotisohvalla</button>
           </div>
         `;
         return;
@@ -2421,7 +2948,7 @@
           <div class="empty-state" style="padding: 20px 14px;">
             <div class="empty-state-icon">🎉</div>
             <h3 style="margin-bottom: 4px;">Kaikki kerätty!</h3>
-            <button class="btn-trip-done" style="max-width: 280px; margin: 0 auto;" onclick="finishShoppingTrip()">🏁 Reissu tehty</button>
+            <button class="btn-trip-done-compact" style="max-width: 260px; margin: 0 auto; padding: 10px;" onclick="finishShoppingTrip()">🏁 Reissu tehty</button>
           </div>
         `;
       }
@@ -2433,10 +2960,12 @@
         const itemsRows = catItems.map(item => {
           const globalIdx = appState.items.indexOf(item);
           const qtyStr = formatQty(item.qty);
+          const itemIcon = resolveItemIcon(item.name, item.cat);
 
           return `
             <div class="store-item" onclick="markDone(${globalIdx}, event)">
               <div class="product-info-inline">
+                <span class="item-icon-badge">${itemIcon}</span>
                 <span class="product-name">${renderItemTitle(item.name)}</span>
                 <span class="product-cat-tag">(${item.cat})</span>
                 ${qtyStr ? `<span class="qty-tag">${qtyStr}</span>` : ''}
@@ -2447,8 +2976,10 @@
         }).join("");
 
         storeContentHtml += `
-          <div class="category-group">
-            <div class="category-header">${category} (${catItems.length})</div>
+          <div class="category-group" style="margin-bottom: 12px;">
+            <div style="font-size: 0.8rem; font-weight: 800; background: #e2e8f0; padding: 10px 12px; border-radius: 8px; margin-bottom: 6px; color: #1e293b; text-transform: uppercase;">
+              ${category} (${catItems.length})
+            </div>
             ${itemsRows}
           </div>
         `;
@@ -2464,14 +2995,16 @@
               ${otherActiveItems.map(item => {
                 const globalIdx = appState.items.indexOf(item);
                 const qtyStr = formatQty(item.qty);
+                const itemIcon = resolveItemIcon(item.name, item.cat);
                 return `
                   <div class="other-store-item" onclick="markDone(${globalIdx}, event)">
-                    <div class="other-store-info">
-                      <span class="other-store-name">${item.name}</span>
-                      <span class="other-store-cat">(${item.cat})</span>
-                      ${qtyStr ? `<span class="other-store-qty">${qtyStr}</span>` : ''}
+                    <div style="display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; flex: 1;">
+                      <span class="item-icon-badge" style="width: 22px; height: 22px; font-size: 0.85rem;">${itemIcon}</span>
+                      <span style="font-size: 0.82rem; font-weight: 700; color: #334155;">${item.name}</span>
+                      <span style="font-size: 0.7rem; color: #94a3b8;">(${item.cat})</span>
+                      ${qtyStr ? `<span style="font-size: 0.7rem; background: #e2e8f0; color: #475569; padding: 1px 5px; border-radius: 4px; font-weight: 700;">${qtyStr}</span>` : ''}
                     </div>
-                    <button class="btn-other-done">Kuittaa täältä ✓</button>
+                    <button style="background: #ffffff; border: 1px solid #cbd5e1; color: #475569; font-size: 0.7rem; font-weight: 700; padding: 3px 8px; border-radius: 6px; pointer-events: none;">Kuittaa täältä ✓</button>
                   </div>
                 `;
               }).join("")}
@@ -2750,8 +3283,6 @@
             processGeminiVision(currentPendingImageBase64);
          } else if (DEFAULT_GEMINI_API_KEY) {
             processGeminiVision(currentPendingImageBase64, DEFAULT_GEMINI_API_KEY);
-         } else {
-            document.getElementById("vision-key-prompt").style.display = "block";
          }
       };
       reader.readAsDataURL(file);
@@ -2765,14 +3296,12 @@
       const statusText = document.getElementById("vision-status-text");
       const resultFields = document.getElementById("vision-result-fields");
       const acceptBtn = document.getElementById("btn-vision-accept");
-      const promptBox = document.getElementById("vision-key-prompt");
 
       if (img) img.src = imageUrl;
       if (container) container.style.display = "block";
       if (statusBox) statusBox.style.display = "flex";
       if (statusText) statusText.innerText = "Analysoidaan kuvaa tekoälyllä...";
       if (resultFields) resultFields.style.display = "none";
-      if (promptBox) promptBox.style.display = "none";
       if (acceptBtn) acceptBtn.disabled = true;
 
       document.getElementById("vision-item-name").value = "";
@@ -2792,18 +3321,6 @@
        currentPendingImageBase64 = null;
     };
 
-    window.saveInlineGeminiKeyAndRetry = function() {
-      const inp = document.getElementById("inline-gemini-key");
-      const key = inp ? inp.value.trim() : "";
-      if (key) {
-        localStorage.setItem("corsia_gemini_api_key", key);
-        document.getElementById("vision-key-prompt").style.display = "none";
-        document.getElementById("vision-status-box").style.display = "flex";
-        document.getElementById("vision-status-text").innerText = "Analysoidaan kuvaa...";
-        processGeminiVision(currentPendingImageBase64, key);
-      }
-    };
-
     async function processGeminiVision(base64Data, manualKey = null) {
       const statusText = document.getElementById("vision-status-text");
       const spinner = document.querySelector("#vision-status-box .ocr-spinner");
@@ -2812,7 +3329,6 @@
       if (!apiKey) {
          if (statusText) statusText.innerText = "API-avain puuttuu.";
          if (spinner) spinner.style.display = "none";
-         document.getElementById("vision-key-prompt").style.display = "block";
          return;
       }
 
