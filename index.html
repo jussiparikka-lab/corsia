@@ -2097,9 +2097,12 @@ Kategoriat: Hevi, Juurekset, Hedelmät, Liha, Leikkeleet, Einekset, Vegaaniset, 
 Palauta AINOASTAAN JSON ilman markdownia:
 [{"name": "Tuotenimi", "cat": "Kategoria", "qty": 1}]`;
 
+        let lastHttpError = "";
+
         if (apiKey) {
           const payload = {
             contents: [{
+              role: "user",
               parts: [
                 { text: promptText },
                 {
@@ -2115,7 +2118,8 @@ Palauta AINOASTAAN JSON ilman markdownia:
 
           const endpoints = [
             `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
+            `https://aiplatform.googleapis.com/v1/publishers/google/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`
           ];
 
           for (const url of endpoints) {
@@ -2123,7 +2127,8 @@ Palauta AINOASTAAN JSON ilman markdownia:
               const res = await fetch(url, {
                 method: "POST",
                 headers: {
-                  "Content-Type": "application/json"
+                  "Content-Type": "application/json",
+                  "x-goog-api-key": apiKey
                 },
                 body: JSON.stringify(payload)
               });
@@ -2139,15 +2144,19 @@ Palauta AINOASTAAN JSON ilman markdownia:
                   parsedProducts = arr;
                   break;
                 }
+              } else {
+                const errData = await res.json().catch(() => ({}));
+                lastHttpError = `${res.status}: ${errData?.error?.message || res.statusText}`;
               }
             } catch (netErr) {
+              lastHttpError = netErr.message || "Verkkovirhe";
               console.warn("Gemini attempt note:", netErr);
             }
           }
         }
 
         if (!parsedProducts || parsedProducts.length === 0) {
-          showUndoBar("⚠️ Kuvaa ei voitu tunnistaa, yritä uudelleen.");
+          showUndoBar(`⚠️ Tunnistus epäonnistui ${lastHttpError ? '(' + lastHttpError.substring(0, 45) + ')' : ''}`);
           return;
         }
 
