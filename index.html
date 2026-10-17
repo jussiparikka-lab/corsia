@@ -1020,7 +1020,7 @@
     };
 
     // Sinun tuore, toimiva Google AI Studio -avain
-    const EMBEDDED_GEMINI_KEY = "AQ.Ab8RN6Jga0R3Rwkxe6Rdb3RYOOsNwszpzsH56OSOVv-gjeaWtA";
+    const EMBEDDED_GEMINI_KEY = "AQ.Ab8RN6KE2UTqm6n_I6ooJbwl6DQCzwAXKKdMlgJJNRUYxcDFyA";
 
     const DEFAULT_CATALOG = [
       { name: "Sukkahousut", cat: "Muut" },
@@ -1173,7 +1173,9 @@
     let cloudSynced = false;
 
     function getEffectiveGeminiKey() {
-      return (localStorage.getItem("corsia_gemini_api_key") || EMBEDDED_GEMINI_KEY || "").trim();
+      let key = localStorage.getItem("corsia_gemini_api_key") || EMBEDDED_GEMINI_KEY || "";
+      // Poistetaan kaikki mahdolliset näkymättömät piilomerkit, rivinvaihdot ja välilyönnit, jotka aiheuttavat 401-virheen
+      return key.replace(/[\s\r\n'"]/g, "").trim();
     }
 
     function inferCategoryFromName(rawName) {
@@ -2096,17 +2098,23 @@
             }
           } else {
             const errJson = await res.json().catch(() => ({}));
-            lastError = `${res.status}: ${errJson?.error?.message || res.statusText}`;
-            // Jos virhe on jokin muu kuin 404 (esim. 400 API_KEY_INVALID), on turha kokeilla varamallia.
+            lastError = errJson?.error?.message || res.statusText;
+            
+            // 401 tarkoittaa aina, että avain on virheellinen tai kuoletettu Googlen päässä
+            if (res.status === 401) {
+              throw new Error("401: API-avain on vanhentunut tai virheellinen. Hae uusi avain asetuksista.");
+            }
+            
+            // Jos virhe on jokin muu kuin 404, lopetetaan kokeilu
             if (res.status !== 404) break;
           }
         } catch (e) {
-          lastError = e.message || "Verkkovirhe (CORS)";
-          break; // Verkkotason katkos, lopetetaan yrittäminen.
+          lastError = e.message || "Verkkovirhe";
+          if (e.message.includes("401")) throw e; // Pakotetaan 401 suoraan läpi
         }
       }
 
-      throw new Error(lastError || "Tekoälyyhteys epäonnistui");
+      throw new Error(lastError || "Tekoäly ei vastannut");
     }
 
     window.handleGeminiCamera = async function(input, mode) {
