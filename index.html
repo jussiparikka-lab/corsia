@@ -2503,17 +2503,391 @@
       if (modal) modal.style.display = "none";
     };
 
-    window.saveGeminiKey = function() {
-      const keyInp = document.getElementById("gemini-api-key-input");
-      const val = keyInp ? keyInp.value.trim() : "";
-      if (val) {
-        localStorage.setItem("corsia_gemini_api_key", val);
-        showUndoBar("Gemini API -avain tallennettu!");
-      } else {
-        localStorage.removeItem("corsia_gemini_api_key");
-        showUndoBar("Gemini API -avain poistettu.");
+    /* =========================================================================
+       1. ÄÄNISANELU (Web Speech API)
+       ========================================================================= */
+    window.startDictation = function() {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        showUndoBar("Selaimesi ei tue sanelua (kokeile Safaria tai Chromea).");
+        return;
       }
-      closeFirebaseSettings();
+
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'fi-FI';
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+
+      recognition.onstart = function() {
+        const micBtn = document.getElementById("btn-mic");
+        if (micBtn) micBtn.classList.add("recording");
+        showUndoBar("🎤 Sanelu käynnissä... Sano tuotteet (esim. 'maitoa ja leipää').");
+      };
+
+      recognition.onresult = function(event) {
+        const transcript = event.results[0][0].transcript;
+        importWhatsAppText(transcript, true);
+      };
+
+      recognition.onerror = function(event) {
+        showUndoBar("Sanelu keskeytyi (" + event.error + ").");
+        const micBtn = document.getElementById("btn-mic");
+        if (micBtn) micBtn.classList.remove("recording");
+      };
+
+      recognition.onend = function() {
+        const micBtn = document.getElementById("btn-mic");
+        if (micBtn) micBtn.classList.remove("recording");
+      };
+
+      try {
+        recognition.start();
+      } catch(e) {
+        showUndoBar("Mikrofonin käynnistys epäonnistui.");
+      }
+    };
+
+    /* =========================================================================
+       2. GEMINI VISION AI - TUOTEKAMERA (Jääkaappi / WhatsApp-kuva)
+       ========================================================================= */
+    window.triggerProductImageCapture = function() {
+      const fileInput = document.getElementById("vision-file-input");
+      if (fileInput) {
+        fileInput.value = "";
+        fileInput.click();
+      }
+    };
+
+    window.handleProductImageSelected = function(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+         const base64Url = e.target.result;
+         currentPendingImageBase64 = base64Url.split(",")[1];
+         openVisionModal(base64Url);
+         processGeminiVision(currentPendingImageBase64);
+      };
+      reader.readAsDataURL(file);
+    };
+
+    window.openVisionModal = function(imageUrl) {
+      const modal = document.getElementById("vision-modal");
+      const img = document.getElementById("vision-preview-img");
+      const container = document.getElementById("vision-preview-container");
+      const statusBox = document.getElementById("vision-status-box");
+      const statusText = document.getElementById("vision-status-text");
+      const resultFields = document.getElementById("vision-result-fields");
+      const acceptBtn = document.getElementById("btn-vision-accept");
+
+      if (img) img.src = imageUrl;
+      if (container) container.style.display = "block";
+      if (statusBox) statusBox.style.display = "flex";
+      if (statusText) statusText.innerText = "Analysoidaan kuvaa tekoälyllä...";
+      if (resultFields) resultFields.style.display = "none";
+      if (acceptBtn) acceptBtn.disabled = true;
+
+      document.getElementById("vision-item-name").value = "";
+      document.getElementById("vision-item-qty").value = "";
+
+      const catSelect = document.getElementById("vision-item-cat");
+      if (catSelect && typeof STANDARD_CATEGORIES !== 'undefined') {
+         catSelect.innerHTML = STANDARD_CATEGORIES.map(c => `<option value="${c}">${c}</option>`).join("");
+      }
+
+      if (modal) modal.style.display = "flex";
+    };
+
+    window.closeVisionModal = function() {
+       const modal = document.getElementById("vision-modal");
+       if (modal) modal.style.display = "none";
+       currentPendingImageBase64 = null;
+    };
+
+    async function processGeminiVision(base64Data) {
+      const statusText = document.getElementById("vision-status-text");
+      const spinner = document.querySelector("#vision-status-box .ocr-spinner");
+
+      try {
+         const apiKey = DEFAULT_GEMINI_API_KEY;
+         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+
+         const requestBody = {
+           contents: [{
+             parts: [
+               { text: "Tunnista kuvassa oleva elintarvike tai kauppatuote. Anna lyhyt ja ytimekäs suomenkielinen nimi, joka sisältää tarkan brändin ja tuotteen (esim. 'Valio Oivariini vähemmän suolaa 400g' tai 'Oatly Barista Kauramaito 1L'). Älä lue eränumeroita tai viivakoodeja. Jos tunnistat määrän, kerro se. Vastauksen muoto: 'NIMI: [tuotteen nimi ja brändi]|MÄÄRÄ: [määrä numeroina, jätä tyhjäksi jos ei ole]|KATEGORIA: [Kategoria: Maitotuotteet, Juustot, Hevi, Kuivat, Einekset, Liha, Pakasteet, Herkut, Muut]'" },
+               { inline_data: { mime_type: "image/jpeg", data: base64Data } }
+             ]
+           }],
+           generationConfig: { temperature: 0.1 }
+         };
+
+         const response = await fetch(url, {
+           method: "POST",
+           headers: { 
+             "Content-Type": "application/json",
+             "x-goog-api-key": apiKey
+           },
+           body: JSON.stringify(requestBody)
+         });
+
+         if (!response.ok) {
+            const errData = await response.json();
+            throw new Error(errData.error?.message || "API Virhe");
+         }
+
+         const data = await response.json();
+         const text = data.candidates[0].content.parts[0].text;
+
+         parseVisionResult(text);
+
+      } catch (e) {
+         console.error("Gemini Error:", e);
+         if (statusText) statusText.innerText = "Tunnistus epäonnistui. " + e.message;
+         if (spinner) spinner.style.display = "none";
+      }
+    }
+
+    function parseVisionResult(text) {
+      const statusBox = document.getElementById("vision-status-box");
+      const resultFields = document.getElementById("vision-result-fields");
+      const acceptBtn = document.getElementById("btn-vision-accept");
+
+      const nameMatch = text.match(/NIMI:\s*([^|]+)/i);
+      const qtyMatch = text.match(/MÄÄRÄ:\s*([^|]+)/i);
+      const catMatch = text.match(/KATEGORIA:\s*([^|]+)/i);
+
+      let parsedName = nameMatch ? nameMatch[1].trim() : "Tuntematon tuote";
+      let parsedQtyRaw = qtyMatch ? qtyMatch[1].trim() : "";
+      let parsedQty = parseInt(parsedQtyRaw, 10);
+      if (isNaN(parsedQty)) parsedQty = "";
+      
+      let parsedCat = catMatch ? catMatch[1].trim() : "Muut";
+      if (typeof resolveStandardCategory === 'function') {
+         parsedCat = resolveStandardCategory(parsedCat, parsedName);
+      }
+
+      document.getElementById("vision-item-name").value = parsedName;
+      document.getElementById("vision-item-qty").value = parsedQty;
+      
+      const catSelect = document.getElementById("vision-item-cat");
+      if (catSelect) catSelect.value = parsedCat;
+
+      if (statusBox) statusBox.style.display = "none";
+      if (resultFields) resultFields.style.display = "block";
+      if (acceptBtn) acceptBtn.disabled = false;
+    }
+
+    window.executeVisionAccept = function() {
+       const name = document.getElementById("vision-item-name").value.trim();
+       const rawQty = document.getElementById("vision-item-qty").value.trim();
+       const cat = document.getElementById("vision-item-cat").value;
+
+       if (!name) return;
+       const qty = (rawQty && !isNaN(Number(rawQty)) && Number(rawQty) > 0) ? Math.round(Number(rawQty)) : null;
+
+       const existingIdx = appState.items.findIndex(i => i.name.toLowerCase() === name.toLowerCase());
+       if (existingIdx >= 0) {
+          appState.items[existingIdx].active = true;
+          appState.items[existingIdx].done = false;
+          if (qty !== null) appState.items[existingIdx].qty = qty;
+       } else {
+          appState.items.unshift({ name, cat, active: true, done: false, qty });
+       }
+
+       closeVisionModal();
+       pushToCloud();
+       showUndoBar("📸 Tunnistettu tuote lisätty!");
+       render();
+    };
+
+    /* =========================================================================
+       3. WHATSAPP-TEKSTIN TUONTI (NLP-jäsentely)
+       ========================================================================= */
+    window.handleWhatsAppImport = async function() {
+      if (navigator.clipboard && navigator.clipboard.readText) {
+        try {
+          const text = await navigator.clipboard.readText();
+          if (text && text.trim().length > 0) {
+            importWhatsAppText(text);
+            return;
+          }
+        } catch (e) {
+          console.log("Clipboard direct read prevented, opening modal fallback");
+        }
+      }
+      openWaModal();
+    };
+
+    window.openWaModal = function() {
+      const modal = document.getElementById("wa-modal");
+      const inp = document.getElementById("wa-text-input");
+      if (inp) inp.value = "";
+      if (modal) modal.style.display = "flex";
+      setTimeout(() => { if (inp) inp.focus(); }, 100);
+    };
+
+    window.closeWaModal = function() {
+      const modal = document.getElementById("wa-modal");
+      if (modal) modal.style.display = "none";
+    };
+
+    window.executeWaImport = function() {
+      const inp = document.getElementById("wa-text-input");
+      const text = inp ? inp.value.trim() : "";
+      closeWaModal();
+      if (text) {
+        importWhatsAppText(text, false);
+      }
+    };
+
+    function importWhatsAppText(text, isDictation = false) {
+      if (!text || !text.trim()) return;
+
+      let rawLines = text
+        .replace(/\r\n/g, "\n")
+        .replace(/[,;]/g, "\n")
+        .replace(/\s+(ja|sekä|\+)\s+/gi, "\n")
+        .split("\n");
+
+      let addedCount = 0;
+
+      rawLines.forEach(line => {
+        let clean = line.trim();
+        if (!clean) return;
+
+        clean = clean.replace(/^(muista(pa)?\s+ostaa|osta|tuo|hae|lisää|kauppalappu:?|kauppaan:?)\s*/i, "");
+        clean = clean.replace(/^[-*•–—\d+\.)]+\s*/, "").trim();
+        if (clean.length < 2) return;
+
+        let parsedQty = null;
+        const numMatch = clean.match(/(\d+)\s*(kpl|g|kg|prk|purkkia|pkt|kappaletta|pussia)?/i);
+        if (numMatch) {
+          const rawNum = parseInt(numMatch[1], 10);
+          const unit = (numMatch[2] || "").toLowerCase();
+          if (unit.startsWith("kg")) {
+            parsedQty = rawNum * 1000;
+          } else {
+            parsedQty = rawNum;
+          }
+        }
+
+        let searchTerm = clean
+          .replace(/(\d+)\s*(kpl|g|kg|prk|purkkia|pkt|kappaletta|pussia)?/gi, "")
+          .replace(/[()]/g, "")
+          .trim()
+          .toLowerCase();
+
+        if (searchTerm.length < 2) return;
+
+        let matchedItem = null;
+
+        if (searchTerm.includes("sinis") || (searchTerm.includes("maito") && searchTerm.includes("kevyt"))) {
+          matchedItem = appState.items.find(i => i.name === "MAITO: Laktoositon kevyt (sininen)");
+        } else if (searchTerm.includes("kurkku")) {
+          matchedItem = appState.items.find(i => i.name === "Kurkku");
+        } else if (searchTerm.includes("banaani")) {
+          matchedItem = appState.items.find(i => i.name === "Banaani");
+        } else if (searchTerm.includes("jauheliha")) {
+          matchedItem = appState.items.find(i => i.name === "Jauheliha");
+        } else if (searchTerm.includes("lohi")) {
+          matchedItem = appState.items.find(i => i.name === "Lohi (tuore)");
+        } else if (searchTerm.includes("kauramaito")) {
+          matchedItem = appState.items.find(i => i.name.toLowerCase().includes("kauramaito"));
+        } else if (searchTerm.includes("kananmuna")) {
+          matchedItem = appState.items.find(i => i.name === "MUNA: Kananmunat");
+        } else if (searchTerm.includes("voi") && !searchTerm.includes("voileipä")) {
+          matchedItem = appState.items.find(i => i.name === "VOI: Voi");
+        } else {
+          matchedItem = appState.items.find(i => {
+            const nameLow = i.name.toLowerCase();
+            return nameLow.includes(searchTerm) || searchTerm.includes(nameLow.replace(/^[a-z]+:\s*/, ""));
+          });
+        }
+
+        if (matchedItem) {
+          matchedItem.active = true;
+          matchedItem.done = false;
+          if (parsedQty) {
+            matchedItem.qty = parsedQty;
+          } else if (typeof isQuickQtyItem === 'function' && isQuickQtyItem(matchedItem) && !matchedItem.qty) {
+            matchedItem.qty = 1;
+          }
+          addedCount++;
+        } else {
+          const formattedName = clean.charAt(0).toUpperCase() + clean.slice(1);
+          appState.items.unshift({
+            name: formattedName,
+            cat: "Muut",
+            active: true,
+            done: false,
+            qty: parsedQty
+          });
+          addedCount++;
+        }
+      });
+
+      if (addedCount > 0) {
+        pushToCloud();
+        showUndoBar(isDictation ? `🎤 Sanelusta lisätty ${addedCount} tuotetta!` : `💬 WA-listalta lisätty ${addedCount} tuotetta!`);
+        render();
+      } else {
+        showUndoBar(isDictation ? "Sanelusta ei tunnistettu ostoksia" : "Tekstistä ei tunnistettu ostoksia");
+      }
+    }
+
+    /* =========================================================================
+       4. KUITIN/LAPUN LUKIJA (Tesseract.js OCR etusivulla)
+       ========================================================================= */
+    window.triggerCameraCapture = function() {
+       const fileInput = document.getElementById("camera-file-input");
+       if (fileInput) {
+         fileInput.value = "";
+         fileInput.click();
+       }
+    };
+    
+    window.handleImageFileSelected = function(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      openOcrModal();
+      
+      if (!window.Tesseract) {
+        document.getElementById("ocr-text-result").value = "Tesseract.js ei ladattu. Tarkista verkkoyhteys.";
+        document.getElementById("ocr-status-box").style.display = "none";
+        return;
+      }
+      
+      Tesseract.recognize(file, 'fin', {
+         logger: m => console.log(m)
+      }).then(({ data: { text } }) => {
+         document.getElementById("ocr-status-box").style.display = "none";
+         document.getElementById("ocr-text-result").value = text;
+      }).catch(e => {
+         document.getElementById("ocr-status-box").style.display = "none";
+         document.getElementById("ocr-text-result").value = "Virhe tunnistuksessa.";
+      });
+    };
+    
+    window.openOcrModal = function() {
+       const modal = document.getElementById("ocr-modal");
+       if(modal) modal.style.display = "flex";
+       const result = document.getElementById("ocr-text-result");
+       if(result) result.value = "";
+       const statusBox = document.getElementById("ocr-status-box");
+       if(statusBox) statusBox.style.display = "flex";
+    };
+    
+    window.closeOcrModal = function() {
+       const modal = document.getElementById("ocr-modal");
+       if(modal) modal.style.display = "none";
+    };
+    
+    window.executeOcrImport = function() {
+       const text = document.getElementById("ocr-text-result").value;
+       closeOcrModal();
+       importWhatsAppText(text, false);
     };
 
     window.addEventListener("DOMContentLoaded", initData);
