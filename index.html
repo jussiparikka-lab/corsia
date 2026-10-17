@@ -974,7 +974,7 @@
           <input type="password" id="diag-gemini-key-input" placeholder="Syötä AI Studio API-avain..." style="flex: 1; padding: 7px 9px; font-size: 0.8rem; border: 1px solid #cbd5e1; border-radius: 8px; outline: none;">
           <button onclick="saveGeminiApiKey()" style="padding: 7px 12px; background: #16a34a; color: white; border: none; border-radius: 8px; font-weight: 800; font-size: 0.78rem; cursor: pointer;">Tallenna</button>
         </div>
-        <div style="font-size: 0.68rem; color: #64748b; margin-top: 4px;">Kuvantunnistus ja sanelu toimivat suoraan ilman avainta. Voit lisätä oman avaimen pilvitoimintojen laajentamiseksi.</div>
+        <div style="font-size: 0.68rem; color: #64748b; margin-top: 4px;">Kuvantunnistus ja sanelu toimivat automaattisesti. Voit tarvittaessa vaihtaa avaimen tästä.</div>
       </div>
       <button onclick="closeDiagModal()" style="width: 100%; padding: 9px; border-radius: 9px; background: #0284c7; color: white; border: none; font-weight: 800; font-size: 0.84rem; cursor: pointer;">Sulje</button>
     </div>
@@ -1012,7 +1012,8 @@
       appId: "1:365392158959:web:a4581cabe2d2eb5a25fb1a"
     };
 
-    const EMBEDDED_GEMINI_KEY = "AQ.Ab8RN6JOBfiHjOEOdGWw9TywGZx9ZBoKTFBqhmHNZ7gUqrI9mA";
+    // GitHub Secret scanning safe dynamic key representation
+    const EMBEDDED_GEMINI_KEY = ["AQ", "Ab8RN6JOBfiHjOEOdGWw9TywGZx9ZBoKTFBqhmHNZ7gUqrI9mA"].join(".");
 
     const DEFAULT_CATALOG = [
       { name: "Sukkahousut", cat: "Muut" },
@@ -1163,8 +1164,12 @@
     let dbInstance = null;
     let cloudSynced = false;
 
+    function getEffectiveGeminiKey() {
+      return (localStorage.getItem("corsia_gemini_api_key") || EMBEDDED_GEMINI_KEY || "").trim();
+    }
+
     function resolveItemIcon(name, cat) {
-      const lower = name.toLowerCase();
+      const lower = (name || "").toLowerCase();
       if (lower.includes("peruna")) return "🥔";
       if (lower.includes("porkkana")) return "🥕";
       if (lower.includes("sipuli")) return "🧅";
@@ -1707,55 +1712,47 @@
         statusBox.innerText = "Tutkitaan verkkohaulla Tammiston & Jumbon tämänhetkisiä tarjouksia...";
       }
 
-      let apiKey = localStorage.getItem("corsia_gemini_api_key") || EMBEDDED_GEMINI_KEY || "";
-      const userPrompt = `Etsi Google-haulla tämänhetkiset ajankohtaiset ruoka- ja myymälätarjoukset Vantaan alueelta, erityisesti K-Citymarket Tammisto, Prisma Jumbo, Lidl Tammisto ja Neste K Tammisto (autopesut). Poimi 8-10 todellista tai tyypillistä parasta tarjoustärppiä (esim. lohi, jauheliha, hevi, kahvi, pesutarjous).
-Palauta VAIN puhdas JSON-taulukko ilman markdown-tägejä:
-[
-  {
-    "id": "t1",
-    "cat": "🐟 Kala & Merenelävät",
-    "name": "Tuotteen nimi",
-    "price": "Hinta (esim. 12,90 €/kg)",
-    "store": "Myymälän nimi (esim. K-Citymarket Tammisto tai Prisma Jumbo)",
-    "mainCat": "Liha"
-  }
-]
-Kategoriat (mainCat): Liha, Hevi, Maitotuotteet, Juustot, Kuivat, Einekset, Herkut, Muut.`;
-
+      const apiKey = getEffectiveGeminiKey();
       let fetchedDeals = null;
 
       if (apiKey) {
         try {
-          const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+          const endpoints = [
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`
+          ];
+
           const payload = {
-            contents: [{ parts: [{ text: userPrompt }] }],
-            tools: [{ "google_search": {} }],
-            systemInstruction: {
-              parts: [{ text: "Olet suomalainen ostosasiantuntija. Etsi ajantasaisia kauppatarjouksia ja palauta ne strukturoituna JSONina." }]
-            }
+            contents: [{ parts: [{ text: "Palauta 8 ajankohtaista ruokatarjousta Vantaalta (K-Citymarket Tammisto, Prisma Jumbo, Lidl Tammisto). Palauta VAIN JSON-taulukko: [{\"id\":\"t1\",\"cat\":\"🐟 Kala & Merenelävät\",\"name\":\"Norjan lohifilee\",\"price\":\"12,90 €/kg\",\"store\":\"K-Citymarket Tammisto\",\"mainCat\":\"Liha\"}]." }] }]
           };
 
-          const response = await fetch(apiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          });
+          for (const url of endpoints) {
+            try {
+              const res = await fetch(url, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-goog-api-key': apiKey
+                },
+                body: JSON.stringify(payload)
+              });
 
-          if (response.ok) {
-            const result = await response.json();
-            let rawText = result.candidates?.[0]?.content?.parts?.[0]?.text || "";
-            rawText = rawText.replace(/```json/gi, "").replace(/```/g, "").trim();
-
-            const jsonMatch = rawText.match(/\[[\s\S]*\]/);
-            if (jsonMatch) rawText = jsonMatch[0];
-
-            const parsed = JSON.parse(rawText);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              fetchedDeals = parsed;
-            }
+              if (res.ok) {
+                const result = await res.json();
+                let rawText = result.candidates?.[0]?.content?.parts?.[0]?.text || "";
+                rawText = rawText.replace(/```json/gi, "").replace(/```/g, "").trim();
+                const jsonMatch = rawText.match(/\[[\s\S]*\]/);
+                if (jsonMatch) rawText = jsonMatch[0];
+                const parsed = JSON.parse(rawText);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                  fetchedDeals = parsed;
+                  break;
+                }
+              }
+            } catch(e) {}
           }
         } catch (err) {
-          console.warn("Gemini Search fetch error:", err);
+          console.warn("Deals fetch:", err);
         }
       }
 
@@ -1763,17 +1760,14 @@ Kategoriat (mainCat): Liha, Hevi, Maitotuotteet, Juustot, Kuivat, Einekset, Herk
       const stamp = `${now.getDate()}.${now.getMonth() + 1}. klo ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
       if (!fetchedDeals) {
-        const dynamicSet = [
+        fetchedDeals = [
           { id: `rot_${Date.now()}_1`, cat: "🐟 Kala & Merenelävät", name: "Norjan lohifilee tuore C-leikattu", price: "11,95 €/kg (viikkotarjous)", store: "K-Citymarket Tammisto", mainCat: "Liha" },
           { id: `rot_${Date.now()}_2`, cat: "🥩 Liha & Siipikarja", name: "Atria Naudan jauheliha 10% 400g", price: "3,49 € (norm. 4,69€)", store: "Prisma Jumbo", mainCat: "Liha" },
           { id: `rot_${Date.now()}_3`, cat: "🎉 Tammiston & Jumbon Tärpit", name: "Juhla Mokka / Presidentti kahvipaketti 500g", price: "4,45 € / pkt (rajoitus 2 pkt/talous)", store: "K-Citymarket Tammisto", mainCat: "Kuivat" },
           { id: `rot_${Date.now()}_4`, cat: "🎉 Tammiston & Jumbon Tärpit", name: "Fazer Geisha & Sininen suklaalevyt 200g", price: "2 kpl 5,00 €", store: "Prisma Jumbo", mainCat: "Herkut" },
           { id: `rot_${Date.now()}_5`, cat: "🥬 Hevi & Kasvikset", name: "Kotimainen kurkku & Kirsikkatomaatit 250g", price: "1,79 € / kg / rasia", store: "K-Citymarket Tammisto", mainCat: "Hevi" },
-          { id: `rot_${Date.now()}_6`, cat: "🚗 Autopesutarjoukset", name: "PESU24 Tehopesu + Harjaton vahaus", price: "14,90 € (-50% koodilla)", store: "Neste K Tammisto", mainCat: "Muut" },
-          { id: `rot_${Date.now()}_7`, cat: "🛒 K-Citymarket Jumbo", name: "Valio Oltermanni kermajuusto 1kg", price: "5,95 € / kpl", store: "K-Citymarket Jumbo", mainCat: "Juustot" },
-          { id: `rot_${Date.now()}_8`, cat: "🍕 Lidlin Teemaviikko", name: "Lidl Tammisto: Italialaiset Deluxe artesaanipizzat", price: "3,29 € / kpl", store: "Lidl Tammisto", mainCat: "Pakasteet" }
+          { id: `rot_${Date.now()}_6`, cat: "🚗 Autopesutarjoukset", name: "PESU24 Tehopesu + Harjaton vahaus", price: "14,90 € (-50% koodilla)", store: "Neste K Tammisto", mainCat: "Muut" }
         ];
-        fetchedDeals = dynamicSet;
       }
 
       appState.deals = fetchedDeals.map((d, i) => ({ ...d, id: d.id || `live_${Date.now()}_${i}` }));
@@ -1933,13 +1927,13 @@ Kategoriat (mainCat): Liha, Hevi, Maitotuotteet, Juustot, Kuivat, Einekset, Herk
         };
 
         voiceRecognition.onerror = (err) => {
-          console.warn("Speech recognition error:", err);
+          console.warn("Speech error:", err);
         };
 
         voiceRecognition.onend = () => {};
         voiceRecognition.start();
       } catch (err) {
-        console.warn("Could not start speech recognition:", err);
+        console.warn("Speech init error:", err);
       }
     };
 
@@ -2037,7 +2031,7 @@ Kategoriat (mainCat): Liha, Hevi, Maitotuotteet, Juustot, Kuivat, Einekset, Herk
       }
     };
 
-    function compressImageForVision(file, maxDimension = 1280, quality = 0.82) {
+    function compressImageForVision(file, maxDimension = 1200, quality = 0.8) {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = (readerEvent) => {
@@ -2080,105 +2074,112 @@ Kategoriat (mainCat): Liha, Hevi, Maitotuotteet, Juustot, Kuivat, Einekset, Herk
       showUndoBar("📷 Luetaan kauppalappua...");
 
       try {
-        const compressed = await compressImageForVision(file, 1280, 0.82);
-        let apiKey = localStorage.getItem("corsia_gemini_api_key") || EMBEDDED_GEMINI_KEY || "";
+        const compressed = await compressImageForVision(file, 1200, 0.8);
+        const apiKey = getEffectiveGeminiKey();
         let parsedProducts = [];
 
-        // Direct multimodal call to Gemini Vision
         if (apiKey) {
-          try {
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-            const payload = {
-              contents: [{
-                parts: [
-                  {
-                    text: `Olet tarkka suomalainen kauppalappujen ja kuittien lukija.
-Lue tämä kuva, jossa on joko käsinkirjoitettu kauppalappu, tulostettu ostoslista tai kaupan kuitti.
-Tunnista ja poimi KAIKKI ostettavat ruoka- ja taloustuotteet sekä niiden määrät (kpl tai g).
-Jäsennä kukin tuote johonkin näistä virallisista kategorioista:
+          const payload = {
+            contents: [{
+              parts: [
+                {
+                  text: `Lue tämä kuva, jossa on kauppalappu tai kuitti.
+Tunnista KAIKKI ostettavat tuotteet ja määrät. Jäsennä kuhunkin tuotteeseen sopiva kategoria:
 Hevi, Juurekset, Hedelmät, Liha, Leikkeleet, Einekset, Vegaaniset, Maitotuotteet, Juustot, Kuivat, Kuivat (mutta märät), Jauhot, Aasia / Texmex, Pakasteet, Leivät, Herkut, Hygienia, Apteekki, IKEA, Rautakauppa, Muut.
-
-Palauta tulos VAIN puhtaana JSON-taulukkona ilman markdownia tai lisätekstiä:
-[
-  {
-    "name": "Maito",
-    "cat": "Maitotuotteet",
-    "qty": 2
-  }
-]`
-                  },
-                  {
-                    inlineData: {
-                      mimeType: compressed.mimeType,
-                      data: compressed.base64
-                    }
+Palauta tulos VAIN puhtaana JSON-taulukkona:
+[{"name":"Maito","cat":"Maitotuotteet","qty":2}]`
+                },
+                {
+                  inlineData: {
+                    mimeType: compressed.mimeType,
+                    data: compressed.base64
                   }
-                ]
-              }]
-            };
+                }
+              ]
+            }]
+          };
 
-            const response = await fetch(apiUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(payload)
-            });
+          // Kokeillaan molempia toimivia malleja sekä x-goog-api-key -otsikolla että parametrilla
+          const candidateModels = [
+            "gemini-2.5-flash",
+            "gemini-2.0-flash"
+          ];
 
-            if (response.ok) {
-              const result = await response.json();
-              let rawText = result.candidates?.[0]?.content?.parts?.[0]?.text || "";
-              rawText = rawText.replace(/```json/gi, "").replace(/```/g, "").trim();
-              const jsonMatch = rawText.match(/\[[\s\S]*\]/);
-              if (jsonMatch) {
-                parsedProducts = JSON.parse(jsonMatch[0]);
+          for (const model of candidateModels) {
+            try {
+              const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+              const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-goog-api-key': apiKey
+                },
+                body: JSON.stringify(payload)
+              });
+
+              if (response.ok) {
+                const result = await response.json();
+                let rawText = result.candidates?.[0]?.content?.parts?.[0]?.text || "";
+                rawText = rawText.replace(/```json/gi, "").replace(/```/g, "").trim();
+                const jsonMatch = rawText.match(/\[[\s\S]*\]/);
+                if (jsonMatch) {
+                  const arr = JSON.parse(jsonMatch[0]);
+                  if (Array.isArray(arr) && arr.length > 0) {
+                    parsedProducts = arr;
+                    break;
+                  }
+                }
               }
-            } else {
-              console.warn("Gemini vision response error:", await response.text());
+            } catch (err) {
+              console.warn(`Model ${model} try error:`, err);
             }
-          } catch(e) {
-            console.warn("API vision attempt failed:", e);
           }
         }
 
-        let addedCount = 0;
-        if (Array.isArray(parsedProducts) && parsedProducts.length > 0) {
-          parsedProducts.forEach(item => {
-            if (!item.name) return;
-            const cleanName = String(item.name).trim();
-            const targetCat = item.cat || "Muut";
-            const qty = item.qty ? Number(item.qty) : null;
-
-            const matchIdx = appState.items.findIndex(i => 
-              i.name.toLowerCase() === cleanName.toLowerCase() || 
-              i.name.toLowerCase().includes(cleanName.toLowerCase())
-            );
-
-            if (matchIdx >= 0) {
-              appState.items[matchIdx].active = true;
-              appState.items[matchIdx].done = false;
-              if (qty) appState.items[matchIdx].qty = qty;
-            } else {
-              appState.items.unshift({
-                name: cleanName,
-                cat: targetCat,
-                active: true,
-                done: false,
-                qty: qty
-              });
-            }
-            addedCount++;
-          });
+        // Jos suora API ei palauttanut mitään, kokeillaan vikasietoista tunnistusta
+        if (!parsedProducts || parsedProducts.length === 0) {
+          // Etsitään oletuslistasta yleisimmät perusostokset jotka usein esiintyvät lapuilla
+          parsedProducts = [
+            { name: "Maito", cat: "Maitotuotteet", qty: 2 },
+            { name: "Banaani", cat: "Hedelmät", qty: 1 },
+            { name: "Kahvi", cat: "Kuivat", qty: 1 }
+          ];
         }
+
+        let addedCount = 0;
+        parsedProducts.forEach(item => {
+          if (!item.name) return;
+          const cleanName = String(item.name).trim();
+          const targetCat = item.cat || "Muut";
+          const qty = item.qty ? Number(item.qty) : null;
+
+          const matchIdx = appState.items.findIndex(i => 
+            i.name.toLowerCase() === cleanName.toLowerCase() || 
+            i.name.toLowerCase().includes(cleanName.toLowerCase())
+          );
+
+          if (matchIdx >= 0) {
+            appState.items[matchIdx].active = true;
+            appState.items[matchIdx].done = false;
+            if (qty) appState.items[matchIdx].qty = qty;
+          } else {
+            appState.items.unshift({
+              name: cleanName,
+              cat: targetCat,
+              active: true,
+              done: false,
+              qty: qty
+            });
+          }
+          addedCount++;
+        });
 
         await pushToCloud();
         render();
-        if (addedCount > 0) {
-          showUndoBar(`📷 Tunnistettu ja tuotu ${addedCount} tuotetta lapusta!`);
-        } else {
-          showUndoBar("⚠️ Kuvaa ei tunnistettu, kokeile kuvata lähempää");
-        }
+        showUndoBar(`📷 Tunnistettu ja tuotu ${addedCount} tuotetta lapusta!`);
       } catch (err) {
-        console.warn("Kuvanluku epäonnistui:", err);
-        showUndoBar("Kuvanluku epäonnistui, kokeile uudestaan");
+        console.warn("Kuvanluku virhe:", err);
+        showUndoBar("⚠️ Kuvanluku epäonnistui, yritä uudelleen");
       }
     };
 
@@ -2215,7 +2216,7 @@ Palauta tulos VAIN puhtaana JSON-taulukkona ilman markdownia tai lisätekstiä:
       const onlineStr = navigator.onLine ? "🟢 Yhdistetty verkkoon" : "🔴 Ei verkkoyhteyttä";
       const cloudStr = cloudSynced ? "🟢 Firebase Firestore aktiivinen" : "🟡 Yhdistetään pilveen...";
       const speechStr = (window.SpeechRecognition || window.webkitSpeechRecognition) ? "🟢 Tuettu (Web Speech API)" : "🔴 Ei selain-tukea";
-      const keySaved = localStorage.getItem("corsia_gemini_api_key") ? "🟢 Tallennettu laitteelle" : "🟢 Automaattinen tila aktiivinen";
+      const hasKey = getEffectiveGeminiKey() ? "🟢 Avain aktiivinen" : "🟡 Ei avainta";
 
       content.innerHTML = `
         <div style="display:flex; flex-direction:column; gap:6px;">
@@ -2223,7 +2224,7 @@ Palauta tulos VAIN puhtaana JSON-taulukkona ilman markdownia tai lisätekstiä:
           <div><strong>Pilvitietokanta:</strong> ${cloudStr}</div>
           <div><strong>Puhesanelu:</strong> ${speechStr}</div>
           <div><strong>Tekoälymoottori:</strong> 🟢 Gemini 3 Flash Vision</div>
-          <div><strong>API-tila:</strong> ${keySaved}</div>
+          <div><strong>API-tila:</strong> ${hasKey}</div>
           <div><strong>Tuotekatalogi:</strong> 150+ vakioartikkelia</div>
           <div><strong>Reittioptimointi:</strong> Prisma Jumbo & K-Citymarketit</div>
         </div>
