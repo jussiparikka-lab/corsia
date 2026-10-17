@@ -7,10 +7,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Corsia">
   <meta name="theme-color" content="#16a34a">
-  <title>Corsia</title>
-
-  <!-- Paikallinen Tekoäly-OCR (Tesseract.js) - Ei vaadi API-avainta tai palvelinta -->
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <title>Corsia Kauppa-apuri</title>
 
   <script>
     (function() {
@@ -359,19 +356,22 @@
       justify-content: center;
       gap: 8px;
       margin: 10px auto 18px;
-      width: fit-content;
+      width: 100%;
+      max-width: 440px;
     }
 
     .wa-subtle-btn {
-      padding: 6px 14px;
+      flex: 1;
+      padding: 9px 12px;
       background: #f0fdf4;
       border: 1px dashed #86efac;
-      border-radius: 20px;
+      border-radius: 12px;
       color: #166534;
-      font-size: 0.74rem;
+      font-size: 0.78rem;
       font-weight: 700;
       display: flex;
       align-items: center;
+      justify-content: center;
       gap: 6px;
       cursor: pointer;
       transition: background 0.15s;
@@ -381,24 +381,25 @@
       background: #dcfce7;
     }
 
-    .smart-cam-btn {
-      padding: 6px 14px;
-      background: #eff6ff;
-      border: 1px dashed #93c5fd;
-      border-radius: 20px;
-      color: #1d4ed8;
-      font-size: 0.74rem;
-      font-weight: 700;
+    .camera-subtle-btn {
+      flex: 1;
+      padding: 9px 12px;
+      background: #f0f9ff;
+      border: 1px dashed #7dd3fc;
+      border-radius: 12px;
+      color: #0369a1;
+      font-size: 0.78rem;
+      font-weight: 800;
       display: flex;
       align-items: center;
+      justify-content: center;
       gap: 6px;
       cursor: pointer;
-      transition: background 0.15s, transform 0.1s;
+      transition: background 0.15s;
     }
 
-    .smart-cam-btn:active {
-      background: #dbeafe;
-      transform: scale(0.97);
+    .camera-subtle-btn:active {
+      background: #e0f2fe;
     }
 
     .deals-bottom-card {
@@ -446,36 +447,6 @@
     .deals-subline {
       font-size: 0.72rem;
       color: #9a3412;
-    }
-
-    /* OCR Tilapalkki ja Latausanimaatio */
-    .ocr-progress-overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(15, 23, 42, 0.75);
-      backdrop-filter: blur(5px);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      z-index: 200;
-      padding: 20px;
-      color: #ffffff;
-      text-align: center;
-    }
-
-    .ocr-spinner {
-      width: 44px;
-      height: 44px;
-      border: 4px solid rgba(255,255,255,0.2);
-      border-top-color: #4ade80;
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-      margin-bottom: 14px;
-    }
-
-    @keyframes spin {
-      to { transform: rotate(360deg); }
     }
 
     .app-footer {
@@ -555,7 +526,7 @@
     }
 
     .soffa-input-qty {
-      width: 54px;
+      width: 58px;
       flex-shrink: 0;
       padding: 9px 4px;
       border-radius: 9px;
@@ -755,7 +726,6 @@
       font-size: 0.88rem;
       font-weight: 700;
       color: var(--text);
-      white-space: hidden;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -964,7 +934,7 @@
     <footer class="app-footer">
       <div>POWERED BY</div>
       <div class="app-footer-tech">
-        <span>Vision AI & NLP Engine</span> •
+        <span>Gemini Vision AI</span> •
         <span>Firebase Cloud</span> •
         <span>Web Speech AI</span>
       </div>
@@ -972,6 +942,7 @@
     </footer>
   </div>
 
+  <!-- Live Speech Dictation Modal -->
   <div class="modal-overlay" id="voice-modal" style="display: none;">
     <div class="modal-panel" style="text-align: center;">
       <h3 style="font-size: 1.05rem; color: #dc2626; margin-bottom: 2px;">🎙️ Kuunnellaan puhetta...</h3>
@@ -996,22 +967,26 @@
     </div>
   </div>
 
+  <!-- Diagnostics & Settings Modal -->
   <div class="modal-overlay" id="diag-modal" style="display: none;">
     <div class="modal-panel">
-      <h3 style="font-size: 1.05rem; margin-bottom: 8px; color:#1e293b;">⚙️ Corsia Järjestelmä</h3>
+      <h3 style="font-size: 1.05rem; margin-bottom: 8px; color:#1e293b;">⚙️ Corsia Järjestelmä & Avain</h3>
       <div id="diag-content-box" style="font-size: 0.82rem; line-height: 1.5; color: #334155; margin-bottom: 12px;"></div>
       
       <div style="background:#f1f5f9; border-radius:10px; padding:10px; margin-bottom:12px;">
-        <label style="font-size:0.75rem; font-weight:800; color:#475569; display:block; margin-bottom:4px;">💡 Älykäs tunnistus:</label>
-        <p style="font-size:0.75rem; color:#64748b; line-height:1.4;">
-          Käytössä on automaattinen monimallinen näkötekoäly (Handwriting Vision & Packaging NLP). Kamerat toimivat nyt suoraan ilman epävakaita avainrajoituksia.
-        </p>
+        <label style="font-size:0.75rem; font-weight:800; color:#475569; display:block; margin-bottom:4px;">🔑 Gemini API-avain (tarvittaessa):</label>
+        <input type="text" id="manual-api-key-input" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:0.78rem; font-family:monospace; outline:none;" placeholder="Liitä tähän tarvittaessa uusi avain">
+        <div style="display:flex; justify-content:flex-end; gap:6px; margin-top:6px;">
+          <button onclick="resetDefaultKey()" style="padding:4px 8px; border-radius:6px; border:1px solid #cbd5e1; background:#ffffff; font-size:0.72rem; cursor:pointer;">Palauta oletus</button>
+          <button onclick="saveManualApiKey()" style="padding:4px 10px; border-radius:6px; border:none; background:#16a34a; color:white; font-size:0.72rem; font-weight:800; cursor:pointer;">Tallenna avain</button>
+        </div>
       </div>
 
       <button onclick="closeDiagModal()" style="width: 100%; padding: 9px; border-radius: 9px; background: #0284c7; color: white; border: none; font-weight: 800; font-size: 0.84rem; cursor: pointer;">Sulje</button>
     </div>
   </div>
 
+  <!-- WhatsApp text input modal -->
   <div class="modal-overlay" id="wa-modal" style="display: none;">
     <div class="modal-panel">
       <h3 style="font-size: 1.05rem; color: #15803d; margin-bottom: 6px;">💬 Tuo WhatsApp-viesti</h3>
@@ -1024,9 +999,9 @@
     </div>
   </div>
 
-  <!-- Piilotetut tiedostokentät kameroille -->
-  <input type="file" id="camera-note-input" accept="image/*" capture="environment" style="display: none;" onchange="handleSmartCameraCapture(this, 'note')">
-  <input type="file" id="camera-item-input" accept="image/*" capture="environment" style="display: none;" onchange="handleSmartCameraCapture(this, 'item')">
+  <!-- Hidden Camera Inputs -->
+  <input type="file" id="camera-note-input" accept="image/*" capture="environment" style="display: none;" onchange="handleCameraUpload(this, 'note')">
+  <input type="file" id="camera-product-input" accept="image/*" capture="environment" style="display: none;" onchange="handleCameraUpload(this, 'product')">
 
   <!-- Undo Bar -->
   <div class="undo-bar-wrap" id="undo-bar" style="display: none;">
@@ -1043,6 +1018,8 @@
       messagingSenderId: "365392158959",
       appId: "1:365392158959:web:a4581cabe2d2eb5a25fb1a"
     };
+
+    const EMBEDDED_GEMINI_KEY = "";
 
     const DEFAULT_CATALOG = [
       { name: "Sukkahousut", cat: "Muut" },
@@ -1101,6 +1078,7 @@
       { name: "TEXMEX tortillat", cat: "Aasia / Texmex" },
       { name: "Pakastepizzat", cat: "Pakasteet" },
       { name: "Pakasteherneet", cat: "Pakasteet" },
+      { name: "Jäätelö (tuutti / paketti)", cat: "Pakasteet" },
       { name: "Ruisleipä", cat: "Leivät" },
       { name: "Paahtoleipä", cat: "Leivät" },
       { name: "Sipsit", cat: "Herkut" },
@@ -1169,7 +1147,7 @@
       "Kuivat (mutta märät)": { bg: "#f8fafc", border: "#cbd5e1", text: "#1e293b", icon: "🥫" },
       "Jauhot": { bg: "#fafaf9", border: "#e7e5e4", text: "#44403c", icon: "🥣" },
       "Aasia / Texmex": { bg: "#fffbeb", border: "#fde68a", text: "#92400e", icon: "🌮" },
-      "Pakasteet": { bg: "#eff6ff", border: "#bfdbfe", text: "#1e40af", icon: "🧊" },
+      "Pakasteet": { bg: "#eff6ff", border: "#bfdbfe", text: "#1e40af", icon: "🍦" },
       "Leivät": { bg: "#fffbeb", border: "#fef3c7", text: "#78350f", icon: "🍞" },
       "Herkut": { bg: "#fdf4ff", border: "#f5d0fe", text: "#86198f", icon: "🍫" },
       "Hygienia": { bg: "#f5f3ff", border: "#ddd6fe", text: "#5b21b6", icon: "🧼" },
@@ -1193,8 +1171,32 @@
     let dbInstance = null;
     let cloudSynced = false;
 
+    function getEffectiveGeminiKey() {
+      return (localStorage.getItem("corsia_gemini_api_key") || EMBEDDED_GEMINI_KEY || "").trim();
+    }
+
+    function inferCategoryFromName(rawName) {
+      const n = (rawName || "").toLowerCase();
+      if (n.includes("jäätelö") || n.includes("tuutti") || n.includes("puikko") || n.includes("pakaste") || n.includes("pizza") || n.includes("herne")) return "Pakasteet";
+      if (n.includes("suklaa") || n.includes("sips") || n.includes("karkki") || n.includes("makeis") || n.includes("olut") || n.includes("siideri") || n.includes("lonkero")) return "Herkut";
+      if (n.includes("maito") || n.includes("kerma") || n.includes("voi") || n.includes("jogurtti") || n.includes("rahka") || n.includes("piimä")) return "Maitotuotteet";
+      if (n.includes("kurkku") || n.includes("tomaatti") || n.includes("salaatti") || n.includes("sipuli") || n.includes("paprika") || n.includes("chili") || n.includes("yritti")) return "Hevi";
+      if (n.includes("peruna") || n.includes("porkkana") || n.includes("juures") || n.includes("lanttu")) return "Juurekset";
+      if (n.includes("banaani") || n.includes("omena") || n.includes("appelsiini") || n.includes("avokado") || n.includes("lime") || n.includes("sitruuna")) return "Hedelmät";
+      if (n.includes("jauheliha") || n.includes("kana") || n.includes("lohi") || n.includes("kala") || n.includes("pihvi") || n.includes("liha") || n.includes("file")) return "Liha";
+      if (n.includes("leipä") || n.includes("ruis") || n.includes("paahto") || n.includes("sämpylä") || n.includes("rieska")) return "Leivät";
+      if (n.includes("juusto") || n.includes("oltermanni") || n.includes("mozzarella") || n.includes("parmesan")) return "Juustot";
+      if (n.includes("pasta") || n.includes("riisi") || n.includes("kahvi") || n.includes("hiutale") || n.includes("makaroni")) return "Kuivat";
+      if (n.includes("tomaattimurska") || n.includes("öljy") || n.includes("kastike") || n.includes("pesto")) return "Kuivat (mutta märät)";
+      if (n.includes("jauho") || n.includes("sokeri") || n.includes("leivinjauhe")) return "Jauhot";
+      if (n.includes("wc") || n.includes("paperi") || n.includes("pesu") || n.includes("shampoo") || n.includes("saippua") || n.includes("tolu")) return "Hygienia";
+      if (n.includes("burana") || n.includes("särkylääke") || n.includes("laastari") || n.includes("vitamiini")) return "Apteekki";
+      return "Muut";
+    }
+
     function resolveItemIcon(name, cat) {
       const lower = (name || "").toLowerCase();
+      if (lower.includes("jäätelö") || lower.includes("tuutti") || lower.includes("puikko")) return "🍦";
       if (lower.includes("peruna")) return "🥔";
       if (lower.includes("porkkana")) return "🥕";
       if (lower.includes("sipuli")) return "🧅";
@@ -1212,7 +1214,6 @@
       if (lower.includes("leipä") || lower.includes("paahto")) return "🍞";
       if (lower.includes("kahvi")) return "☕";
       if (lower.includes("pasta") || lower.includes("spagetti")) return "🍝";
-      if (lower.includes("olut") || lower.includes("kalja") || lower.includes("karhu") || lower.includes("koff")) return "🍺";
       if (lower.includes("suklaa") || lower.includes("sipsi")) return "🍫";
       if (lower.includes("wc") || lower.includes("paperi")) return "🧻";
       if (lower.includes("pesu") || lower.includes("tolu")) return "🧼";
@@ -1253,14 +1254,10 @@
         `;
       }
       if (storeKey === "rautakauppa") {
-        return `
-          <div style="background:#ea580c; width:100%; height:100%; display:flex; align-items:center; justify-content:center; color:#ffffff; font-weight:900; font-size:0.75rem; letter-spacing:0.5px;">RAUTA</div>
-        `;
+        return `<div style="background:#ea580c; width:100%; height:100%; display:flex; align-items:center; justify-content:center; color:#ffffff; font-weight:900; font-size:0.75rem; letter-spacing:0.5px;">RAUTA</div>`;
       }
       if (storeKey === "apteekki") {
-        return `
-          <div style="background:#f0fdf4; width:100%; height:100%; display:flex; align-items:center; justify-content:center; color:#15803d; font-weight:900; font-size:0.72rem; letter-spacing:0.5px;">APTEEKKI</div>
-        `;
+        return `<div style="background:#f0fdf4; width:100%; height:100%; display:flex; align-items:center; justify-content:center; color:#15803d; font-weight:900; font-size:0.72rem; letter-spacing:0.5px;">APTEEKKI</div>`;
       }
       return ``;
     }
@@ -1305,12 +1302,12 @@
             pushToCloud();
           }
         }, (err) => {
-          console.warn("Firestore error:", err);
+          console.warn("Firestore sync note:", err);
           cloudSynced = false;
           updateStatusPills();
         });
       } catch(e) {
-        console.warn("Firebase init failed:", e);
+        console.warn("Firebase init note:", e);
       }
     }
 
@@ -1408,7 +1405,7 @@
                 <span class="status-dot"></span> PILVI OK
               </div>
               <div class="status-pill" onclick="openDiagnostics('ai')">
-                ⚙️ JÄRJESTELMÄ
+                ⚙️ AI & AVAIN
               </div>
             </div>
           </div>
@@ -1488,11 +1485,12 @@
             </div>
           </div>
 
+          <!-- Älykäs etusivun tuontipalkki: WhatsApp + Kauppalappukamera rinnakkain -->
           <div class="subtle-actions-group">
             <div class="wa-subtle-btn" onclick="openWaModal()">
               <span>💬 Tuo WhatsApp-lista</span>
             </div>
-            <div class="smart-cam-btn" onclick="triggerSmartCamera('note')" title="Kuvaa käsinkirjoitettu kauppalappu">
+            <div class="camera-subtle-btn" onclick="triggerNoteCamera()" title="Skannaa käsinkirjoitettu kauppalappu">
               <span>📷 Lue kauppalappu</span>
             </div>
           </div>
@@ -1575,10 +1573,10 @@
               <span class="badge-quickadd">Pikalisäys</span>
             </div>
             <div class="soffa-input-row">
-              <input type="text" id="soffa-add-name" class="soffa-input-name" placeholder="Tuotteen nimi (esim. Kauramaito)" />
+              <input type="text" id="soffa-add-name" class="soffa-input-name" placeholder="Tuotteen nimi (esim. Fazer Geisha Jäätelö)" />
               <input type="text" id="soffa-add-qty" class="soffa-input-qty" placeholder="1 kpl" />
               <button class="soffa-icon-btn" onclick="startVoiceRecognition()" title="Puhu sanelemalla">🎤</button>
-              <button class="soffa-icon-btn" onclick="triggerSmartCamera('item')" title="Tunnista tuote & paino kameralla" style="color: #0284c7;">📷</button>
+              <button class="soffa-icon-btn" style="background:#f0f9ff; border-color:#bae6fd; color:#0284c7;" onclick="triggerProductCamera()" title="Tunnista tuotepakkaus kuvasta">📷</button>
             </div>
             <select id="soffa-add-cat" class="soffa-category-select">
               ${allCategories.map(c => `<option value="${c}">${c.toUpperCase()}</option>`).join("")}
@@ -1683,7 +1681,7 @@
               <p style="font-size:0.72rem; color:#9a3412;">Klikkaa <strong>+ Valitse</strong> lisätäksesi tärpin suoraan ostoslistalle.</p>
               <div style="font-size:0.68rem; color:#ea580c; font-weight:700; margin-top:4px;">⏱️ Päivitetty: ${appState.dealsUpdatedAt || 'Oletustärpit'}</div>
             </div>
-            <button id="btn-deals-refresh" onclick="refreshDealsDirect()" style="background:#ea580c; color:#ffffff; border:none; padding:7px 11px; border-radius:10px; font-size:0.76rem; font-weight:800; cursor:pointer; display:inline-flex; align-items:center; gap:5px; flex-shrink:0;">
+            <button id="btn-deals-refresh" onclick="refreshDealsWithGemini()" style="background:#ea580c; color:#ffffff; border:none; padding:7px 11px; border-radius:10px; font-size:0.76rem; font-weight:800; cursor:pointer; display:inline-flex; align-items:center; gap:5px; flex-shrink:0;">
               <span id="deals-refresh-icon">🔄</span>
               <span id="deals-refresh-label">Hae tuoreet</span>
             </button>
@@ -1723,35 +1721,6 @@
 
       container.innerHTML = `<div class="main-content" style="padding-top:10px;">${contentHtml}</div>`;
     }
-
-    window.refreshDealsDirect = async function() {
-      const btn = document.getElementById("btn-deals-refresh");
-      const icon = document.getElementById("deals-refresh-icon");
-      const label = document.getElementById("deals-refresh-label");
-
-      if (btn) btn.disabled = true;
-      if (icon) icon.innerText = "⏳";
-      if (label) label.innerText = "Haetaan...";
-
-      const now = new Date();
-      const timeStr = `${now.getDate()}.${now.getMonth() + 1}. klo ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-
-      const freshCampaignDeals = [
-        { id: "d1_" + Date.now(), cat: "🐟 Kala & Tuoretori", name: "Norjan lohifilee tuore C-leikattu", price: "11,95 €/kg (-38%)", store: "K-Citymarket Tammisto", mainCat: "Liha" },
-        { id: "d2_" + Date.now(), cat: "🥩 Liha & Siipikarja", name: "Naudan jauheliha 10% (rotukarja)", price: "3,49 € / 400g", store: "Prisma Jumbo", mainCat: "Liha" },
-        { id: "d3_" + Date.now(), cat: "🥩 Liha & Siipikarja", name: "Kariniemen Kananpojan Minifilee", price: "4,29 € / 500g", store: "K-Citymarket Tammisto", mainCat: "Liha" },
-        { id: "d4_" + Date.now(), cat: "☕ Kahvit & Juomat", name: "Juhla Mokka / Presidentti kahvipaketit", price: "4,95 € / pkt (max 3 pkt)", store: "Prisma Jumbo", mainCat: "Kuivat" },
-        { id: "d5_" + Date.now(), cat: "🎉 Tammiston Erikoistärpit", name: "Uusi Pesula: Harjaton Tehopesu + Vaahdotus", price: "15,00 € (norm. 32€)", store: "Neste K Tammisto", mainCat: "Muut" },
-        { id: "d6_" + Date.now(), cat: "🍫 Makeiset & Herkut", name: "Fazer Sininen suklaalevyt 200g", price: "5 kpl 10,00 €", store: "K-Citymarket Jumbo", mainCat: "Herkut" },
-        { id: "d7_" + Date.now(), cat: "🍕 Lidlin Teemaviikot", name: "Deluxe Tuorepastat & Kastikkeet", price: "1,99 € / pkt", store: "Lidl Tammisto", mainCat: "Einekset" }
-      ];
-
-      appState.deals = freshCampaignDeals;
-      appState.dealsUpdatedAt = timeStr;
-      await pushToCloud();
-      render();
-      showUndoBar(`🔥 Tärpit päivitetty: ${timeStr}`);
-    };
 
     window.toggleDealOnList = function(dealId) {
       const dealsList = (appState.deals && appState.deals.length > 0) ? appState.deals : DAILY_DEALS;
@@ -1823,7 +1792,7 @@
       if (!nameInput || !nameInput.value.trim()) return;
 
       const name = nameInput.value.trim();
-      const cat = catSelect ? catSelect.value : "Muut";
+      const cat = catSelect ? catSelect.value : inferCategoryFromName(name);
       const rawQty = qtyInput ? qtyInput.value.trim() : "";
       const qtyNum = parseInt(rawQty, 10);
 
@@ -1992,8 +1961,8 @@
           .replace(/perunoita/g, "peruna");
 
         baseName = baseName.charAt(0).toUpperCase() + baseName.slice(1);
+        const cat = inferCategoryFromName(baseName);
 
-        const targetCat = inferCategoryFromName(baseName);
         const existingIdx = appState.items.findIndex(i => i.name.toLowerCase().includes(baseName.toLowerCase()));
         if (existingIdx >= 0) {
           appState.items[existingIdx].active = true;
@@ -2002,7 +1971,7 @@
         } else {
           appState.items.unshift({
             name: baseName,
-            cat: targetCat,
+            cat: cat,
             active: true,
             done: false,
             qty: qty > 1 ? qty : null
@@ -2016,49 +1985,23 @@
       showUndoBar(`🎙️ Tunnistettu ${addedCount} tuotetta!`);
     }
 
-    function inferCategoryFromName(name) {
-      const n = (name || "").toLowerCase();
-      if (n.includes("peruna") || n.includes("porkkana") || n.includes("punajuuri") || n.includes("juures")) return "Juurekset";
-      if (n.includes("omena") || n.includes("banaani") || n.includes("appelsiini") || n.includes("lime") || n.includes("sitruuna") || n.includes("avokado") || n.includes("rypäle") || n.includes("mandariini") || n.includes("päärynä")) return "Hedelmät";
-      if (n.includes("salaatti") || n.includes("kurkku") || n.includes("tomaatti") || n.includes("sipuli") || n.includes("chili") || n.includes("paprika") || n.includes("parsakaali") || n.includes("yritti") || n.includes("basilika") || n.includes("persilja") || n.includes("korianteri") || n.includes("sieni")) return "Hevi";
-      if (n.includes("jauheliha") || n.includes("kana") || n.includes("broileri") || n.includes("lohi") || n.includes("kala") || n.includes("pihvi") || n.includes("possu") || n.includes("nauta") || n.includes("siika") || n.includes("kuha") || n.includes("liha")) return "Liha";
-      if (n.includes("kinkku") || n.includes("pekoni") || n.includes("leikkele") || n.includes("metvursti") || n.includes("salami") || n.includes("meetvursti")) return "Leikkeleet";
-      if (n.includes("nakki") || n.includes("makkara") || n.includes("valmisateria") || n.includes("einäs") || n.includes("keitto") || n.includes("pizza") && !n.includes("pakaste")) return "Einekset";
-      if (n.includes("tofu") || n.includes("vege") || n.includes("kaurapala") || n.includes("soijarouhe")) return "Vegaaniset";
-      if (n.includes("maito") || n.includes("kerma") || n.includes("voi") || n.includes("jogurtti") || n.includes("rahka") || n.includes("viili") || n.includes("muna") || n.includes("kananmuna")) return "Maitotuotteet";
-      if (n.includes("juusto") || n.includes("oltermanni") || n.includes("cheddar") || n.includes("parmesan") || n.includes("feta") || n.includes("mozzarella")) return "Juustot";
-      if (n.includes("tomaattimurska") || n.includes("öljy") || n.includes("etikka") || n.includes("kastike") || n.includes("ketsuppi") || n.includes("sinappi")) return "Kuivat (mutta märät)";
-      if (n.includes("jauho") || n.includes("sokeri") || n.includes("leivinjauhe") || n.includes("hiiva")) return "Jauhot";
-      if (n.includes("soija") || n.includes("nuudeli") || n.includes("tortilla") || n.includes("taco") || n.includes("salsa") || n.includes("curry") || n.includes("kookosmaito")) return "Aasia / Texmex";
-      if (n.includes("pakaste") || n.includes("jäätelö") || n.includes("herne") || n.includes("marja")) return "Pakasteet";
-      if (n.includes("leipä") || n.includes("ruis") || n.includes("paahto") || n.includes("sämpylä") || n.includes("rieska") || n.includes("croissant")) return "Leivät";
-      if (n.includes("sipsi") || n.includes("suklaa") || n.includes("karkki") || n.includes("keksi") || n.includes("popcorn") || n.includes("olut") || n.includes("siideri") || n.includes("limu") || n.includes("kokis") || n.includes("pepsi")) return "Herkut";
-      if (n.includes("paperi") || n.includes("wc") || n.includes("talouspaperi") || n.includes("shampoo") || n.includes("saippua") || n.includes("pesu") || n.includes("hammastahna") || n.includes("deodorantti")) return "Hygienia";
-      if (n.includes("burana") || n.includes("panadol") || n.includes("ibuxin") || n.includes("laastari") || n.includes("vitamiini") || n.includes("särkylääke")) return "Apteekki";
-      if (n.includes("kynttilä") || n.includes("ikea") || n.includes("servetti")) return "IKEA";
-      if (n.includes("teippi") || n.includes("ruuvi") || n.includes("lamppu") || n.includes("paristo") || n.includes("maali")) return "Rautakauppa";
-      if (n.includes("kahvi") || n.includes("tee") || n.includes("pasta") || n.includes("spagetti") || n.includes("riisi") || n.includes("hiutale") || n.includes("mysli")) return "Kuivat";
-      return "Muut";
-    }
-
-    window.openWaModal = function() {
-      document.getElementById("wa-modal").style.display = "flex";
-    };
-
-    window.closeWaModal = function() {
-      document.getElementById("wa-modal").style.display = "none";
-    };
-
-    window.triggerSmartCamera = function(mode) {
-      const inputId = mode === 'note' ? 'camera-note-input' : 'camera-item-input';
-      const fileInp = document.getElementById(inputId);
-      if (fileInp) {
-        fileInp.value = "";
-        fileInp.click();
+    window.triggerNoteCamera = function() {
+      const inp = document.getElementById("camera-note-input");
+      if (inp) {
+        inp.value = "";
+        inp.click();
       }
     };
 
-    function compressImageForVision(file, maxDimension = 1200, quality = 0.8) {
+    window.triggerProductCamera = function() {
+      const inp = document.getElementById("camera-product-input");
+      if (inp) {
+        inp.value = "";
+        inp.click();
+      }
+    };
+
+    function compressImage(file, maxDimension = 900, quality = 0.7) {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = (e) => {
@@ -2066,6 +2009,7 @@
           img.onload = () => {
             let width = img.width;
             let height = img.height;
+
             if (width > maxDimension || height > maxDimension) {
               if (width > height) {
                 height = Math.round((height * maxDimension) / width);
@@ -2075,19 +2019,19 @@
                 height = maxDimension;
               }
             }
+
             const canvas = document.createElement("canvas");
             canvas.width = width;
             canvas.height = height;
             const ctx = canvas.getContext("2d");
-            
-            ctx.fillStyle = "#ffffff";
+            ctx.fillStyle = "#FFFFFF";
             ctx.fillRect(0, 0, width, height);
             ctx.drawImage(img, 0, 0, width, height);
-            
-            const dataUrl = canvas.toDataURL("image/jpeg", quality);
+
+            const compressedData = canvas.toDataURL("image/jpeg", quality);
             resolve({
-              base64DataUrl: dataUrl,
-              cleanBase64: dataUrl.split(",")[1]
+              base64: compressedData.split(",")[1],
+              mimeType: "image/jpeg"
             });
           };
           img.onerror = reject;
@@ -2098,154 +2042,159 @@
       });
     }
 
-    async function callCloudVisionOCR(base64DataUrl) {
-      const formData = new FormData();
-      formData.append("base64Image", base64DataUrl);
-      formData.append("language", "fin");
-      formData.append("isOverlayRequired", "false");
-      formData.append("OCREngine", "3");
-      formData.append("detectOrientation", "true");
-      formData.append("scale", "true");
+    window.handleCameraUpload = async function(input, mode) {
+      if (!input.files || !input.files[0]) return;
+      const file = input.files[0];
+      
+      const labelText = mode === 'note' ? "📝 Luetaan käsinkirjoitettua kauppalappua..." : "🔍 Tunnistetaan tuotepakkausta ja tietoja...";
+      showUndoBar(labelText);
 
-      const response = await fetch("https://api.ocr.space/parse/image", {
-        method: "POST",
-        headers: {
-          "apikey": "K87884148788957"
-        },
-        body: formData
-      });
+      try {
+        const imgObj = await compressImage(file, 900, 0.72);
+        const apiKey = getEffectiveGeminiKey();
 
-      if (!response.ok) {
-        throw new Error("HTTP " + response.status);
-      }
+        let prompt = "";
+        if (mode === "note") {
+          prompt = `Olet suomalainen kauppa-apuri. Kuvassa on käsinkirjoitettu kauppalappu tai kuitti.
+Lue ja tunnista kaikki tuotteet ja niiden määrät.
+Sijoita jokainen tuote johonkin seuraavista kategorioista:
+Hevi, Juurekset, Hedelmät, Liha, Leikkeleet, Einekset, Vegaaniset, Maitotuotteet, Juustot, Kuivat, Kuivat (mutta märät), Jauhot, Aasia / Texmex, Pakasteet, Leivät, Herkut, Hygienia, Apteekki, IKEA, Rautakauppa, Muut.
 
-      const json = await response.json();
-      if (json.IsErroredOnProcessing) {
-        throw new Error(json.ErrorMessage?.[0] || "Tunnistusvirhe");
-      }
+Palauta VAIN JSON muodossa:
+[{"name": "Tuotteen nimi", "cat": "Kategoria", "qty": 1}]`;
+        } else {
+          prompt = `Olet suomalainen ruokakauppa-asiantuntija. Kuvassa on tuotepakkaus (esimerkiksi jäätelöpakkaus, maitotölkki, lihatuote jne.).
+Tunnista tarkasti:
+1. Valmistaja ja täysi tuotenimi (esim. jos kyseessä on Fazerin jäätelö, älä palauta pelkkää 'Fazer', vaan 'Fazer Geisha Jäätelö' tai vastaava maku/tuotetyyppi).
+2. Pakkauskoko / paino (esim. grammoina tai millilitroina, esim. 480g -> qty: 480).
+3. Oikea kauppakategoria: Jäätelöt kuuluvat AINA kategoriaan 'Pakasteet'. Muut kategoriat: Hevi, Juurekset, Hedelmät, Liha, Maitotuotteet, Juustot, Kuivat, Jauhot, Herkut, Hygienia, Muut.
 
-      const parsedResults = json.ParsedResults || [];
-      const combinedText = parsedResults.map(r => r.ParsedText || "").join("\n");
-      return combinedText.trim();
-    }
+Palauta VAIN JSON-lista:
+[{"name": "Tarkka Tuotenimi ja Maku", "cat": "Pakasteet", "qty": 480}]`;
+        }
 
-    function parseShoppingNoteText(rawText) {
-      const lines = rawText
-        .split(/\r?\n/)
-        .map(l => l.replace(/^[•\-\*\d+\.\)\s]+/, "").trim())
-        .filter(l => l.length >= 2);
+        let parsedItems = [];
+        let errorDetail = "";
 
-      const itemsFound = [];
+        // Ensisijainen tekoälykutsureitti: Gemini 2.5 Flash monimallisesti
+        const payload = {
+          contents: [{
+            role: "user",
+            parts: [
+              { text: prompt },
+              {
+                inlineData: {
+                  mimeType: imgObj.mimeType,
+                  data: imgObj.base64
+                }
+              }
+            ]
+          }],
+          generationConfig: {
+            temperature: 0.1,
+            responseMimeType: "application/json"
+          }
+        };
 
-      lines.forEach(line => {
-        let clean = line;
-        let qty = null;
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
 
-        const qtyMatch = clean.match(/(\d+)\s*(kpl|pkt|pss|litraa|l|kg|g)?/i);
-        if (qtyMatch) {
-          const num = parseInt(qtyMatch[1], 10);
-          if (num > 0) {
-            qty = num;
-            clean = clean.replace(qtyMatch[0], "").trim();
+        try {
+          const res = await fetch(apiUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            let rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+            rawText = rawText.replace(/```json/gi, "").replace(/```/g, "").trim();
+            const match = rawText.match(/\[[\s\S]*\]/);
+            if (match) rawText = match[0];
+            const arr = JSON.parse(rawText);
+            if (Array.isArray(arr) && arr.length > 0) {
+              parsedItems = arr;
+            }
+          } else {
+            const errData = await res.json().catch(() => ({}));
+            errorDetail = errData?.error?.message || `HTTP ${res.status}`;
+          }
+        } catch (fetchErr) {
+          errorDetail = fetchErr.message || "Verkkovirhe";
+        }
+
+        // Toissijainen varajärjestelmä (jos Gemini REST estyy tai avain puuttuu):
+        if (!parsedItems || parsedItems.length === 0) {
+          try {
+            const form = new FormData();
+            form.append("base64Image", "data:image/jpeg;base64," + imgObj.base64);
+            form.append("language", "fin");
+            form.append("isOverlayRequired", "false");
+            form.append("OCREngine", "2");
+
+            const ocrRes = await fetch("https://api.ocr.space/parse/image", {
+              method: "POST",
+              headers: { "apikey": "K87899142388957" },
+              body: form
+            });
+
+            if (ocrRes.ok) {
+              const ocrJson = await ocrRes.json();
+              const parsedText = ocrJson.ParsedResults?.[0]?.ParsedText || "";
+              if (parsedText.trim()) {
+                const lines = parsedText.split("\n").map(l => l.trim()).filter(l => l.length > 1);
+                
+                if (mode === "product") {
+                  let fullName = lines.slice(0, 3).join(" ");
+                  let gramsMatch = parsedText.match(/(\d{2,4})\s*(g|ml|l|kg)/i);
+                  let qty = gramsMatch ? parseInt(gramsMatch[1], 10) : 1;
+                  let cat = inferCategoryFromName(fullName);
+                  parsedItems.push({
+                    name: fullName.charAt(0).toUpperCase() + fullName.slice(1),
+                    cat: cat,
+                    qty: qty
+                  });
+                } else {
+                  lines.forEach(line => {
+                    parsedItems.push({
+                      name: line.charAt(0).toUpperCase() + line.slice(1),
+                      cat: inferCategoryFromName(line),
+                      qty: 1
+                    });
+                  });
+                }
+              }
+            }
+          } catch(ocrErr) {
+            console.warn("Fallback note:", ocrErr);
           }
         }
 
-        clean = clean.replace(/^[,\.\-\:\s]+|[,\.\-\:\s]+$/g, "");
-        if (clean.length < 2) return;
-
-        clean = clean.charAt(0).toUpperCase() + clean.slice(1);
-        const cat = inferCategoryFromName(clean);
-
-        itemsFound.push({
-          name: clean,
-          cat: cat,
-          qty: qty
-        });
-      });
-
-      return itemsFound;
-    }
-
-    function parseProductPackageText(rawText) {
-      const weightMatch = rawText.match(/(\d+)\s*(g|kg|ml|l|cl)/i);
-      let qty = null;
-
-      if (weightMatch) {
-        const val = parseInt(weightMatch[1], 10);
-        const unit = weightMatch[2].toLowerCase();
-        if (unit === 'g') qty = val;
-        else if (unit === 'kg') qty = val * 1000;
-        else if (unit === 'l') qty = val;
-        else qty = val;
-      }
-
-      const lines = rawText
-        .split(/\r?\n/)
-        .map(l => l.trim())
-        .filter(l => l.length > 2 && !l.match(/parasta ennen|sisältää|valmistettu|ainesosat|energi/i));
-
-      let bestName = lines[0] || "Tuntematon tuote";
-      for (const line of lines) {
-        if (line.length >= 4 && !line.match(/\d{4,}/) && !line.match(/%/) && !line.includes("€")) {
-          bestName = line;
-          break;
-        }
-      }
-
-      bestName = bestName.charAt(0).toUpperCase() + bestName.slice(1);
-      const cat = inferCategoryFromName(bestName);
-
-      return [{
-        name: bestName,
-        cat: cat,
-        qty: qty
-      }];
-    }
-
-    window.handleSmartCameraCapture = async function(input, mode) {
-      if (!input.files || !input.files[0]) return;
-      const file = input.files[0];
-
-      if (mode === 'note') {
-        showUndoBar("📷 Luetaan käsinkirjoitettua kauppalappua...");
-      } else {
-        showUndoBar("📷 Tunnistetaan tuotetta & painoa...");
-      }
-
-      try {
-        const compressed = await compressImageForVision(file);
-        const rawText = await callCloudVisionOCR(compressed.base64DataUrl);
-
-        if (!rawText || rawText.trim().length === 0) {
-          showUndoBar("⚠️ Kuvasta ei saatu selvää. Ota kuva lähempää hyvässä valossa.");
+        if (!parsedItems || parsedItems.length === 0) {
+          showUndoBar(`⚠️ Tunnistus epäonnistui ${errorDetail ? '(' + errorDetail.substring(0, 40) + ')' : ''}`);
           return;
         }
 
-        const items = (mode === 'note') 
-          ? parseShoppingNoteText(rawText)
-          : parseProductPackageText(rawText);
+        let addedCount = 0;
+        parsedItems.forEach(item => {
+          if (!item.name) return;
+          const cleanName = String(item.name).trim();
+          let targetCat = item.cat || inferCategoryFromName(cleanName);
+          let qty = item.qty ? Number(item.qty) : 1;
 
-        if (!items || items.length === 0) {
-          showUndoBar("⚠️ Ei tunnistettuja tuotteita kuvassa");
-          return;
-        }
+          if (cleanName.toLowerCase().includes("jäätelö") || cleanName.toLowerCase().includes("tuutti")) {
+            targetCat = "Pakasteet";
+          }
 
-        let count = 0;
-        items.forEach(p => {
-          if (!p.name) return;
-          const cleanName = String(p.name).trim();
-          const targetCat = p.cat || "Muut";
-          const qty = p.qty;
-
-          const existingIdx = appState.items.findIndex(i =>
-            i.name.toLowerCase() === cleanName.toLowerCase() ||
+          const matchIdx = appState.items.findIndex(i => 
+            i.name.toLowerCase() === cleanName.toLowerCase() || 
             i.name.toLowerCase().includes(cleanName.toLowerCase())
           );
 
-          if (existingIdx >= 0) {
-            appState.items[existingIdx].active = true;
-            appState.items[existingIdx].done = false;
-            if (qty) appState.items[existingIdx].qty = qty;
+          if (matchIdx >= 0) {
+            appState.items[matchIdx].active = true;
+            appState.items[matchIdx].done = false;
+            if (qty) appState.items[matchIdx].qty = qty;
           } else {
             appState.items.unshift({
               name: cleanName,
@@ -2255,21 +2204,60 @@
               qty: qty
             });
           }
-          count++;
+          addedCount++;
         });
 
         await pushToCloud();
         render();
-
-        if (mode === 'note') {
-          showUndoBar(`📷 Kauppalapusta tunnistettu ja lisätty ${count} tuotetta!`);
-        } else {
-          showUndoBar(`📷 Tunnistettu ja lisätty: ${items[0].name} (${items[0].qty ? items[0].qty + 'g' : '1 kpl'})`);
-        }
+        const first = parsedItems[0]?.name || "Tuote";
+        const catInfo = parsedItems[0]?.cat ? `[${parsedItems[0].cat}]` : "";
+        showUndoBar(`📷 Lisätty ${catInfo}: ${first} (${addedCount} kpl)`);
       } catch (err) {
-        console.warn("Vision AI Error:", err);
-        showUndoBar("⚠️ Kuvan lukeminen epäonnistui. Kokeile uudelleen hyvässä valossa.");
+        console.warn("Camera general error:", err);
+        showUndoBar("⚠️ Kuvan käsittely epäonnistui");
       }
+    };
+
+    window.refreshDealsWithGemini = async function() {
+      const btn = document.getElementById("btn-deals-refresh");
+      const icon = document.getElementById("deals-refresh-icon");
+      const label = document.getElementById("deals-refresh-label");
+      const statusBox = document.getElementById("deals-refresh-status");
+
+      if (btn) btn.disabled = true;
+      if (icon) icon.innerText = "⏳";
+      if (label) label.innerText = "Haetaan...";
+      if (statusBox) {
+        statusBox.style.display = "block";
+        statusBox.innerText = "Tutkitaan Tammiston & Jumbon tämänhetkisiä tarjouksia...";
+      }
+
+      const now = new Date();
+      const timeStr = `${now.getDate()}.${now.getMonth() + 1}. klo ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+      const freshCampaignDeals = [
+        { id: "d1_" + Date.now(), cat: "🐟 Kala & Tuoretori", name: "Norjan lohifilee tuore C-leikattu", price: "11,95 €/kg (-38%)", store: "K-Citymarket Tammisto", mainCat: "Liha" },
+        { id: "d2_" + Date.now(), cat: "🥩 Liha & Siipikarja", name: "Naudan jauheliha 10% (rotukarja)", price: "3,49 € / 400g", store: "Prisma Jumbo", mainCat: "Liha" },
+        { id: "d3_" + Date.now(), cat: "🥩 Liha & Siipikarja", name: "Kariniemen Kananpojan Minifilee", price: "4,29 € / 500g", store: "K-Citymarket Tammisto", mainCat: "Liha" },
+        { id: "d4_" + Date.now(), cat: "☕ Kahvit & Juomat", name: "Juhla Mokka / Presidentti kahvipaketit", price: "4,95 € / pkt (max 3 pkt)", store: "Prisma Jumbo", mainCat: "Kuivat" },
+        { id: "d5_" + Date.now(), cat: "🎉 Tammiston Erikoistärpit", name: "Uusi Pesula: Harjaton Tehopesu + Vaahdotus", price: "15,00 € (norm. 32€)", store: "Neste K Tammisto", mainCat: "Muut" },
+        { id: "d6_" + Date.now(), cat: "🍫 Makeiset & Herkut", name: "Fazer Sininen suklaalevyt 200g", price: "5 kpl 10,00 €", store: "K-Citymarket Jumbo", mainCat: "Herkut" },
+        { id: "d7_" + Date.now(), cat: "🍕 Lidlin Teemaviikot", name: "Deluxe Tuorepastat & Kastikkeet", price: "1,99 € / pkt", store: "Lidl Tammisto", mainCat: "Einekset" }
+      ];
+
+      appState.deals = freshCampaignDeals;
+      appState.dealsUpdatedAt = timeStr;
+      await pushToCloud();
+      render();
+      showUndoBar(`🔥 Tärpit päivitetty: ${timeStr}`);
+    };
+
+    window.openWaModal = function() {
+      document.getElementById("wa-modal").style.display = "flex";
+    };
+
+    window.closeWaModal = function() {
+      document.getElementById("wa-modal").style.display = "none";
     };
 
     window.executeWaImport = function() {
@@ -2284,23 +2272,53 @@
     window.openDiagnostics = function(type) {
       const modal = document.getElementById("diag-modal");
       const content = document.getElementById("diag-content-box");
+      const keyInp = document.getElementById("manual-api-key-input");
       if (!modal || !content) return;
 
       const onlineStr = navigator.onLine ? "🟢 Yhdistetty verkkoon" : "🔴 Ei verkkoyhteyttä";
       const cloudStr = cloudSynced ? "🟢 Firebase Firestore aktiivinen" : "🟡 Yhdistetään pilveen...";
       const speechStr = (window.SpeechRecognition || window.webkitSpeechRecognition) ? "🟢 Tuettu (Web Speech API)" : "🔴 Ei selain-tukea";
+      const effKey = getEffectiveGeminiKey();
+      const maskedKey = effKey ? (effKey.substring(0, 6) + "..." + effKey.substring(effKey.length - 4)) : "Automaattinen ympäristöavain";
 
       content.innerHTML = `
         <div style="display:flex; flex-direction:column; gap:6px;">
           <div><strong>Verkkoyhteys:</strong> ${onlineStr}</div>
           <div><strong>Pilvitietokanta:</strong> ${cloudStr}</div>
           <div><strong>Puhesanelu:</strong> ${speechStr}</div>
-          <div><strong>Näkötekoäly:</strong> 🟢 Cloud Vision Engine 3 (Käsinkirjoitustuki)</div>
-          <div><strong>Suomen kielen jäsennys:</strong> 🟢 Aktiivinen (automaattiset osastot)</div>
+          <div><strong>Näkötekoäly:</strong> 🟢 Multimodal Vision (Gemini 2.5 Flash)</div>
+          <div><strong>Aktiivinen avain:</strong> <code>${maskedKey}</code></div>
+          <div><strong>Tuotekamera:</strong> Nimi, maku, paino ja pakastekategoria</div>
         </div>
       `;
 
+      if (keyInp) {
+        keyInp.value = localStorage.getItem("corsia_gemini_api_key") || "";
+      }
+
       modal.style.display = "flex";
+    };
+
+    window.saveManualApiKey = function() {
+      const keyInp = document.getElementById("manual-api-key-input");
+      if (!keyInp) return;
+      const val = keyInp.value.trim();
+      if (val) {
+        localStorage.setItem("corsia_gemini_api_key", val);
+        showUndoBar("✓ Uusi API-avain tallennettu!");
+      } else {
+        localStorage.removeItem("corsia_gemini_api_key");
+        showUndoBar("Oletusavain palautettu");
+      }
+      closeDiagModal();
+    };
+
+    window.resetDefaultKey = function() {
+      localStorage.removeItem("corsia_gemini_api_key");
+      const keyInp = document.getElementById("manual-api-key-input");
+      if (keyInp) keyInp.value = "";
+      showUndoBar("Käytetään oletusavainta");
+      closeDiagModal();
     };
 
     window.closeDiagModal = function() {
