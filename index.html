@@ -1,0 +1,2323 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Corsia">
+  <meta name="theme-color" content="#16a34a">
+  <title>Corsia</title>
+
+  <!-- Selainpohjainen OCR-moottori (Tesseract.js v5) -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+
+  <script>
+    (function() {
+      const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180"><defs><linearGradient id="g" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#4ade80" /><stop offset="100%" stop-color="#16a34a" /></linearGradient></defs><rect width="180" height="180" fill="url(#g)"/><g fill="none" stroke="#ffffff" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"><path d="M 30 45 L 50 45 L 65 105 L 135 105 L 150 55 L 55 55" /><circle cx="75" cy="132" r="11" fill="#ffffff" stroke="none" /><circle cx="125" cy="132" r="11" fill="#ffffff" stroke="none" /></g></svg>';
+      const encoded = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+      
+      const favLink = document.createElement("link");
+      favLink.rel = "icon";
+      favLink.type = "image/svg+xml";
+      favLink.href = encoded;
+      document.head.appendChild(favLink);
+      
+      const img = new Image();
+      img.onload = function() {
+        const canvas = document.createElement("canvas");
+        canvas.width = 180;
+        canvas.height = 180;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0);
+        const pngUrl = canvas.toDataURL("image/png");
+        
+        const appleLink = document.createElement("link");
+        appleLink.rel = "apple-touch-icon";
+        appleLink.href = pngUrl;
+        document.head.appendChild(appleLink);
+        
+        const manifest = {
+          name: "Corsia",
+          short_name: "Corsia",
+          display: "standalone",
+          background_color: "#f4f5f8",
+          theme_color: "#16a34a",
+          icons: [{ src: pngUrl, sizes: "180x180", type: "image/png" }]
+        };
+        const manifestLink = document.createElement("link");
+        manifestLink.rel = "manifest";
+        manifestLink.href = "data:application/json;charset=utf-8," + encodeURIComponent(JSON.stringify(manifest));
+        document.head.appendChild(manifestLink);
+      };
+      img.src = encoded;
+    })();
+  </script>
+  
+  <style>
+    :root {
+      --bg: #f4f5f8;
+      --card-bg: #ffffff;
+      --text: #1c1c1e;
+      --text-muted: #8e8e93;
+      --primary: #007aff;
+      --accent-green: #34c759;
+      --k-orange: #ff6b00;
+      --k-red: #d6001c;
+      --prisma-green: #007934;
+      --wa-green: #25d366;
+      --border: #e5e5ea;
+      --shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+      --font-stack: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: var(--font-stack);
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    header {
+      position: sticky;
+      top: 0;
+      background: rgba(255, 255, 255, 0.94);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 8px 16px;
+      padding-top: max(8px, env(safe-area-inset-top));
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 46px;
+      z-index: 90;
+    }
+
+    .header-title {
+      font-size: 1.02rem;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+      text-align: center;
+      flex: 1;
+    }
+
+    .header-btn {
+      background: none;
+      border: none;
+      font-size: 0.92rem;
+      color: var(--primary);
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 0;
+    }
+
+    .content {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 8px 12px 60px;
+    }
+
+    .content.store-view-padding {
+      padding-bottom: 105px;
+    }
+
+    .home-hero {
+      margin-bottom: 8px;
+    }
+
+    .home-hero h2 {
+      margin: 0 0 2px;
+      font-size: 1.25rem;
+      font-weight: 800;
+      letter-spacing: -0.4px;
+    }
+
+    .home-hero p {
+      margin: 0;
+      color: var(--text-muted);
+      font-size: 0.8rem;
+    }
+
+    .card-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .action-card {
+      background: var(--card-bg);
+      border-radius: 12px;
+      padding: 8px 12px;
+      box-shadow: var(--shadow);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      transition: transform 0.12s ease;
+    }
+
+    .action-card:active {
+      transform: scale(0.985);
+    }
+
+    .action-card.card-soffa {
+      background: linear-gradient(135deg, #e8f5e9 0%, #dcedc8 100%);
+      border-color: #c5e1a5;
+      padding: 10px 12px;
+      margin-bottom: 48px;
+    }
+
+    .action-card.card-soffa .card-title {
+      color: #2e7d32;
+    }
+
+    /* Alaosio tarjouksille */
+    .deals-bottom-section {
+      margin-top: 18px;
+      padding-top: 14px;
+      border-top: 1px dashed #cbd5e1;
+    }
+
+    .deals-bottom-label {
+      font-size: 0.72rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: #ea580c;
+      margin-bottom: 7px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .action-card.card-deals {
+      background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
+      border: 1.5px solid #fdba74;
+      padding: 12px 14px;
+      box-shadow: 0 4px 12px rgba(234, 88, 12, 0.08);
+    }
+
+    .action-card.card-deals .card-title {
+      color: #c2410c;
+      font-size: 0.96rem;
+    }
+
+    .action-card.card-deals .card-desc {
+      color: #9a3412;
+      font-size: 0.74rem;
+    }
+
+    /* WA & Kamera -painikkeiden yhteisrivi */
+    .home-quick-actions-row {
+      margin: 14px auto 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: fit-content;
+    }
+
+    .card-wa-subtle {
+      padding: 6px 14px;
+      background: transparent;
+      border: 1px dashed #cbd5e1;
+      border-radius: 20px;
+      color: #94a3b8;
+      font-size: 0.72rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .card-wa-subtle:active {
+      background: #f1f5f9;
+      border-color: #94a3b8;
+      color: #475569;
+      transform: scale(0.98);
+    }
+
+    .btn-camera-subtle {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: 1px dashed #cbd5e1;
+      background: transparent;
+      color: #94a3b8;
+      font-size: 0.95rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      padding: 0;
+    }
+
+    .btn-camera-subtle:active {
+      background: #f1f5f9;
+      border-color: #94a3b8;
+      color: #007aff;
+      transform: scale(0.94);
+    }
+
+    .card-icon {
+      font-size: 1.6rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      flex-shrink: 0;
+    }
+
+    .logo-container {
+      width: 82px;
+      height: 32px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 7px;
+      overflow: hidden;
+      border: 1px solid rgba(0,0,0,0.06);
+    }
+
+    .card-info {
+      flex: 1;
+    }
+
+    .card-title {
+      font-size: 0.92rem;
+      font-weight: 700;
+      margin: 0 0 1px;
+    }
+
+    .card-desc {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      margin: 0;
+    }
+
+    .card-arrow {
+      color: #c7c7cc;
+      font-size: 1.1rem;
+      font-weight: 600;
+    }
+
+    .search-box {
+      position: relative;
+      margin-bottom: 10px;
+    }
+
+    .search-input {
+      width: 100%;
+      padding: 9px 34px 9px 34px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: #ffffff;
+      font-size: 0.9rem;
+      font-family: inherit;
+      outline: none;
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      font-size: 0.85rem;
+    }
+
+    .search-clear-btn {
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: #e2e8f0;
+      border: none;
+      color: #64748b;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.72rem;
+      font-weight: 800;
+      cursor: pointer;
+      padding: 0;
+    }
+
+    .add-section {
+      background: var(--card-bg);
+      border-radius: 12px;
+      padding: 12px;
+      box-shadow: var(--shadow);
+      margin-bottom: 14px;
+      border: 1px solid var(--border);
+    }
+
+    .add-section-title {
+      font-size: 0.86rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .form-row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .form-inputs-group {
+      display: flex;
+      gap: 6px;
+    }
+
+    .btn-mic {
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      color: #475569;
+      font-size: 1.1rem;
+      width: 38px;
+      height: 38px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: all 0.2s;
+    }
+
+    .btn-mic.recording {
+      background: #fee2e2;
+      border-color: #f87171;
+      color: #ef4444;
+      animation: pulse-mic 1.4s infinite;
+    }
+
+    @keyframes pulse-mic {
+      0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+      70% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+    }
+
+    .qty-field {
+      width: 105px;
+      flex-shrink: 0;
+      padding: 9px 8px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #f9f9fb;
+      font-size: 0.86rem;
+      font-family: inherit;
+      outline: none;
+    }
+
+    .input-field, .select-field {
+      width: 100%;
+      padding: 9px 10px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #f9f9fb;
+      font-size: 0.88rem;
+      font-family: inherit;
+      outline: none;
+    }
+
+    .btn-add {
+      background: var(--accent-green);
+      color: #fff;
+      border: none;
+      padding: 10px;
+      border-radius: 8px;
+      font-size: 0.88rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .btn-add:active {
+      opacity: 0.85;
+    }
+
+    .category-group {
+      margin-bottom: 14px;
+    }
+
+    .category-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.8rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #1e293b;
+      background: #e2e8f0;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid #cbd5e1;
+      margin-bottom: 6px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .category-toggle-icon {
+      display: inline-block;
+      transition: transform 0.2s ease;
+      margin-right: 8px;
+      font-size: 0.75rem;
+      color: #64748b;
+    }
+
+    .category-toggle-icon.open {
+      transform: rotate(90deg);
+    }
+
+    .product-row {
+      background: var(--card-bg);
+      border-radius: 9px;
+      padding: 8px 10px;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border: 1px solid var(--border);
+      cursor: pointer;
+    }
+
+    .product-row:active {
+      background-color: #f2f2f7;
+    }
+
+    .product-info-inline {
+      display: flex;
+      align-items: baseline;
+      gap: 5px;
+      flex-wrap: wrap;
+      flex: 1;
+      padding-right: 6px;
+    }
+
+    .product-name {
+      font-size: 0.92rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .product-cat-tag {
+      font-size: 0.76rem;
+      color: var(--text-muted);
+      font-weight: 400;
+    }
+
+    .deal-badge-tag {
+      font-size: 0.72rem;
+      font-weight: 800;
+      color: #c2410c;
+      background: #ffedd5;
+      padding: 1px 6px;
+      border-radius: 4px;
+      border: 1px solid #fed7aa;
+    }
+
+    .qty-tag {
+      font-size: 0.74rem;
+      font-weight: 700;
+      background: #eef2ff;
+      color: #3730a3;
+      padding: 2px 6px;
+      border-radius: 6px;
+      border: 1px solid #c7d2fe;
+    }
+
+    .row-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .btn-qty-quick {
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      color: #475569;
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 3px 6px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .btn-delete-row {
+      background: none;
+      border: none;
+      font-size: 0.95rem;
+      color: #8e8e93;
+      cursor: pointer;
+      padding: 4px;
+    }
+
+    .checkbox-round {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: 2px solid #c7c7cc;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .checkbox-round.checked {
+      background-color: var(--accent-green);
+      border-color: var(--accent-green);
+    }
+
+    .checkbox-round.checked::after {
+      content: "✓";
+      color: white;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    /* Tarjouskortit */
+    .deal-card {
+      background: var(--card-bg);
+      border-radius: 11px;
+      padding: 11px 13px;
+      margin-bottom: 7px;
+      border: 1px solid #fed7aa;
+      box-shadow: var(--shadow);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .deal-card.deal-card-offerilla {
+      border-color: #cbd5e1;
+      background: #f8fafc;
+    }
+
+    .deal-info {
+      flex: 1;
+    }
+
+    .deal-title {
+      font-size: 0.92rem;
+      font-weight: 700;
+      color: #1e293b;
+    }
+
+    .deal-price {
+      font-size: 0.88rem;
+      font-weight: 800;
+      color: #ea580c;
+      margin-top: 2px;
+    }
+
+    .deal-card-offerilla .deal-price {
+      color: #0369a1;
+    }
+
+    .deal-store {
+      font-size: 0.74rem;
+      color: #64748b;
+      margin-top: 3px;
+    }
+
+    .btn-add-deal {
+      background: #ea580c;
+      color: white;
+      border: none;
+      padding: 7px 12px;
+      border-radius: 8px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: all 0.15s ease;
+    }
+
+    .deal-card-offerilla .btn-add-deal {
+      background: #0284c7;
+    }
+
+    .btn-add-deal:active {
+      transform: scale(0.96);
+    }
+
+    .btn-add-deal.added {
+      background: #16a34a !important;
+    }
+
+    .store-badge {
+      display: inline-block;
+      padding: 3px 9px;
+      border-radius: 12px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+      background: #eef0f4;
+      color: #3a3a3c;
+    }
+
+    .store-item {
+      background: var(--card-bg);
+      border-radius: 11px;
+      padding: 14px 14px;
+      margin-bottom: 7px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border: 1.5px solid var(--border);
+      cursor: pointer;
+    }
+
+    .store-item .product-name {
+      font-size: 1.05rem;
+      font-weight: 800;
+      color: #0f172a;
+    }
+
+    .store-item-btn {
+      background: #f0fdf4;
+      border: 1.5px solid #86efac;
+      color: #166534;
+      font-weight: 800;
+      font-size: 0.85rem;
+      padding: 8px 12px;
+      border-radius: 12px;
+      pointer-events: none;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 36px 14px;
+      color: var(--text-muted);
+    }
+
+    .empty-state-icon {
+      font-size: 2.4rem;
+      margin-bottom: 6px;
+    }
+
+    .home-footer {
+      text-align: center;
+      padding: 24px 0 10px;
+      font-size: 0.75rem;
+      color: #94a3b8;
+      font-weight: 600;
+    }
+
+    .undo-bar {
+      position: fixed;
+      bottom: max(14px, env(safe-area-inset-bottom));
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(30, 30, 32, 0.95);
+      color: white;
+      padding: 9px 16px;
+      border-radius: 26px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.28);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      z-index: 100;
+      width: 90%;
+      max-width: 400px;
+      justify-content: space-between;
+    }
+
+    .undo-text {
+      font-size: 0.82rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .undo-btn {
+      background: #ffcc00;
+      border: none;
+      color: #000;
+      font-weight: 800;
+      font-size: 0.78rem;
+      padding: 5px 10px;
+      border-radius: 12px;
+      cursor: pointer;
+    }
+
+    .sync-status {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 0.74rem;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #34c759;
+    }
+
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+      padding: 16px;
+    }
+
+    .modal {
+      background: white;
+      border-radius: 16px;
+      padding: 18px;
+      width: 100%;
+      max-width: 360px;
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .btn-secondary {
+      background: #e5e5ea;
+      color: #000;
+      border: none;
+      padding: 7px 12px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.82rem;
+      cursor: pointer;
+    }
+
+    .btn-danger {
+      background: #ff3b30;
+      color: white;
+      border: none;
+      padding: 7px 12px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.82rem;
+      cursor: pointer;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 7px 12px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.82rem;
+      cursor: pointer;
+    }
+
+    .wa-textarea {
+      width: 100%;
+      height: 110px;
+      font-size: 0.85rem;
+      padding: 10px;
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      margin-bottom: 12px;
+    }
+
+    .ocr-status-box {
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 0.78rem;
+      color: #1e40af;
+      margin-top: 10px;
+      display: none;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .ocr-spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid #93c5fd;
+      border-top-color: #2563eb;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getFirestore, doc, onSnapshot, setDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+    window.FirebaseModule = { initializeApp, getFirestore, doc, onSnapshot, setDoc };
+  </script>
+</head>
+<body>
+
+  <header>
+    <button class="header-btn" id="btn-back" onclick="navigate('home')" style="visibility: hidden;">
+      ‹ Takaisin
+    </button>
+    <div class="header-title" id="page-title">Corsia</div>
+    <div class="sync-status" onclick="openFirebaseSettings()">
+      <div class="status-dot" id="sync-dot"></div>
+      <span id="sync-label">Muisti</span>
+    </div>
+  </header>
+
+  <div class="content" id="app"></div>
+
+  <!-- Piilotettu tiedostokenttä kameralle ja kuville -->
+  <input type="file" id="camera-file-input" accept="image/*" capture="environment" style="display: none;" onchange="handleImageFileSelected(event)">
+
+  <div class="undo-bar" id="undo-bar" style="display: none;">
+    <div class="undo-text" id="undo-text">Tuote kerätty</div>
+    <button class="undo-btn" onclick="triggerUndo()">PERU</button>
+  </div>
+
+  <div class="modal-overlay" id="delete-modal" style="display: none;">
+    <div class="modal">
+      <h3 style="color: #ff3b30; margin-top: 0;">Poista tuote</h3>
+      <p id="delete-modal-text">Haluatko varmasti poistaa tuotteen vakiovalikoimasta?</p>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closeDeleteModal()">Peruuta</button>
+        <button class="btn-danger" onclick="executeDeleteProduct()">Poista tuote</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="qty-modal" style="display: none;">
+    <div class="modal">
+      <h3 style="margin-top: 0;">Määritä määrä</h3>
+      <p id="qty-modal-sub" style="margin-bottom: 10px;">Aseta kappalemäärä tai grammat tuotteelle.</p>
+      <div style="margin-bottom: 14px;">
+        <input type="number" id="qty-modal-input" class="input-field" placeholder="Vain numeroita, esim. 3 (kpl) tai 300 (g)" min="0" step="1">
+      </div>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closeQtyModal()">Peruuta</button>
+        <button class="btn-primary" onclick="saveQtyModal()">Tallenna määrä</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="wa-modal" style="display: none;">
+    <div class="modal" style="max-width: 400px;">
+      <h3 style="margin-top: 0; color: #196f3d;">💬 Tuo WhatsApp-lista</h3>
+      <p style="margin-bottom: 10px; font-size: 0.82rem;">Liitä tähän viesti (esim. <em>"banaani ja 2 maitoa ja lohi ja kurkku"</em>):</p>
+      <textarea id="wa-text-input" class="wa-textarea" placeholder="Liitä viesti tähän..."></textarea>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closeWaModal()">Peruuta</button>
+        <button class="btn-primary" style="background: var(--wa-green);" onclick="executeWaImport()">Tuo ostoslistalle ✓</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- OCR / Kameran tunnistusikkuna -->
+  <div class="modal-overlay" id="ocr-modal" style="display: none;">
+    <div class="modal" style="max-width: 400px;">
+      <h3 style="margin-top: 0; color: #0284c7;">📷 Tunnistettu teksti kuvasta</h3>
+      <p style="margin-bottom: 8px; font-size: 0.8rem; color: #475569;">
+        Tarkista tunnistettu teksti ja muokkaa tarvittaessa ennen listalle vientiä:
+      </p>
+      <textarea id="ocr-text-result" class="wa-textarea" placeholder="Teksti ilmestyy tähän..."></textarea>
+      
+      <div class="ocr-status-box" id="ocr-status-box">
+        <div class="ocr-spinner"></div>
+        <span id="ocr-status-text">Käsitellään kuvaa...</span>
+      </div>
+
+      <div class="modal-actions" style="margin-top: 10px;">
+        <button class="btn-secondary" onclick="closeOcrModal()">Peruuta</button>
+        <button class="btn-primary" id="btn-ocr-accept" onclick="executeOcrImport()">Vie ostoslistalle ✓</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="firebase-modal" style="display: none;">
+    <div class="modal" style="max-width: 440px;">
+      <h3 style="margin-top: 0;">☁️ Pilvisynkronointi (Firebase)</h3>
+      <p style="font-size: 0.85rem;">Synkronointi yhdistetty Corsia-perheen pilveen.</p>
+      <div class="modal-actions">
+        <button class="btn-primary" onclick="closeFirebaseSettings()">Sulje</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const HARDCODED_FIREBASE_CONFIG = {
+      apiKey: "AIzaSyDQYWVqRwWc1DfQIr-rDrrt0-7XY2I9ReI",
+      authDomain: "corsia-perhe.firebaseapp.com",
+      projectId: "corsia-perhe",
+      storageBucket: "corsia-perhe.firebasestorage.app",
+      messagingSenderId: "365392158959",
+      appId: "1:365392158959:web:a4581cabe2d2eb5a25fb1a"
+    };
+
+    // Klo 16:00 Päivittyvä tarjouskokoelma Tammistosta ja Vantaalta
+    const DAILY_DEALS = [
+      { 
+        id: "d1", 
+        cat: "🎉 Avajaistarjoukset (Vantaa)", 
+        name: "Uusi Pesula: Harjaton Tehopesu + Vaha", 
+        price: "14,90 € (-50%)", 
+        store: "Neste K Tammisto", 
+        mainCat: "Muut",
+        url: "https://www.neste.fi/asemat/neste-k-vantaa-tammisto"
+      },
+      { 
+        id: "d2", 
+        cat: "🎉 Avajaistarjoukset (Vantaa)", 
+        name: "Naudan ulkofileepala", 
+        price: "9,90 €/kg", 
+        store: "K-Citymarket Tammisto", 
+        mainCat: "Liha",
+        url: "https://www.k-ruoka.fi/tarjoukset?kauppa=k-citymarket-vantaa-tammisto"
+      },
+      { 
+        id: "d_cof1", 
+        cat: "☕ Kahvitarjoukset", 
+        name: "Juhla Mokka (suodatinjauhatus 500g)", 
+        price: "3,99 € / pkt (rajoitus 2 pkt/talous)", 
+        store: "K-Citymarket Tammisto", 
+        mainCat: "Kuivat",
+        url: "https://www.k-ruoka.fi/tarjoukset?kauppa=k-citymarket-vantaa-tammisto"
+      },
+      { 
+        id: "d_cof2", 
+        cat: "☕ Kahvitarjoukset", 
+        name: "Paulig Presidentti Kahvit 500g", 
+        price: "4,49 € / pkt (norm. 6,89 €)", 
+        store: "Prisma Jumbo", 
+        mainCat: "Kuivat",
+        url: "https://www.s-kaupat.fi/tarjoukset"
+      },
+      { 
+        id: "d_bun1", 
+        cat: "📦 Bundle Dealit & Monipakkaukset", 
+        name: "Oivariini 400g (Normaali / Vähemmän suolaa)", 
+        price: "2 kpl yhteishintaan 5,00 €", 
+        store: "Prisma Jumbo", 
+        mainCat: "Maitotuotteet",
+        url: "https://www.s-kaupat.fi/tarjoukset"
+      },
+      { 
+        id: "d_bun2", 
+        cat: "📦 Bundle Dealit & Monipakkaukset", 
+        name: "Valio Oltermanni Juustot 900g-1kg", 
+        price: "Osta 2 kpl säästä 3,00 €", 
+        store: "K-Citymarket Tammisto", 
+        mainCat: "Juustot",
+        url: "https://www.k-ruoka.fi/tarjoukset?kauppa=k-citymarket-vantaa-tammisto"
+      },
+      { 
+        id: "d3", 
+        cat: "🐟 Kala & Merenelävät", 
+        name: "Norjan lohifilee (tuore C-leikkuu)", 
+        price: "12,90 €/kg (norm. 18,90€)", 
+        store: "K-Citymarket Tammisto", 
+        mainCat: "Liha",
+        url: "https://www.k-ruoka.fi/tarjoukset?kauppa=k-citymarket-vantaa-tammisto"
+      },
+      { 
+        id: "d4", 
+        cat: "🐟 Kala & Merenelävät", 
+        name: "Lämminsavustettu kirjolohipala", 
+        price: "16,90 €/kg", 
+        store: "Prisma Jumbo", 
+        mainCat: "Liha",
+        url: "https://www.s-kaupat.fi/tarjoukset"
+      },
+      { 
+        id: "d_lohi3", 
+        cat: "🐟 Kala & Merenelävät", 
+        name: "Kylmäsavustettu lohifilee / siivutettu 150g", 
+        price: "3,99 € / pkt (norm. 5,49 €)", 
+        store: "K-Citymarket Tammisto", 
+        mainCat: "Liha",
+        url: "https://www.k-ruoka.fi/tarjoukset?kauppa=k-citymarket-vantaa-tammisto"
+      },
+      { 
+        id: "d_lohi4", 
+        cat: "🐟 Kala & Merenelävät", 
+        name: "Kirjolohifileepala (tuore, kotimainen)", 
+        price: "13,95 €/kg", 
+        store: "Prisma Jumbo", 
+        mainCat: "Liha",
+        url: "https://www.s-kaupat.fi/tarjoukset"
+      },
+      { 
+        id: "d_lohi5", 
+        cat: "🐟 Kala & Merenelävät", 
+        name: "Lohisuikaleet / Lohimedaljongit 300g", 
+        price: "4,49 € / rs", 
+        store: "K-Citymarket Tammisto", 
+        mainCat: "Liha",
+        url: "https://www.k-ruoka.fi/tarjoukset?kauppa=k-citymarket-vantaa-tammisto"
+      },
+      { 
+        id: "d_muikku1", 
+        cat: "🐟 Kala & Merenelävät", 
+        name: "Tuore muikku (keskikoko, kotimainen)", 
+        price: "7,95 €/kg", 
+        store: "Prisma Jumbo", 
+        mainCat: "Liha",
+        url: "https://www.s-kaupat.fi/tarjoukset"
+      },
+      { 
+        id: "d_silakka1", 
+        cat: "🐟 Kala & Merenelävät", 
+        name: "Silakkafilee (tuore, kotimainen)", 
+        price: "9,99 €/kg (Plussalla, norm. 13,90€)", 
+        store: "K-Citymarket Tammisto", 
+        mainCat: "Liha",
+        url: "https://www.k-ruoka.fi/tarjoukset?kauppa=k-citymarket-vantaa-tammisto"
+      },
+      { 
+        id: "d5", 
+        cat: "🥩 Liha & Siipikarja", 
+        name: "Naudan sisäpaisti (A-luokka)", 
+        price: "11,90 €/kg (-35%)", 
+        store: "K-Citymarket Tammisto", 
+        mainCat: "Liha",
+        url: "https://www.k-ruoka.fi/tarjoukset?kauppa=k-citymarket-vantaa-tammisto"
+      },
+      { 
+        id: "d6", 
+        cat: "🥩 Liha & Siipikarja", 
+        name: "Kariniemen Kananpojan fileesuikaleet 400g", 
+        price: "2,99 €/pkt (norm. 4,29€)", 
+        store: "Prisma Jumbo", 
+        mainCat: "Liha",
+        url: "https://www.s-kaupat.fi/tarjoukset"
+      },
+      { 
+        id: "d7", 
+        cat: "🛒 K-Citymarket Jumbo - Päivän Tärppi", 
+        name: "Fiskars Hard Face -paistokasari 28cm", 
+        price: "39,90 € Plussalla (norm. 79,90€)", 
+        store: "K-Citymarket Jumbo", 
+        mainCat: "Muut",
+        url: "https://www.k-ruoka.fi/tarjoukset?kauppa=k-citymarket-vantaa-jumbo"
+      },
+
+      /* LIDL TAMMISTO - TOP 5 TÄRPIT */
+      { 
+        id: "lidl_1", 
+        cat: "🍕 Lidl Tammisto – Top 5 Tarjoukset", 
+        name: "Vitasia Sushilajitelma 400g", 
+        price: "4,99 € (Teemauutuus)", 
+        store: "Lidl Tammisto", 
+        mainCat: "Einekset",
+        url: "https://www.lidl.fi/tarjoukset"
+      },
+      { 
+        id: "lidl_2", 
+        cat: "🍕 Lidl Tammisto – Top 5 Tarjoukset", 
+        name: "Kanan rintafilee 1 kg (Reilu pakkaus)", 
+        price: "6,99 €/kg (Säästökoko)", 
+        store: "Lidl Tammisto", 
+        mainCat: "Liha",
+        url: "https://www.lidl.fi/tarjoukset"
+      },
+      { 
+        id: "lidl_3", 
+        cat: "🍕 Lidl Tammisto – Top 5 Tarjoukset", 
+        name: "Paistopiste: Voivoisarvet / Ranskanleipä", 
+        price: "0,49 € / kpl", 
+        store: "Lidl Tammisto", 
+        mainCat: "Leivät",
+        url: "https://www.lidl.fi/tarjoukset"
+      },
+      { 
+        id: "lidl_4", 
+        cat: "🍕 Lidl Tammisto – Top 5 Tarjoukset", 
+        name: "Snack Box (Chili cheese nuggets & sipulirenkaat) 450g", 
+        price: "3,49 € / pkt", 
+        store: "Lidl Tammisto", 
+        mainCat: "Pakasteet",
+        url: "https://www.lidl.fi/tarjoukset"
+      },
+      { 
+        id: "lidl_5", 
+        cat: "🍕 Lidl Tammisto – Top 5 Tarjoukset", 
+        name: "Kuningasbanaanit (Reilu kauppa)", 
+        price: "1,19 €/kg", 
+        store: "Lidl Tammisto", 
+        mainCat: "Hedelmät",
+        url: "https://www.lidl.fi/tarjoukset"
+      },
+
+      { 
+        id: "d9", 
+        cat: "🚗 Autopesutarjoukset", 
+        name: "Tehopesu koodilla PESU24 automaatista", 
+        price: "14,90 € (norm. 29,90€)", 
+        store: "Neste K Tammisto", 
+        mainCat: "Muut",
+        url: "https://www.neste.fi/asemat/neste-k-vantaa-tammisto"
+      },
+
+      /* OFFERILLA - 3 tarkoin valittua diiliä 50v miehelle */
+      { 
+        id: "off_1", 
+        cat: "🎁 Offerilla – Vantaan Paikallisdiilit", 
+        name: "Katsastus ja vuosihuolto Mekonomenilla", 
+        price: "99,00 € (-67%, arvo 309 €)", 
+        store: "Mekonomen Hakkila (Vantaa)", 
+        mainCat: "Muut",
+        url: "https://offerilla.com/vantaa/"
+      },
+      { 
+        id: "off_2", 
+        cat: "🎁 Offerilla – Vantaan Paikallisdiilit", 
+        name: "Auton käsinpesu, sisäpuhdistus & suojaava kovavaha", 
+        price: "129,00 € (-34%, norm. 195 €)", 
+        store: "Proautolasi Koivukylä (Vantaa)", 
+        mainCat: "Muut",
+        url: "https://offerilla.com/vantaa/"
+      },
+      { 
+        id: "off_3", 
+        cat: "🎁 Offerilla – Vantaan Paikallisdiilit", 
+        name: "Klassinen tai urheiluhieronta 60 min", 
+        price: "29,00 € (-47%, norm. 55 €)", 
+        store: "Fysio Myyrmäki (Vantaa)", 
+        mainCat: "Muut",
+        url: "https://offerilla.com/vantaa/"
+      }
+    ];
+
+    const STANDARD_CATEGORIES = [
+      "Hevi", "Juurekset", "Hedelmät", "Liha", "Leikkeleet", "Einekset", "Vegaaniset",
+      "Maitotuotteet", "Juustot", "Kuivat", "Kuivat (mutta märät)", "Jauhot",
+      "Aasia / Texmex", "Pakasteet", "Leivät", "Herkut", "Hygienia",
+      "Apteekki", "IKEA", "Rautakauppa", "Muut"
+    ];
+
+    function resolveStandardCategory(proposedCat, itemName) {
+      if (proposedCat && STANDARD_CATEGORIES.includes(proposedCat)) {
+        return proposedCat;
+      }
+      const lower = (itemName || "").toLowerCase();
+      if (lower.includes("kahvi") || lower.includes("mokka") || lower.includes("tee") || lower.includes("pasta") || lower.includes("riisi") || lower.includes("puuro") || lower.includes("hiutale") || lower.includes("muro")) {
+        return "Kuivat";
+      }
+      if (lower.includes("muikku") || lower.includes("silakka") || lower.includes("lohi") || lower.includes("kala") || lower.includes("kana") || lower.includes("nauta") || lower.includes("sika") || lower.includes("pihvi") || lower.includes("filee") || lower.includes("jauheliha") || lower.includes("kinkku")) {
+        return "Liha";
+      }
+      if (lower.includes("maito") || lower.includes("voi") || lower.includes("kerma") || lower.includes("jogurtti") || lower.includes("muna") || lower.includes("rahka") || lower.includes("viili")) {
+        return "Maitotuotteet";
+      }
+      if (lower.includes("juusto") || lower.includes("oltermanni") || lower.includes("mozzarella") || lower.includes("cheddar") || lower.includes("feta")) {
+        return "Juustot";
+      }
+      if (lower.includes("leipä") || lower.includes("sämpylä") || lower.includes("patonki") || lower.includes("voisarvi") || lower.includes("croissant") || lower.includes("ruisleipä")) {
+        return "Leivät";
+      }
+      if (lower.includes("pizza") || lower.includes("jäätelö") || lower.includes("pakaste") || lower.includes("snack box") || lower.includes("nuggets")) {
+        return "Pakasteet";
+      }
+      if (lower.includes("salaatti") || lower.includes("sushi") || lower.includes("ateria") || lower.includes("lounas") || lower.includes("keitto") || lower.includes("nakki")) {
+        return "Einekset";
+      }
+      if (lower.includes("omena") || lower.includes("banaani") || lower.includes("appelsiini") || lower.includes("marja") || lower.includes("avokado") || lower.includes("lime") || lower.includes("sitruuna")) {
+        return "Hedelmät";
+      }
+      if (lower.includes("kurkku") || lower.includes("tomaatti") || lower.includes("paprika") || lower.includes("yritti") || lower.includes("sipuli") || lower.includes("salaatti")) {
+        return "Hevi";
+      }
+      if (lower.includes("peruna") || lower.includes("porkkana") || lower.includes("juures") || lower.includes("punajuuri")) {
+        return "Juurekset";
+      }
+      if (lower.includes("pesuaine") || lower.includes("paperi") || lower.includes("shampoo") || lower.includes("saippua") || lower.includes("hammastahna") || lower.includes("harja")) {
+        return "Hygienia";
+      }
+      return "Muut";
+    }
+
+    const DEFAULT_CATALOG = [
+      { name: "Sukkahousut", cat: "Muut" },
+      { name: "Tarmo avainpiilo", cat: "Muut" },
+      { name: "Kukkamulta", cat: "Muut" },
+      { name: "Renkaanpaikkausaine CRC", cat: "Muut" },
+      { name: "Sateenvarjo", cat: "Muut" },
+      { name: "Ihmesekoituspussi", cat: "Muut" },
+      { name: "YRITTI: Basilika (tuore)", cat: "Hevi" },
+      { name: "YRITTI: Korianteri", cat: "Hevi" },
+      { name: "YRITTI: Persilja", cat: "Hevi" },
+      { name: "Chili", cat: "Hevi" },
+      { name: "Herkkusieni", cat: "Hevi" },
+      { name: "Jäävuorisalaatti", cat: "Hevi" },
+      { name: "Keltasipuli", cat: "Hevi" },
+      { name: "Kirsikkatomaatti", cat: "Hevi" },
+      { name: "Kurkku", cat: "Hevi" },
+      { name: "Punainen paprika", cat: "Hevi" },
+      { name: "Parsakaali", cat: "Hevi" },
+      { name: "Tomaatti", cat: "Hevi" },
+      { name: "Valkosipuli", cat: "Hevi" },
+      { name: "Peruna (yleis / uusi)", cat: "Juurekset" },
+      { name: "Porkkana", cat: "Juurekset" },
+      { name: "Avokado", cat: "Hedelmät" },
+      { name: "Banaani", cat: "Hedelmät" },
+      { name: "Lime", cat: "Hedelmät" },
+      { name: "Omenat", cat: "Hedelmät" },
+      { name: "Jauheliha", cat: "Liha" },
+      { name: "Kanafile", cat: "Liha" },
+      { name: "Lohi (tuore)", cat: "Liha" },
+      { name: "Silakkafilee (tuore)", cat: "Liha" },
+      { name: "Tuore muikku", cat: "Liha" },
+      { name: "Kuve (Flank steak)", cat: "Liha" },
+      { name: "Possun ulkofile", cat: "Liha" },
+      { name: "Pekoni", cat: "Leikkeleet" },
+      { name: "Einarisalaatti kanacaesar", cat: "Einekset" },
+      { name: "Nakki", cat: "Einekset" },
+      { name: "Tofu (luomu / kiinteä)", cat: "Vegaaniset" },
+      { name: "MAITO: Laktoositon kevyt (sininen)", cat: "Maitotuotteet" },
+      { name: "MAITO: Barista kauramaito", cat: "Maitotuotteet" },
+      { name: "VOI: Voi", cat: "Maitotuotteet" },
+      { name: "KERMA: Kuohukerma", cat: "Maitotuotteet" },
+      { name: "JOGURTTI: Kreikkalainen jogurtti", cat: "Maitotuotteet" },
+      { name: "MUNA: Kananmunat", cat: "Maitotuotteet" },
+      { name: "Oltermanni", cat: "Juustot" },
+      { name: "Mozzarellapallo", cat: "Juustot" },
+      { name: "Parmesan (pala)", cat: "Juustot" },
+      { name: "RIISI: Basmati", cat: "Kuivat" },
+      { name: "PASTA: Spagetti", cat: "Kuivat" },
+      { name: "KAHVI: Presidentti Sapphire", cat: "Kuivat" },
+      { name: "HIUTALE: Puurohiutaleet", cat: "Kuivat" },
+      { name: "Mutti tomaattimurska", cat: "Kuivat (mutta märät)" },
+      { name: "Oliiviöljy", cat: "Kuivat (mutta märät)" },
+      { name: "JAUHO: Puolikarkea vehnäjauho", cat: "Jauhot" },
+      { name: "Soijakastike", cat: "Aasia / Texmex" },
+      { name: "TEXMEX tortillat", cat: "Aasia / Texmex" },
+      { name: "Pakastepizzat", cat: "Pakasteet" },
+      { name: "Ruisleipä", cat: "Leivät" },
+      { name: "Paahtoleipä", cat: "Leivät" },
+      { name: "Sipsit", cat: "Herkut" },
+      { name: "Talouspaperi", cat: "Hygienia" },
+      { name: "WC-paperi", cat: "Hygienia" },
+      { name: "Burana / Ibuxin", cat: "Apteekki" },
+      { name: "Kruunukynttilät", cat: "IKEA" },
+      { name: "Ilmastointiteippi", cat: "Rautakauppa" }
+    ];
+
+    const STORE_LAYOUTS = {
+      "prisma_jumbo": [
+        "Muut", "Hevi", "Juurekset", "Hedelmät", "Liha", "Leikkeleet", "Einekset", "Vegaaniset",
+        "Maitotuotteet", "Juustot", "Kuivat", "Kuivat (mutta märät)", "Jauhot",
+        "Aasia / Texmex", "Pakasteet", "Leivät", "Herkut", "Hygienia"
+      ],
+      "cm_jumbo": [
+        "Hygienia", "Muut", "Herkut", "Maitotuotteet", "Juustot",
+        "Leikkeleet", "Einekset", "Vegaaniset", "Liha", "Aasia / Texmex", "Kuivat",
+        "Kuivat (mutta märät)", "Jauhot", "Leivät", "Hevi", "Juurekset", "Hedelmät", "Pakasteet"
+      ],
+      "cm_tammisto": [
+        "Hevi", "Juurekset", "Hedelmät", "Maitotuotteet", "Juustot", "Liha",
+        "Leikkeleet", "Einekset", "Vegaaniset", "Leivät", "Aasia / Texmex", "Kuivat",
+        "Kuivat (mutta märät)", "Jauhot", "Pakasteet", "Hygienia", "Muut", "Herkut"
+      ],
+      "ikea": ["IKEA"],
+      "rautakauppa": ["Rautakauppa"],
+      "apteekki": ["Apteekki"]
+    };
+
+    const STORE_NAMES = {
+      "prisma_jumbo": "Prisma Jumbo",
+      "cm_tammisto": "K-Citymarket Tammisto",
+      "cm_jumbo": "K-Citymarket Jumbo",
+      "ikea": "IKEA",
+      "rautakauppa": "Rautakauppa",
+      "apteekki": "Apteekki"
+    };
+
+    let appState = {
+      items: DEFAULT_CATALOG.map(p => ({ ...p, active: false, done: false, qty: null }))
+    };
+
+    let currentView = "home";
+    let activeStoreKey = "";
+    let lastCollectedIndex = null;
+    let deleteTargetIndex = null;
+    let qtyTargetIndex = null;
+    let undoTimer = null;
+    let searchQuery = "";
+    let categoryOpenState = {};
+    let firestoreUnsub = null;
+    let dbInstance = null;
+
+    function formatQty(qty) {
+      if (!qty && qty !== 0) return "";
+      const num = Number(qty);
+      if (isNaN(num) || num <= 0) return "";
+      return num >= 50 ? `${num} g` : `${num} kpl`;
+    }
+
+    function initData() {
+      const local = localStorage.getItem("perheen_kauppalappu_data");
+      if (local) {
+        try {
+          const parsed = JSON.parse(local);
+          if (parsed && Array.isArray(parsed.items)) appState = parsed;
+        } catch(e){}
+      }
+      initFirebaseFromStorage();
+      render();
+    }
+
+    function saveLocal() {
+      localStorage.setItem("perheen_kauppalappu_data", JSON.stringify(appState));
+    }
+
+    async function initFirebaseFromStorage() {
+      const dot = document.getElementById("sync-dot");
+      const label = document.getElementById("sync-label");
+      if (!window.FirebaseModule) return;
+
+      try {
+        const { initializeApp, getFirestore, doc, onSnapshot } = window.FirebaseModule;
+        const fbApp = initializeApp(HARDCODED_FIREBASE_CONFIG, "kauppalappuApp_" + Date.now());
+        dbInstance = getFirestore(fbApp);
+        const docRef = doc(dbInstance, "perhe", "kauppalappu");
+
+        if (firestoreUnsub) firestoreUnsub();
+
+        firestoreUnsub = onSnapshot(docRef, (snap) => {
+          if (snap.exists()) {
+            appState = snap.data();
+            saveLocal();
+            render();
+          } else {
+            pushToCloud();
+          }
+          if(dot) dot.style.background = "#007aff";
+          if(label) label.innerText = "Pilvi OK";
+        });
+      } catch (err) {
+        if(dot) dot.style.background = "#ff3b30";
+      }
+    }
+
+    async function pushToCloud() {
+      saveLocal();
+      if (!dbInstance || !window.FirebaseModule) return;
+      try {
+        const { doc, setDoc } = window.FirebaseModule;
+        await setDoc(doc(dbInstance, "perhe", "kauppalappu"), appState);
+      } catch (e) {}
+    }
+
+    window.navigate = function(view, storeKey = "") {
+      currentView = view;
+      activeStoreKey = storeKey;
+      searchQuery = "";
+      render();
+    };
+
+    function render() {
+      const appEl = document.getElementById("app");
+      const pageTitle = document.getElementById("page-title");
+      const btnBack = document.getElementById("btn-back");
+
+      if (currentView === "home") {
+        appEl.classList.remove("store-view-padding");
+        btnBack.style.visibility = "hidden";
+        pageTitle.innerText = "Corsia";
+        renderHome(appEl);
+      } else if (currentView === "deals") {
+        appEl.classList.remove("store-view-padding");
+        btnBack.style.visibility = "visible";
+        pageTitle.innerText = "Tarjoukset & Tärpit";
+        renderDeals(appEl);
+      } else if (currentView === "soffa") {
+        appEl.classList.remove("store-view-padding");
+        btnBack.style.visibility = "visible";
+        pageTitle.innerText = "Kotisohva";
+        renderSoffa(appEl);
+      } else if (currentView === "store") {
+        appEl.classList.add("store-view-padding");
+        btnBack.style.visibility = "visible";
+        pageTitle.innerText = STORE_NAMES[activeStoreKey] || "Kauppareitti";
+        renderStore(appEl);
+      }
+    }
+
+    function renderHome(container) {
+      const activeCount = appState.items.filter(i => i.active && !i.done).length;
+
+      container.innerHTML = `
+        <div class="home-hero">
+          <h2>Tervetuloa ostoksille</h2>
+          <p>${activeCount > 0 ? `Listalla on <strong>${activeCount}</strong> tuotetta valmiina kerättäväksi.` : "Kauppalappu on tyhjä. Valitse tuotteet kotisohvalla tai tutustu tarjouksiin!"}</p>
+        </div>
+
+        <div class="card-list">
+          <!-- Kotisohva (Päävalinta) -->
+          <div class="action-card card-soffa" onclick="navigate('soffa')">
+            <div class="card-icon">🛋️</div>
+            <div class="card-info">
+              <div class="card-title">Täytä kauppalappua kotisohvalla</div>
+              <div class="card-desc">Valitse vakiotuotteet, sanelu ”ja”-sanalla tai lisää uusia</div>
+            </div>
+            <div class="card-arrow">›</div>
+          </div>
+
+          <!-- Prisma Jumbo -->
+          <div class="action-card" onclick="navigate('store', 'prisma_jumbo')">
+            <div class="logo-container" style="background: #ffffff; border-color: #e0e0e0;">
+              <svg width="80" height="28" viewBox="0 0 170 38"><polygon points="19,4 6,28 32,28" fill="#e0006c"/><polygon points="6,28 0,36 12,36" fill="#f37021"/><polygon points="32,28 20,36 43,36" fill="#ffc20e"/><text x="47" y="29" font-family="-apple-system, sans-serif" font-weight="900" font-size="28" fill="#007934">PRISMA</text></svg>
+            </div>
+            <div class="card-info">
+              <div class="card-title">Prisma Jumbo</div>
+              <div class="card-desc">Hyllyreitin mukainen järjestys</div>
+            </div>
+            <div class="card-arrow">›</div>
+          </div>
+
+          <!-- K-Citymarket Tammisto -->
+          <div class="action-card" onclick="navigate('store', 'cm_tammisto')">
+            <div class="logo-container" style="background: #d6001c;">
+              <svg width="80" height="28" viewBox="0 0 170 42">
+                <text x="85" y="26" fill="#ffffff" font-family="sans-serif" font-weight="900" font-size="12" text-anchor="middle">CITYMARKET TAMMISTO</text>
+              </svg>
+            </div>
+            <div class="card-info">
+              <div class="card-title">K-Citymarket Tammisto</div>
+              <div class="card-desc">Hyllyreitin mukainen järjestys</div>
+            </div>
+            <div class="card-arrow">›</div>
+          </div>
+
+          <!-- K-Citymarket Jumbo -->
+          <div class="action-card" onclick="navigate('store', 'cm_jumbo')">
+            <div class="logo-container" style="background: #d6001c;">
+              <svg width="80" height="28" viewBox="0 0 170 42">
+                <text x="85" y="26" fill="#ffffff" font-family="sans-serif" font-weight="900" font-size="12" text-anchor="middle">CITYMARKET JUMBO</text>
+              </svg>
+            </div>
+            <div class="card-info">
+              <div class="card-title">K-Citymarket Jumbo</div>
+              <div class="card-desc">Hyllyreitin mukainen järjestys</div>
+            </div>
+            <div class="card-arrow">›</div>
+          </div>
+
+          <!-- IKEA -->
+          <div class="action-card" onclick="navigate('store', 'ikea')">
+            <div class="logo-container" style="background: #0051ba; border: 1px solid #004299;">
+              <svg width="78" height="28" viewBox="0 0 130 50">
+                <!-- Sininen pohja -->
+                <rect width="130" height="50" fill="#0051ba" />
+                <!-- Keltainen soikio / ellipsi -->
+                <ellipse cx="65" cy="25" rx="60" ry="22.5" fill="#ffda1a" />
+                <!-- Sininen IKEA-teksti -->
+                <text x="63" y="35" fill="#0051ba" font-family="Arial Black, Impact, sans-serif" font-weight="900" font-size="31" letter-spacing="1.5" text-anchor="middle">IKEA</text>
+                <!-- Pieni rekisteröity tavaramerkkimerkki ® -->
+                <text x="115" y="19" fill="#0051ba" font-family="Arial, sans-serif" font-weight="bold" font-size="7">®</text>
+              </svg>
+            </div>
+            <div class="card-info"><div class="card-title">IKEA</div><div class="card-desc">Sisustus, huonekalut & pientavarat</div></div>
+            <div class="card-arrow">›</div>
+          </div>
+
+          <!-- Rautakauppa -->
+          <div class="action-card" onclick="navigate('store', 'rautakauppa')">
+            <div class="logo-container" style="background: #ff5722;"><text x="50%" y="68%" fill="#ffffff" font-family="sans-serif" font-weight="900" font-size="14" text-anchor="middle">RAUTA</text></div>
+            <div class="card-info"><div class="card-title">Rautakauppa</div><div class="card-desc">Työkalut, remontointi & tarvikkeet</div></div>
+            <div class="card-arrow">›</div>
+          </div>
+
+          <!-- Apteekki -->
+          <div class="action-card" onclick="navigate('store', 'apteekki')">
+            <div class="logo-container" style="background: #ffffff; border-color: #a5d6a7;"><text x="50%" y="68%" fill="#007934" font-family="sans-serif" font-weight="900" font-size="13" text-anchor="middle">APTEEKKI</text></div>
+            <div class="card-info"><div class="card-title">Apteekki</div><div class="card-desc">Lääkkeet, vitamiinit & hoitotuotteet</div></div>
+            <div class="card-arrow">›</div>
+          </div>
+        </div>
+
+        <!-- Alalaitaan erilleen siirretty Tarjoukset-osio -->
+        <div class="deals-bottom-section">
+          <div class="deals-bottom-label">
+            <span>🔥 Päivän Parhaat Säästöt</span>
+          </div>
+          <div class="action-card card-deals" onclick="navigate('deals')">
+            <div class="card-icon">🏷️</div>
+            <div class="card-info">
+              <div class="card-title">Tarjoukset</div>
+              <div class="card-desc">Tammiston ja lähialueen ajankohtaiset tärpit</div>
+            </div>
+            <div class="card-arrow">›</div>
+          </div>
+        </div>
+
+        <!-- WA-tuonti ja uusi Kameranappi vierekkäin -->
+        <div class="home-quick-actions-row">
+          <div class="card-wa-subtle" onclick="handleWhatsAppImport()">💬 Tuo WhatsApp-lista</div>
+          <button class="btn-camera-subtle" onclick="triggerCameraCapture()" title="Lue kauppalappu tai kuitti kameralla">📷</button>
+        </div>
+
+        <div class="home-footer">
+          <div>Jussi 2026</div>
+          <div style="margin-top: 4px; font-size: 0.68rem; color: #64748b; font-weight: 500; letter-spacing: 0.2px;">
+            Powered by <strong>Gemini AI</strong>, <strong>Tesseract OCR</strong> & <strong>Smart NLP</strong>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderDeals(container) {
+      const validDeals = DAILY_DEALS.filter(d => d && d.name && d.name.trim() !== "" && d.price && d.price.trim() !== "");
+      
+      const rawCategories = [...new Set(validDeals.map(d => d.cat))];
+      const offerillaCat = "🎁 Offerilla – Vantaan Paikallisdiilit";
+      const dealCategories = rawCategories.filter(c => c !== offerillaCat);
+      if (rawCategories.includes(offerillaCat)) {
+        dealCategories.push(offerillaCat);
+      }
+
+      let html = `
+        <div style="margin-bottom: 12px; background: #fff7ed; border: 1px solid #fed7aa; padding: 10px 12px; border-radius: 10px;">
+          <h3 style="margin: 0 0 3px; font-size: 0.95rem; color: #c2410c;">🔥 Tammiston & Vantaan Päivän Tärpit (Päivittyvä lista)</h3>
+          <p style="margin: 0; font-size: 0.78rem; color: #9a3412;">Klikkaa <strong>+ Valitse</strong> lisätäksesi tuotteen listalle tai <strong>(Linkki)</strong> avataksesi tarjoussivun.</p>
+        </div>
+      `;
+
+      dealCategories.forEach(cat => {
+        const dealsInCat = validDeals.filter(d => d.cat === cat);
+        if (dealsInCat.length === 0) return;
+        const isOfferillaSection = (cat === offerillaCat);
+
+        html += `
+          <div class="category-group">
+            <div class="category-header" style="${isOfferillaSection ? 'background: #f1f5f9; color: #0f172a; border-color: #cbd5e1;' : 'background: #ffedd5; color: #9a3412; border-color: #fed7aa;'}">
+              <span>${cat}</span>
+              <span>${dealsInCat.length} tärppiä</span>
+            </div>
+            ${dealsInCat.map(deal => {
+              const fullItemName = `${deal.name} (tarjous: ${deal.store})`;
+              const isAdded = appState.items.some(i => i.name === fullItemName && i.active);
+
+              return `
+                <div class="deal-card ${isOfferillaSection ? 'deal-card-offerilla' : ''}">
+                  <div class="deal-info">
+                    <div class="deal-title">${deal.name}</div>
+                    <div class="deal-price">${deal.price}</div>
+                    <div class="deal-store">📍 ${deal.store}</div>
+                  </div>
+                  <button class="btn-add-deal ${isAdded ? 'added' : ''}" onclick="addDealToShoppingList('${deal.id}')">
+                    ${isAdded ? '✓ Lisätty' : '+ Valitse'}
+                  </button>
+                </div>
+              `;
+            }).join("")}
+          </div>
+        `;
+      });
+
+      container.innerHTML = html;
+    }
+
+    window.addDealToShoppingList = function(dealId) {
+      const deal = DAILY_DEALS.find(d => d.id === dealId);
+      if (!deal) return;
+
+      const formattedName = `${deal.name} (tarjous: ${deal.store})`;
+      const existingIdx = appState.items.findIndex(i => i.name === formattedName);
+
+      if (existingIdx >= 0) {
+        appState.items[existingIdx].active = !appState.items[existingIdx].active;
+        appState.items[existingIdx].done = false;
+        appState.items[existingIdx].cat = resolveStandardCategory(appState.items[existingIdx].cat, formattedName);
+      } else {
+        const assignedCat = resolveStandardCategory(deal.mainCat, deal.name);
+        appState.items.unshift({
+          name: formattedName,
+          cat: assignedCat,
+          active: true,
+          done: false,
+          qty: 1
+        });
+      }
+
+      pushToCloud();
+      render();
+      showUndoBar(`Päivitetty: ${deal.name}`);
+    };
+
+    function renderSoffa(container) {
+      const allCategories = [...new Set(appState.items.map(i => i.cat))];
+      const prismaLayout = STORE_LAYOUTS["prisma_jumbo"] || [];
+      const categories = allCategories.sort((a, b) => {
+        const idxA = prismaLayout.indexOf(a);
+        const idxB = prismaLayout.indexOf(b);
+        if (idxA === -1 && idxB === -1) return a.localeCompare(b);
+        if (idxA === -1) return 1;
+        if (idxB === -1) return -1;
+        return idxA - idxB;
+      });
+
+      const categoriesHtml = buildSoffaCategoriesHtml(categories);
+
+      container.innerHTML = `
+        <div class="search-box">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="soffa-search-input" class="search-input" placeholder="Etsi tuotetta tai kategoriaa..." value="${searchQuery}" oninput="onSearchChange(this.value)">
+          <button class="search-clear-btn" id="soffa-search-clear" onclick="clearSearch()" style="display: ${searchQuery ? 'flex' : 'none'};">✕</button>
+        </div>
+
+        <div class="add-section">
+          <div class="add-section-title"><span>+ Lisää uusi tuote tai sanele listaa</span></div>
+          <div class="form-row">
+            <div class="form-inputs-group">
+              <input type="text" id="new-item-name" class="input-field" placeholder="Tuote (tai sanele mikillä)">
+              <input type="number" id="new-item-qty" class="qty-field" placeholder="Määrä (3/300)">
+              <button class="btn-mic" id="btn-mic" onclick="startDictation()" title="Sanele useita tuotteita kerralla: 'maito ja lohi ja kurkku'">🎤</button>
+            </div>
+            <select id="new-item-cat" class="select-field">
+              ${categories.map(c => `<option value="${c}">${c}</option>`).join("")}
+            </select>
+            <button class="btn-add" onclick="addNewProduct()">Lisää kauppalappuun</button>
+          </div>
+        </div>
+
+        <div id="soffa-categories-container">
+          ${categoriesHtml || '<div class="empty-state">Ei hakua vastaavia tuotteita</div>'}
+        </div>
+      `;
+    }
+
+    function buildSoffaCategoriesHtml(categories) {
+      const query = (searchQuery || "").toLowerCase();
+      const isSearching = query.length > 0;
+      const filteredItems = appState.items.filter(item => {
+        if (!query) return true;
+        return item.name.toLowerCase().includes(query) || item.cat.toLowerCase().includes(query);
+      });
+
+      let html = "";
+      categories.forEach(cat => {
+        const catItems = filteredItems.filter(i => i.cat === cat).sort((a, b) => a.name.localeCompare(b.name, 'fi'));
+        if (catItems.length === 0) return;
+
+        const isOpen = isSearching || categoryOpenState[cat] === true;
+        const activeCount = catItems.filter(i => i.active).length;
+
+        let itemsRows = "";
+        if (isOpen) {
+          itemsRows = catItems.map(item => {
+            const globalIdx = appState.items.findIndex(x => x.name === item.name && x.cat === item.cat);
+            const qtyStr = formatQty(item.qty);
+            const isDeal = item.name.includes("(tarjous:");
+
+            return `
+              <div class="product-row" onclick="toggleActive(${globalIdx})">
+                <div class="product-info-inline">
+                  <span class="product-name">${item.name}</span>
+                  <span class="product-cat-tag">(${item.cat})</span>
+                  ${isDeal ? `<span class="deal-badge-tag">Tarjous</span>` : ''}
+                  ${qtyStr ? `<span class="qty-tag" onclick="event.stopPropagation(); openQtyModal(${globalIdx})">${qtyStr} ✎</span>` : ''}
+                </div>
+                <div class="row-actions">
+                  ${item.active ? `
+                    <button class="btn-qty-quick" onclick="event.stopPropagation(); openQtyModal(${globalIdx})">
+                      ${qtyStr || '+ määrä'}
+                    </button>
+                  ` : ''}
+                  <button class="btn-delete-row" onclick="event.stopPropagation(); openDeleteModal(${globalIdx})">🗑</button>
+                  <div class="checkbox-round ${item.active ? 'checked' : ''}"></div>
+                </div>
+              </div>
+            `;
+          }).join("");
+        }
+
+        html += `
+          <div class="category-group">
+            <div class="category-header" onclick="toggleCategory('${cat}')">
+              <div style="display: flex; align-items: center;">
+                <span class="category-toggle-icon ${isOpen ? 'open' : ''}">▶</span>
+                <span>${cat}</span>
+              </div>
+              <span>${activeCount} valittu</span>
+            </div>
+            ${isOpen ? itemsRows : ''}
+          </div>
+        `;
+      });
+      return html;
+    }
+
+    function renderStore(container) {
+      const layout = STORE_LAYOUTS[activeStoreKey] || [];
+      const storeItems = appState.items.filter(i => i.active && layout.includes(i.cat));
+      const uncollectedItems = storeItems.filter(i => !i.done);
+      const otherActiveItems = appState.items.filter(i => i.active && !i.done && !layout.includes(i.cat));
+
+      let storeContentHtml = `<div class="store-badge">${STORE_NAMES[activeStoreKey]} • Hyllyjärjestys</div>`;
+
+      if (uncollectedItems.length === 0 && otherActiveItems.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">🛋️</div>
+            <h3>Kauppalappu on tyhjä tähän kauppaan</h3>
+            <p>Valitse ostettavia tuotteita kotisohvalla tai Tammiston tarjouksista.</p>
+            <br>
+            <button class="btn-add" style="margin: 0 auto;" onclick="navigate('soffa')">Täytä kotisohvalla</button>
+          </div>
+        `;
+        return;
+      }
+
+      layout.forEach(category => {
+        const catItems = uncollectedItems.filter(i => i.cat === category).sort((a, b) => a.name.localeCompare(b.name, 'fi'));
+        if (catItems.length === 0) return;
+
+        const itemsRows = catItems.map(item => {
+          const globalIdx = appState.items.findIndex(x => x.name === item.name && x.cat === item.cat);
+          const qtyStr = formatQty(item.qty);
+
+          return `
+            <div class="store-item" onclick="markDone(${globalIdx})">
+              <div class="product-info-inline">
+                <span class="product-name">${item.name}</span>
+                <span class="product-cat-tag">(${item.cat})</span>
+                ${qtyStr ? `<span class="qty-tag">${qtyStr}</span>` : ''}
+              </div>
+              <button class="store-item-btn">✓ Kuittaa</button>
+            </div>
+          `;
+        }).join("");
+
+        storeContentHtml += `
+          <div class="category-group">
+            <div class="category-header">${category} (${catItems.length})</div>
+            ${itemsRows}
+          </div>
+        `;
+      });
+
+      if (otherActiveItems.length > 0) {
+        storeContentHtml += `
+          <div style="margin-top: 24px; padding-top: 12px; border-top: 1px dashed #cbd5e1;">
+            <div style="font-size: 0.74rem; font-weight: 700; color: #64748b; margin-bottom: 7px;">
+              💡 Muilla listoilla tai tarjouksissa odottaa (${otherActiveItems.length})
+            </div>
+            ${otherActiveItems.map(item => {
+              const globalIdx = appState.items.findIndex(x => x.name === item.name && x.cat === item.cat);
+              const qtyStr = formatQty(item.qty);
+              return `
+                <div class="product-row" style="margin-bottom: 6px;" onclick="markDone(${globalIdx})">
+                  <div class="product-info-inline">
+                    <span class="product-name">${item.name}</span>
+                    <span class="product-cat-tag">(${item.cat})</span>
+                    ${qtyStr ? `<span class="qty-tag">${qtyStr}</span>` : ''}
+                  </div>
+                  <button class="store-item-btn" style="padding: 4px 8px; font-size: 0.72rem;">Kuittaa täältä ✓</button>
+                </div>
+              `;
+            }).join("")}
+          </div>
+        `;
+      }
+
+      container.innerHTML = storeContentHtml;
+    }
+
+    window.toggleCategory = function(cat) {
+      categoryOpenState[cat] = !categoryOpenState[cat];
+      render();
+    };
+
+    window.toggleActive = function(index) {
+      if (!appState.items[index]) return;
+      appState.items[index].active = !appState.items[index].active;
+      appState.items[index].done = false;
+      pushToCloud();
+      render();
+    };
+
+    window.markDone = function(index) {
+      if (!appState.items[index]) return;
+      appState.items[index].done = true;
+      lastCollectedIndex = index;
+      pushToCloud();
+      showUndoBar(`Kerätty: ${appState.items[index].name}`);
+      render();
+    };
+
+    window.addNewProduct = function() {
+      const nameInp = document.getElementById("new-item-name");
+      const catSelect = document.getElementById("new-item-cat");
+      const name = nameInp ? nameInp.value.trim() : "";
+      const cat = catSelect ? catSelect.value : "Muut";
+      if (!name) return;
+
+      // Jos käyttäjä kirjoittaa käsin "maito ja leipä ja voi"
+      if (name.includes(" ja ") || name.includes(" sekä ") || name.includes(",")) {
+        processRawTextToShoppingList(name);
+        nameInp.value = "";
+        return;
+      }
+
+      appState.items.unshift({ name, cat, active: true, done: false, qty: 1 });
+      nameInp.value = "";
+      pushToCloud();
+      render();
+    };
+
+    window.openDeleteModal = function(index) {
+      deleteTargetIndex = index;
+      document.getElementById("delete-modal").style.display = "flex";
+    };
+
+    window.closeDeleteModal = function() {
+      deleteTargetIndex = null;
+      document.getElementById("delete-modal").style.display = "none";
+    };
+
+    window.executeDeleteProduct = function() {
+      if (deleteTargetIndex !== null) {
+        appState.items.splice(deleteTargetIndex, 1);
+        closeDeleteModal();
+        pushToCloud();
+        render();
+      }
+    };
+
+    window.openQtyModal = function(index) {
+      qtyTargetIndex = index;
+      document.getElementById("qty-modal-input").value = appState.items[index].qty || "";
+      document.getElementById("qty-modal").style.display = "flex";
+    };
+
+    window.closeQtyModal = function() {
+      qtyTargetIndex = null;
+      document.getElementById("qty-modal").style.display = "none";
+    };
+
+    window.saveQtyModal = function() {
+      if (qtyTargetIndex !== null) {
+        const val = document.getElementById("qty-modal-input").value;
+        appState.items[qtyTargetIndex].qty = val ? Number(val) : null;
+        closeQtyModal();
+        pushToCloud();
+        render();
+      }
+    };
+
+    window.onSearchChange = function(val) {
+      searchQuery = val;
+      const clearBtn = document.getElementById("soffa-search-clear");
+      if (clearBtn) {
+        clearBtn.style.display = val ? "flex" : "none";
+      }
+
+      const listContainer = document.getElementById("soffa-categories-container");
+      if (listContainer) {
+        const allCategories = [...new Set(appState.items.map(i => i.cat))];
+        const prismaLayout = STORE_LAYOUTS["prisma_jumbo"] || [];
+        const categories = allCategories.sort((a, b) => {
+          const idxA = prismaLayout.indexOf(a);
+          const idxB = prismaLayout.indexOf(b);
+          if (idxA === -1 && idxB === -1) return a.localeCompare(b);
+          if (idxA === -1) return 1;
+          if (idxB === -1) return -1;
+          return idxA - idxB;
+        });
+
+        const html = buildSoffaCategoriesHtml(categories);
+        listContainer.innerHTML = html || '<div class="empty-state">Ei hakua vastaavia tuotteita</div>';
+      }
+    };
+
+    window.clearSearch = function() {
+      searchQuery = "";
+      const inp = document.getElementById("soffa-search-input");
+      if (inp) {
+        inp.value = "";
+        inp.focus();
+      }
+      onSearchChange("");
+    };
+
+    function showUndoBar(label) {
+      const bar = document.getElementById("undo-bar");
+      const text = document.getElementById("undo-text");
+      text.innerText = label;
+      bar.style.display = "flex";
+      if (undoTimer) clearTimeout(undoTimer);
+      undoTimer = setTimeout(() => { bar.style.display = "none"; }, 4000);
+    }
+
+    window.triggerUndo = function() {
+      if (lastCollectedIndex !== null && appState.items[lastCollectedIndex]) {
+        appState.items[lastCollectedIndex].done = false;
+        pushToCloud();
+        lastCollectedIndex = null;
+        render();
+      }
+      document.getElementById("undo-bar").style.display = "none";
+    };
+
+    window.openFirebaseSettings = function() {
+      document.getElementById("firebase-modal").style.display = "flex";
+    };
+
+    window.closeFirebaseSettings = function() {
+      document.getElementById("firebase-modal").style.display = "none";
+    };
+
+    window.handleWhatsAppImport = function() {
+      document.getElementById("wa-modal").style.display = "flex";
+    };
+
+    window.closeWaModal = function() {
+      document.getElementById("wa-modal").style.display = "none";
+    };
+
+    window.executeWaImport = function() {
+      const inp = document.getElementById("wa-text-input");
+      const val = inp ? inp.value : "";
+      if (val) {
+        processRawTextToShoppingList(val);
+      }
+      closeWaModal();
+    };
+
+    /* Kamera ja OCR -toiminnallisuudet */
+    window.triggerCameraCapture = function() {
+      const fileInput = document.getElementById("camera-file-input");
+      if (fileInput) {
+        fileInput.value = "";
+        fileInput.click();
+      }
+    };
+
+    window.closeOcrModal = function() {
+      document.getElementById("ocr-modal").style.display = "none";
+    };
+
+    window.executeOcrImport = function() {
+      const area = document.getElementById("ocr-text-result");
+      const val = area ? area.value : "";
+      if (val) {
+        processRawTextToShoppingList(val);
+      }
+      closeOcrModal();
+    };
+
+    async function handleImageFileSelected(e) {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+
+      const modal = document.getElementById("ocr-modal");
+      const statusBox = document.getElementById("ocr-status-box");
+      const statusText = document.getElementById("ocr-status-text");
+      const resultArea = document.getElementById("ocr-text-result");
+      const btnAccept = document.getElementById("btn-ocr-accept");
+
+      modal.style.display = "flex";
+      statusBox.style.display = "flex";
+      btnAccept.disabled = true;
+      resultArea.value = "";
+      statusText.innerText = "Valmistellaan kuvaa ja ladataan OCR-moottoria...";
+
+      try {
+        const processedImageBlob = await preprocessImageForOcr(file);
+
+        statusText.innerText = "Tunnistetaan tekstiä...";
+
+        if (typeof Tesseract === "undefined") {
+          throw new Error("Tesseract.js ei latautunut verkkoyhteyden vuoksi.");
+        }
+
+        const worker = await Tesseract.createWorker("fin", 1, {
+          logger: m => {
+            if (m.status === "recognizing text") {
+              const pct = Math.round((m.progress || 0) * 100);
+              statusText.innerText = `Luetaan tekstiä... ${pct}%`;
+            }
+          }
+        });
+
+        const { data: { text } } = await worker.recognize(processedImageBlob);
+        await worker.terminate();
+
+        statusBox.style.display = "none";
+        btnAccept.disabled = false;
+
+        const cleanedLines = text
+          .split("\n")
+          .map(l => l.replace(/[^a-zA-Z0-9åäöÅÄÖ\s\-\,\.\(\)]/g, "").trim())
+          .filter(l => l.length >= 2);
+
+        resultArea.value = cleanedLines.join("\n");
+
+        if (cleanedLines.length === 0) {
+          statusBox.style.display = "flex";
+          statusText.innerText = "Kuvasta ei löytynyt selkeää tekstiä. Voit kirjoittaa käsin.";
+        }
+      } catch (err) {
+        console.error("OCR virhe:", err);
+        statusBox.style.display = "flex";
+        statusText.innerText = "Virhe tunnistuksessa: " + (err.message || "Tuntematon virhe");
+        btnAccept.disabled = false;
+      }
+    }
+
+    function preprocessImageForOcr(file) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = function(evt) {
+          const img = new Image();
+          img.onload = function() {
+            const canvas = document.createElement("canvas");
+            const maxDimension = 1600;
+            let width = img.width;
+            let height = img.height;
+
+            if (width > maxDimension || height > maxDimension) {
+              if (width > height) {
+                height = Math.round((height * maxDimension) / width);
+                width = maxDimension;
+              } else {
+                width = Math.round((width * maxDimension) / height);
+                height = maxDimension;
+              }
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(img, 0, 0, width, height);
+
+            const imgData = ctx.getImageData(0, 0, width, height);
+            const data = imgData.data;
+
+            const factor = 1.3;
+            for (let i = 0; i < data.length; i += 4) {
+              const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+              const highContrast = Math.min(255, Math.max(0, factor * (gray - 128) + 128));
+              data[i] = highContrast;
+              data[i + 1] = highContrast;
+              data[i + 2] = highContrast;
+            }
+            ctx.putImageData(imgData, 0, 0);
+
+            canvas.toBlob(resolve, "image/jpeg", 0.9);
+          };
+          img.src = evt.target.result;
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    /* Puheentunnistus ja "ja"-sanalla luetteleminen */
+    window.startDictation = function() {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        showUndoBar("Selaimesi ei tue puhesanelua (toimii mm. Chromessa ja Safarissa).");
+        return;
+      }
+
+      const micBtn = document.getElementById("btn-mic");
+      if (micBtn && micBtn.classList.contains("recording")) {
+        return;
+      }
+
+      const recognition = new SpeechRecognition();
+      recognition.lang = "fi-FI";
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+
+      recognition.onstart = function() {
+        if (micBtn) micBtn.classList.add("recording");
+        showUndoBar("🎤 Sanele vapaasti: esim. 'maito ja kaksi leipää ja lohi'");
+      };
+
+      recognition.onresult = function(event) {
+        const transcript = event.results[0][0].transcript;
+        if (transcript) {
+          processRawTextToShoppingList(transcript);
+        }
+      };
+
+      recognition.onerror = function(event) {
+        showUndoBar("Sanelu keskeytyi (" + (event.error || "virhe") + ")");
+        if (micBtn) micBtn.classList.remove("recording");
+      };
+
+      recognition.onend = function() {
+        if (micBtn) micBtn.classList.remove("recording");
+      };
+
+      try {
+        recognition.start();
+      } catch (err) {
+        showUndoBar("Mikrofonin käynnistys epäonnistui.");
+      }
+    };
+
+    // Sanalliset lukusanat numeroiksi puhetta varten
+    const WORD_TO_NUM = {
+      "yksi": 1, "yhden": 1, "yhtä": 1,
+      "kaksi": 2, "kahta": 2, "kahden": 2,
+      "kolme": 3, "kolmea": 3,
+      "neljä": 4, "neljää": 4,
+      "viisi": 5, "viittä": 5,
+      "kuusi": 6, "kuutta": 6,
+      "seitsemän": 7, "kahdeksan": 8, "yhdeksän": 9, "kymmenen": 10
+    };
+
+    /* Keskitetty älykäs tekstin käsittelijä (Sanelu, WA, Kamera) */
+    function processRawTextToShoppingList(rawText) {
+      if (!rawText) return;
+
+      // 1. Esipuhdistus ja puhekielen aloitussanojen karsinta
+      let cleanText = rawText
+        .replace(/^(muista(pa)?\s+ostaa|osta|tuo|hae|lisää|kauppalappu:?|kauppaan:?)\s+/i, "")
+        .replace(/\b(ole hyvä ja|voisitko hakea|viitsitkö ostaa)\b/gi, "")
+        .trim();
+
+      // Korvataan puheessa sanotut lukusanat numeroiksi
+      Object.keys(WORD_TO_NUM).forEach(word => {
+        const reg = new RegExp(`\\b${word}\\b`, "gi");
+        cleanText = cleanText.replace(reg, WORD_TO_NUM[word]);
+      });
+
+      // 2. Pilkonta "ja"-, "sekä"-, "tai"-, pilkku- ja rivinvaihtokohdista
+      const chunks = cleanText
+        .split(/(?:\s+(?:ja|sekä|tai|\+|ynnä)\s+|[\n,\r\t;]+)/i)
+        .map(c => c.trim())
+        .filter(c => c.length >= 2);
+
+      let count = 0;
+
+      chunks.forEach(chunk => {
+        let line = chunk.replace(/^[-*•–—\d+\.)]+\s*/, "").trim();
+        if (line.length < 2) return;
+
+        // Etsitään mahdollinen määrä (esim. "2 maitoa", "500g jauhelihaa", "3 kpl kurkkua")
+        let parsedQty = 1;
+        const numMatch = line.match(/^(\d+)\s*(kpl|g|kg|prk|purkkia|pkt|pussia|litraa|l)?\s*(.*)$/i) ||
+                         line.match(/^(.*?)\s*(\d+)\s*(kpl|g|kg|prk|purkkia|pkt|pussia|litraa|l)?$/i);
+
+        let itemName = line;
+
+        if (numMatch) {
+          const num = parseInt(numMatch[1] || numMatch[2], 10);
+          const unit = (numMatch[2] || numMatch[3] || "").toLowerCase();
+          const remainder = (numMatch[3] || numMatch[1] || "").trim();
+
+          if (!isNaN(num) && num > 0) {
+            parsedQty = unit.startsWith("kg") ? num * 1000 : num;
+            if (remainder && remainder.length >= 2) {
+              itemName = remainder;
+            }
+          }
+        }
+
+        // Siistitään tuotteen nimi
+        itemName = itemName
+          .replace(/^(kpl|purkki|purkkia|paketti|pakettia|litra|litraa|kilo|kiloa)\s+/i, "")
+          .replace(/[()]/g, "")
+          .trim();
+
+        if (itemName.length < 2) return;
+
+        const lowerItem = itemName.toLowerCase();
+
+        // Etsitään vastaako Corsian tunnettua tuotekatalogia
+        let matchedCatalog = null;
+        if (lowerItem.includes("maito")) {
+          matchedCatalog = appState.items.find(i => i.name.includes("Laktoositon kevyt (sininen)")) || appState.items.find(i => i.name.includes("MAITO:"));
+        } else if (lowerItem.includes("lohi")) {
+          matchedCatalog = appState.items.find(i => i.name === "Lohi (tuore)");
+        } else if (lowerItem.includes("kurkku")) {
+          matchedCatalog = appState.items.find(i => i.name === "Kurkku");
+        } else if (lowerItem.includes("banaani")) {
+          matchedCatalog = appState.items.find(i => i.name === "Banaani");
+        } else if (lowerItem.includes("jauheliha")) {
+          matchedCatalog = appState.items.find(i => i.name === "Jauheliha");
+        } else if (lowerItem.includes("voi") && !lowerItem.includes("leipä")) {
+          matchedCatalog = appState.items.find(i => i.name === "VOI: Voi");
+        } else if (lowerItem.includes("muna")) {
+          matchedCatalog = appState.items.find(i => i.name === "MUNA: Kananmunat");
+        } else {
+          matchedCatalog = appState.items.find(i => {
+            const rawCatName = i.name.toLowerCase().replace(/^[a-zåäö]+:\s*/i, "");
+            return rawCatName === lowerItem || lowerItem.includes(rawCatName) || rawCatName.includes(lowerItem);
+          });
+        }
+
+        if (matchedCatalog) {
+          matchedCatalog.active = true;
+          matchedCatalog.done = false;
+          matchedCatalog.qty = parsedQty;
+        } else {
+          // Luodaan uusi tuote ja tunnistetaan kategoria automaattisesti
+          const formattedTitle = itemName.charAt(0).toUpperCase() + itemName.slice(1);
+          const assignedCat = resolveStandardCategory("Muut", itemName);
+
+          appState.items.unshift({
+            name: formattedTitle,
+            cat: assignedCat,
+            active: true,
+            done: false,
+            qty: parsedQty
+          });
+        }
+        count++;
+      });
+
+      if (count > 0) {
+        pushToCloud();
+        render();
+        showUndoBar(`Lisätty ${count} tuotetta ostoslistalle!`);
+      } else {
+        showUndoBar("Puheesta ei tunnistettu tuotteita.");
+      }
+    }
+
+    window.addEventListener("DOMContentLoaded", initData);
+  </script>
+</body>
+</html>
