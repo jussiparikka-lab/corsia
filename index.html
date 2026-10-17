@@ -182,7 +182,7 @@
       background: linear-gradient(135deg, #e8f5e9 0%, #dcedc8 100%);
       border-color: #c5e1a5;
       padding: 10px 12px;
-      margin-bottom: 48px; 
+      margin-bottom: 30px; 
     }
 
     .action-card.card-soffa .card-title {
@@ -213,6 +213,8 @@
       border: 1.5px solid #fdba74;
       padding: 12px 14px;
       box-shadow: 0 4px 12px rgba(234, 88, 12, 0.08);
+      margin-top: 24px;
+      margin-bottom: 20px;
     }
 
     .action-card.card-deals .card-title {
@@ -1919,8 +1921,14 @@
     const DAILY_DEALS = [
       { id: "d1", cat: "🎉 Avajaistarjoukset (Vantaa)", name: "Uusi Pesula: Harjaton Tehopesu + Vaha", price: "14,90 € (-50%)", store: "Neste K Tammisto", mainCat: "Muut" },
       { id: "d2", cat: "🎉 Avajaistarjoukset (Vantaa)", name: "Naudan ulkofileepala", price: "9,90 €/kg", store: "K-Citymarket Tammisto", mainCat: "Liha" },
-      { id: "d3", cat: "🐟 Kala & Merenelävät", name: "Norjan lohifilee (tuore C-leikkuu)", price: "12,90 €/kg", store: "K-Citymarket Tammisto", mainCat: "Liha" },
-      { id: "d4", cat: "🐟 Kala & Merenelävät", name: "Lämminsavustettu kirjolohipala", price: "16,90 €/kg", store: "Prisma Jumbo", mainCat: "Liha" }
+      { id: "d3", cat: "🐟 Kala & Merenelävät", name: "Norjan lohifilee (tuore C-leikkuu)", price: "12,90 €/kg (norm. 18,90€)", store: "K-Citymarket Tammisto", mainCat: "Liha" },
+      { id: "d4", cat: "🐟 Kala & Merenelävät", name: "Lämminsavustettu kirjolohipala", price: "16,90 €/kg", store: "Prisma Jumbo", mainCat: "Liha" },
+      { id: "d5", cat: "🥩 Liha & Siipikarja", name: "Naudan sisäpaisti (A-luokka)", price: "11,90 €/kg (-35%)", store: "K-Citymarket Tammisto", mainCat: "Liha" },
+      { id: "d6", cat: "🥩 Liha & Siipikarja", name: "Kariniemen Kananpojan fileesuikaleet 400g", price: "2,99 €/pkt (norm. 4,29€)", store: "Prisma Jumbo", mainCat: "Liha" },
+      { id: "d7", cat: "🛒 K-Citymarket Jumbo - Päivän Tärppi", name: "Fiskars Hard Face -paistokasari 28cm", price: "39,90 € Plussalla (norm. 79,90€)", store: "K-Citymarket Jumbo", mainCat: "Muut" },
+      { id: "d8", cat: "🍕 Lidlin Teemaviikko (Aasian Maut)", name: "Vitasia Sushilajitelma 400g", price: "4,99 € (Teemauutuus)", store: "Lidl Tammisto", mainCat: "Einekset" },
+      { id: "d9", cat: "🚗 Autopesutarjoukset", name: "Tehopesu koodilla PESU24 automaatista", price: "14,90 € (norm. 29,90€)", store: "Neste K Tammisto", mainCat: "Muut" },
+      { id: "d10", cat: "🎁 Muut aluetärpit (Offerilla)", name: "Ravintola BISTRO: 2x Lounas yhden hinnalla", price: "13,50 € (norm. 27,00€)", store: "Offerilla Tammisto", mainCat: "Einekset" }
     ];
 
     let appState = {
@@ -2116,16 +2124,7 @@
         </div>
 
         <div class="card-list">
-          <div class="action-card card-deals" onclick="navigate('deals')">
-            <div class="card-icon">🏷️</div>
-            <div class="card-info">
-              <div class="card-title">Tarjoukset & Paikallistärpit</div>
-              <div class="card-desc">Tammisto, Kala, Liha, Jumbo & Avajaistarjoukset</div>
-            </div>
-            <div class="card-arrow">›</div>
-          </div>
-
-          <div class="action-card card-soffa" onclick="navigate('soffa')">
+          <div class="action-card card-soffa" onclick="navigate('soffa')" style="margin-bottom: 30px;">
             <div class="card-icon">🛋️</div>
             <div class="card-info">
               <div class="card-title">Täytä kauppalappua kotisohvalla</div>
@@ -2148,16 +2147,28 @@
           </div>
 
           <div class="action-card" onclick="navigate('store', 'cm_tammisto')">
-            <div class="logo-container" style="background: #d6001c;">
-              <text x="50%" y="65%" fill="#ffffff" font-family="sans-serif" font-weight="900" font-size="12" text-anchor="middle">CITYMARKET TAMMISTO</text>
+            <div class="logo-container" style="background: #ffffff; border-color: #e2e8f0;">
+              <svg width="100%" height="100%" viewBox="0 0 180 42" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
+                <line x1="8" y1="10" x2="28" y2="10" stroke="#ff6b00" stroke-width="3" />
+                <text x="18" y="28" fill="#ff6b00" font-family="Arial Black, sans-serif" font-weight="900" font-size="20" text-anchor="middle">K</text>
+                <line x1="8" y1="32" x2="28" y2="32" stroke="#ff6b00" stroke-width="3" />
+                <text x="32" y="28" fill="#c8102e" font-family="Arial Black, sans-serif" font-weight="900" font-size="21" letter-spacing="-0.5">CITYMARKET</text>
+                <text x="90" y="41" fill="#94a3b8" font-family="Arial, sans-serif" font-weight="800" font-size="8.5" letter-spacing="2" text-anchor="middle">TAMMISTO</text>
+              </svg>
             </div>
             <div class="card-info"><div class="card-title">K-Citymarket Tammisto</div><div class="card-desc">Hyllyreitin mukainen järjestys</div></div>
             <div class="card-arrow">›</div>
           </div>
 
           <div class="action-card" onclick="navigate('store', 'cm_jumbo')">
-            <div class="logo-container" style="background: #d6001c;">
-              <text x="50%" y="65%" fill="#ffffff" font-family="sans-serif" font-weight="900" font-size="12" text-anchor="middle">CITYMARKET JUMBO</text>
+            <div class="logo-container" style="background: #ffffff; border-color: #e2e8f0;">
+              <svg width="100%" height="100%" viewBox="0 0 180 42" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
+                <line x1="8" y1="10" x2="28" y2="10" stroke="#ff6b00" stroke-width="3" />
+                <text x="18" y="28" fill="#ff6b00" font-family="Arial Black, sans-serif" font-weight="900" font-size="20" text-anchor="middle">K</text>
+                <line x1="8" y1="32" x2="28" y2="32" stroke="#ff6b00" stroke-width="3" />
+                <text x="32" y="28" fill="#c8102e" font-family="Arial Black, sans-serif" font-weight="900" font-size="21" letter-spacing="-0.5">CITYMARKET</text>
+                <text x="90" y="41" fill="#94a3b8" font-family="Arial, sans-serif" font-weight="800" font-size="8.5" letter-spacing="2" text-anchor="middle">JUMBO</text>
+              </svg>
             </div>
             <div class="card-info"><div class="card-title">K-Citymarket Jumbo</div><div class="card-desc">Hyllyreitin mukainen järjestys</div></div>
             <div class="card-arrow">›</div>
@@ -2195,7 +2206,25 @@
             </button>
           </div>
         </div>
-        <div class="home-footer">Jussi 2026</div>
+
+        <div class="action-card card-deals" onclick="navigate('deals')">
+          <div class="card-icon">🔥</div>
+          <div class="card-info">
+            <div class="card-title">Tarjoukset & paikallistärpit</div>
+            <div class="card-desc">Tammisto, Jumbo & erikoistarjoukset</div>
+          </div>
+          <div class="card-arrow">›</div>
+        </div>
+
+        <div class="home-footer">
+          <div style="font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; margin-bottom: 6px;">
+            Powered by
+          </div>
+          <div style="font-size: 0.68rem; color: #94a3b8; margin-bottom: 8px;">
+            Gemini 3.8 Vision ⚫ Tesseract OCR ⚫ Firebase ⚫ Web Speech
+          </div>
+          <div style="font-size: 0.75rem; color: #94a3b8; font-weight: 600;">Jussi 2026</div>
+        </div>
       `;
     }
 
@@ -2697,10 +2726,6 @@
       if (modal) modal.style.display = "none";
     };
 
-    // ==========================================
-    // ÄLYOMINAISUUDET (Vision, Sanelu, OCR, WA)
-    // ==========================================
-
     /* 1. Älykäs kameratunnistus (Gemini Vision) ruokatuotteille */
     window.triggerVisionCameraCapture = function() {
       const fileInput = document.getElementById("vision-file-input");
@@ -2792,7 +2817,6 @@
       }
 
       try {
-         // PÄIVITETTY: Käytetään uusinta ja tuettua gemini-3.8-flash -mallia kuvantunnistukseen
          const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`;
 
          const requestBody = {
@@ -2807,7 +2831,10 @@
 
          const response = await fetch(url, {
            method: "POST",
-           headers: { "Content-Type": "application/json" },
+           headers: { 
+             "Content-Type": "application/json",
+             "x-goog-api-key": apiKey 
+           },
            body: JSON.stringify(requestBody)
          });
 
