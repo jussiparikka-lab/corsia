@@ -378,24 +378,24 @@
       background: #dcfce7;
     }
 
-    .camera-subtle-btn {
-      width: 32px;
-      height: 32px;
-      background: #f8fafc;
-      border: 1px solid var(--border);
-      border-radius: 50%;
-      display: inline-flex;
+    .smart-cam-btn {
+      padding: 6px 14px;
+      background: #eff6ff;
+      border: 1px dashed #93c5fd;
+      border-radius: 20px;
+      color: #1d4ed8;
+      font-size: 0.74rem;
+      font-weight: 700;
+      display: flex;
       align-items: center;
-      justify-content: center;
-      font-size: 0.95rem;
+      gap: 6px;
       cursor: pointer;
-      box-shadow: var(--shadow-sm);
-      transition: background 0.15s;
+      transition: background 0.15s, transform 0.1s;
     }
 
-    .camera-subtle-btn:active {
-      background: #e2e8f0;
-      transform: scale(0.95);
+    .smart-cam-btn:active {
+      background: #dbeafe;
+      transform: scale(0.97);
     }
 
     .deals-bottom-card {
@@ -722,6 +722,7 @@
       font-size: 0.88rem;
       font-weight: 700;
       color: var(--text);
+      white-space: hidden;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -930,7 +931,6 @@
     <footer class="app-footer">
       <div>POWERED BY</div>
       <div class="app-footer-tech">
-        <span>Gemini Vision AI</span> •
         <span>Firebase Cloud</span> •
         <span>Web Speech AI</span>
       </div>
@@ -938,7 +938,6 @@
     </footer>
   </div>
 
-  <!-- Live Speech Dictation Modal -->
   <div class="modal-overlay" id="voice-modal" style="display: none;">
     <div class="modal-panel" style="text-align: center;">
       <h3 style="font-size: 1.05rem; color: #dc2626; margin-bottom: 2px;">🎙️ Kuunnellaan puhetta...</h3>
@@ -963,14 +962,13 @@
     </div>
   </div>
 
-  <!-- Diagnostics & Settings Modal -->
   <div class="modal-overlay" id="diag-modal" style="display: none;">
     <div class="modal-panel">
       <h3 style="font-size: 1.05rem; margin-bottom: 8px; color:#1e293b;">⚙️ Corsia Järjestelmä & Avain</h3>
       <div id="diag-content-box" style="font-size: 0.82rem; line-height: 1.5; color: #334155; margin-bottom: 12px;"></div>
       
       <div style="background:#f1f5f9; border-radius:10px; padding:10px; margin-bottom:12px;">
-        <label style="font-size:0.75rem; font-weight:800; color:#475569; display:block; margin-bottom:4px;">🔑 Gemini API-avain (AQ... tai AIza...):</label>
+        <label style="font-size:0.75rem; font-weight:800; color:#475569; display:block; margin-bottom:4px;">🔑 Gemini API-avain (tarjouksia varten):</label>
         <input type="text" id="manual-api-key-input" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:0.78rem; font-family:monospace; outline:none;" placeholder="Liitä tähän tarvittaessa uusi avain">
         <div style="display:flex; justify-content:flex-end; gap:6px; margin-top:6px;">
           <button onclick="resetDefaultKey()" style="padding:4px 8px; border-radius:6px; border:1px solid #cbd5e1; background:#ffffff; font-size:0.72rem; cursor:pointer;">Palauta oletus</button>
@@ -982,7 +980,6 @@
     </div>
   </div>
 
-  <!-- WhatsApp text input modal -->
   <div class="modal-overlay" id="wa-modal" style="display: none;">
     <div class="modal-panel">
       <h3 style="font-size: 1.05rem; color: #15803d; margin-bottom: 6px;">💬 Tuo WhatsApp-viesti</h3>
@@ -995,8 +992,9 @@
     </div>
   </div>
 
-  <!-- Camera File Input (Hidden) -->
-  <input type="file" id="camera-file-input" accept="image/*" capture="environment" style="display: none;" onchange="handleReceiptImage(this)">
+  <!-- Piilotetut tiedostokentät kameroille -->
+  <input type="file" id="camera-note-input" accept="image/*" capture="environment" style="display: none;" onchange="handleSmartCameraCapture(this, 'note')">
+  <input type="file" id="camera-item-input" accept="image/*" capture="environment" style="display: none;" onchange="handleSmartCameraCapture(this, 'item')">
 
   <!-- Undo Bar -->
   <div class="undo-bar-wrap" id="undo-bar" style="display: none;">
@@ -1468,8 +1466,8 @@
             <div class="wa-subtle-btn" onclick="openWaModal()">
               <span>💬 Tuo WhatsApp-lista</span>
             </div>
-            <div class="camera-subtle-btn" onclick="triggerCameraInput()" title="Skannaa tuote, kuitti tai lappu">
-              📷
+            <div class="smart-cam-btn" onclick="triggerSmartCamera('note')" title="Kuvaa käsinkirjoitettu kauppalappu">
+              <span>📷 Lue kauppalappu</span>
             </div>
           </div>
 
@@ -1554,7 +1552,7 @@
               <input type="text" id="soffa-add-name" class="soffa-input-name" placeholder="Tuotteen nimi (esim. Kauramaito)" />
               <input type="text" id="soffa-add-qty" class="soffa-input-qty" placeholder="1 kpl" />
               <button class="soffa-icon-btn" onclick="startVoiceRecognition()" title="Puhu sanelemalla">🎤</button>
-              <button class="soffa-icon-btn" onclick="triggerCameraInput()" title="Skannaa tuote, kuitti tai lappu">📷</button>
+              <button class="soffa-icon-btn" onclick="triggerSmartCamera('item')" title="Tunnista tuote & paino kameralla" style="color: #0284c7;">📷</button>
             </div>
             <select id="soffa-add-cat" class="soffa-category-select">
               ${allCategories.map(c => `<option value="${c}">${c.toUpperCase()}</option>`).join("")}
@@ -2026,23 +2024,31 @@
       showUndoBar(`🎙️ Tunnistettu ${addedCount} tuotetta!`);
     }
 
-    window.triggerCameraInput = function() {
-      const fileInp = document.getElementById("camera-file-input");
+    window.openWaModal = function() {
+      document.getElementById("wa-modal").style.display = "flex";
+    };
+
+    window.closeWaModal = function() {
+      document.getElementById("wa-modal").style.display = "none";
+    };
+
+    window.triggerSmartCamera = function(mode) {
+      const inputId = mode === 'note' ? 'camera-note-input' : 'camera-item-input';
+      const fileInp = document.getElementById(inputId);
       if (fileInp) {
         fileInp.value = "";
         fileInp.click();
       }
     };
 
-    function compressImageForVision(file, maxDimension = 800, quality = 0.65) {
+    function compressImageForAI(file, maxDimension = 1000, quality = 0.7) {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.onload = (readerEvent) => {
+        reader.onload = (e) => {
           const img = new Image();
           img.onload = () => {
             let width = img.width;
             let height = img.height;
-
             if (width > maxDimension || height > maxDimension) {
               if (width > height) {
                 height = Math.round((height * maxDimension) / width);
@@ -2052,142 +2058,120 @@
                 height = maxDimension;
               }
             }
-
             const canvas = document.createElement("canvas");
             canvas.width = width;
             canvas.height = height;
             const ctx = canvas.getContext("2d");
-            
-            ctx.fillStyle = "#FFFFFF";
+            ctx.fillStyle = "#ffffff";
             ctx.fillRect(0, 0, width, height);
             ctx.drawImage(img, 0, 0, width, height);
-
-            const compressedBase64 = canvas.toDataURL("image/jpeg", quality);
-            const cleanBase64 = compressedBase64.split(",")[1];
-            resolve({ base64: cleanBase64, mimeType: "image/jpeg" });
+            const dataUrl = canvas.toDataURL("image/jpeg", quality);
+            resolve({
+              base64: dataUrl.split(",")[1],
+              mimeType: "image/jpeg"
+            });
           };
           img.onerror = reject;
-          img.src = readerEvent.target.result;
+          img.src = e.target.result;
         };
         reader.onerror = reject;
         reader.readAsDataURL(file);
       });
     }
 
-    function categorizeProductName(rawName) {
-      const n = (rawName || "").toLowerCase();
-      if (n.includes("olut") || n.includes("kalja") || n.includes("koff") || n.includes("karhu") || n.includes("siideri") || n.includes("lonkero") || n.includes("sips") || n.includes("suklaa") || n.includes("karkki")) return "Herkut";
-      if (n.includes("maito") || n.includes("kerma") || n.includes("voi") || n.includes("jogurtti") || n.includes("rahka")) return "Maitotuotteet";
-      if (n.includes("kurkku") || n.includes("tomaatti") || n.includes("salaatti") || n.includes("sipuli") || n.includes("paprika") || n.includes("chili")) return "Hevi";
-      if (n.includes("peruna") || n.includes("porkkana") || n.includes("juures")) return "Juurekset";
-      if (n.includes("banaani") || n.includes("omena") || n.includes("appelsiini") || n.includes("avokado")) return "Hedelmät";
-      if (n.includes("jauheliha") || n.includes("kana") || n.includes("lohi") || n.includes("kala") || n.includes("pihvi") || n.includes("liha")) return "Liha";
-      if (n.includes("leipä") || n.includes("ruis") || n.includes("paahto") || n.includes("sämpylä")) return "Leivät";
-      if (n.includes("juusto") || n.includes("oltermanni")) return "Juustot";
-      if (n.includes("pasta") || n.includes("riisi") || n.includes("kahvi") || n.includes("jauho")) return "Kuivat";
-      if (n.includes("wc") || n.includes("paperi") || n.includes("pesu") || n.includes("shampoo") || n.includes("saippua")) return "Hygienia";
-      return "Muut";
-    }
-
-    window.handleReceiptImage = async function(input) {
+    window.handleSmartCameraCapture = async function(input, mode) {
       if (!input.files || !input.files[0]) return;
       const file = input.files[0];
-      showUndoBar("📷 Tiivistetään kuvaa & haistellaan tekoälyllä...");
+
+      if (mode === 'note') {
+        showUndoBar("📷 Luetaan käsinkirjoitettua kauppalappua...");
+      } else {
+        showUndoBar("📷 Tunnistetaan tuotetta ja painoa...");
+      }
 
       try {
-        const compressed = await compressImageForVision(file, 800, 0.65);
+        const compressed = await compressImageForAI(file);
         const apiKey = getEffectiveGeminiKey();
-        let parsedProducts = [];
 
-        const promptText = `Olet kokenut suomalainen ruokakauppa-apuri. Tunnista kuvasta tuotteet ja niiden määrät.
-Kuvassa voi olla loppunut pakkaus kotona (esim. olut, kahvi, leipä, maito) tai käsinkirjoitettu kauppalappu / kuitti.
-Päättele tuotteelle selkeä, yleinen suomenkielinen nimi (esim. "Karhu olut", "Kauramaito", "Banaani").
+        let promptText = "";
+        if (mode === 'note') {
+          promptText = `Olet avulias tekoäly suomalaisessa kauppa-apurissa.
+Lue kuvassa oleva käsinkirjoitettu kauppalappu, muistiinpano tai kuitti.
+Tunnista jokainen ostettava nimike ja sen määrä/paino jos mainittu.
+
+Sallitut kategoriat ovat täsmälleen: Hevi, Juurekset, Hedelmät, Liha, Leikkeleet, Einekset, Vegaaniset, Maitotuotteet, Juustot, Kuivat, Kuivat (mutta märät), Jauhot, Aasia / Texmex, Pakasteet, Leivät, Herkut, Hygienia, Apteekki, IKEA, Rautakauppa, Muut.
+
+Palauta VAIN JSON-taulukko muodossa:
+[{"name": "Tuotteen nimi", "cat": "Kategoria", "qty": 1}]
+Jos määrää ei mainita tai se on epäselvä, laita qty: null tai 1.`;
+        } else {
+          promptText = `Olet suomalainen kauppa-apuri. Kuvassa on yksittäinen kauppatuote tai pakkaus (esim. ruoka, juoma, pesuaine).
+Tunnista tuotteen selkeä nimi suomeksi ja sen paino tai pakkauskoko (esim. 400g jauheliha -> "Jauheliha 10%", paino 400).
+Jos paino/koko on grammoina, anna qty-arvoksi grammamäärä numerona (esim. 400). Jos kyseessä on kappale, anna kappalemäärä (esim. 1 tai 2).
 
 Sallitut kategoriat: Hevi, Juurekset, Hedelmät, Liha, Leikkeleet, Einekset, Vegaaniset, Maitotuotteet, Juustot, Kuivat, Kuivat (mutta märät), Jauhot, Aasia / Texmex, Pakasteet, Leivät, Herkut, Hygienia, Apteekki, IKEA, Rautakauppa, Muut.
 
 Palauta VAIN JSON-taulukko muodossa:
-[{"name": "Tuotteen nimi", "cat": "Kategoria", "qty": 1}]`;
-
-        let lastHttpError = "";
-
-        if (apiKey) {
-          const payload = {
-            contents: [{
-              role: "user",
-              parts: [
-                { text: promptText },
-                {
-                  inlineData: {
-                    mimeType: compressed.mimeType,
-                    data: compressed.base64
-                  }
-                }
-              ]
-            }],
-            generationConfig: { 
-              temperature: 0.1,
-              responseMimeType: "application/json"
-            }
-          };
-
-          // Kokeillaan malleja natiivilla ?key=-parametrilla (toimii luotettavimmin kaikille avaintyypeille ilman CORS preflight -virheitä)
-          const models = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash"];
-
-          for (const model of models) {
-            try {
-              const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json"
-                },
-                body: JSON.stringify(payload)
-              });
-
-              if (res.ok) {
-                const data = await res.json();
-                let raw = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-                raw = raw.replace(/```json/gi, "").replace(/```/g, "").trim();
-                const match = raw.match(/\[[\s\S]*\]/);
-                if (match) raw = match[0];
-                const arr = JSON.parse(raw);
-                if (Array.isArray(arr) && arr.length > 0) {
-                  parsedProducts = arr;
-                  break;
-                }
-              } else {
-                const errData = await res.json().catch(() => ({}));
-                lastHttpError = `${res.status}: ${errData?.error?.message || res.statusText}`;
-              }
-            } catch (netErr) {
-              lastHttpError = netErr.message || "Verkkovirhe";
-              console.warn("Gemini attempt note:", netErr);
-            }
-          }
-        } else {
-          lastHttpError = "Ei API-avainta asetettu";
+[{"name": "Tuotteen nimi", "cat": "Kategoria", "qty": 400}]`;
         }
 
-        if (!parsedProducts || parsedProducts.length === 0) {
-          showUndoBar(`⚠️ Tunnistus epäonnistui ${lastHttpError ? '(' + lastHttpError.substring(0, 48) + ')' : ''}`);
+        const payload = {
+          contents: [{
+            role: "user",
+            parts: [
+              { text: promptText },
+              {
+                inlineData: {
+                  mimeType: compressed.mimeType,
+                  data: compressed.base64
+                }
+              }
+            ]
+          }],
+          generationConfig: {
+            temperature: 0.1,
+            responseMimeType: "application/json"
+          }
+        };
+
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+          throw new Error("Pyyntö epäonnistui: " + res.status);
+        }
+
+        const data = await res.json();
+        let rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        rawText = rawText.replace(/```json/gi, "").replace(/```/g, "").trim();
+        const jsonMatch = rawText.match(/\[[\s\S]*\]/);
+        if (jsonMatch) rawText = jsonMatch[0];
+
+        const parsedList = JSON.parse(rawText);
+        if (!Array.isArray(parsedList) || parsedList.length === 0) {
+          showUndoBar("⚠️ Kuvasta ei tunnistettu tuotteita");
           return;
         }
 
-        let addedCount = 0;
-        parsedProducts.forEach(item => {
-          if (!item.name) return;
-          const cleanName = String(item.name).trim();
-          const targetCat = item.cat || categorizeProductName(cleanName);
-          const qty = item.qty ? Number(item.qty) : 1;
+        let count = 0;
+        parsedList.forEach(p => {
+          if (!p.name) return;
+          const cleanName = String(p.name).trim();
+          const targetCat = p.cat && CATEGORY_THEMES[p.cat] ? p.cat : "Muut";
+          const qty = p.qty ? Number(p.qty) : null;
 
-          const matchIdx = appState.items.findIndex(i => 
-            i.name.toLowerCase() === cleanName.toLowerCase() || 
+          const existingIdx = appState.items.findIndex(i =>
+            i.name.toLowerCase() === cleanName.toLowerCase() ||
             i.name.toLowerCase().includes(cleanName.toLowerCase())
           );
 
-          if (matchIdx >= 0) {
-            appState.items[matchIdx].active = true;
-            appState.items[matchIdx].done = false;
-            if (qty) appState.items[matchIdx].qty = qty;
+          if (existingIdx >= 0) {
+            appState.items[existingIdx].active = true;
+            appState.items[existingIdx].done = false;
+            if (qty) appState.items[existingIdx].qty = qty;
           } else {
             appState.items.unshift({
               name: cleanName,
@@ -2197,25 +2181,22 @@ Palauta VAIN JSON-taulukko muodossa:
               qty: qty
             });
           }
-          addedCount++;
+          count++;
         });
 
         await pushToCloud();
         render();
-        const firstItem = parsedProducts[0]?.name || "Tuote";
-        showUndoBar(`📷 Lisätty: ${firstItem} (${addedCount} kpl)`);
+
+        if (mode === 'note') {
+          showUndoBar(`📷 Kauppalapusta lisätty ${count} tuotetta!`);
+        } else {
+          const firstTitle = parsedList[0]?.name || "Tuote";
+          showUndoBar(`📷 Tunnistettu ja lisätty: ${firstTitle}`);
+        }
       } catch (err) {
-        console.warn("Kuvankäsittelyvirhe:", err);
-        showUndoBar("⚠️ Kuvan käsittely epäonnistui");
+        console.warn("Älykäs kamera -virhe:", err);
+        showUndoBar("⚠️ Tekoälytunnistus epäonnistui");
       }
-    };
-
-    window.openWaModal = function() {
-      document.getElementById("wa-modal").style.display = "flex";
-    };
-
-    window.closeWaModal = function() {
-      document.getElementById("wa-modal").style.display = "none";
     };
 
     window.executeWaImport = function() {
@@ -2244,9 +2225,7 @@ Palauta VAIN JSON-taulukko muodossa:
           <div><strong>Verkkoyhteys:</strong> ${onlineStr}</div>
           <div><strong>Pilvitietokanta:</strong> ${cloudStr}</div>
           <div><strong>Puhesanelu:</strong> ${speechStr}</div>
-          <div><strong>Tekoälymoottori:</strong> 🟢 Gemini Vision (v1beta REST)</div>
           <div><strong>Aktiivinen avain:</strong> <code>${maskedKey}</code></div>
-          <div><strong>Kuvien kompressio:</strong> 800px / JPEG 0.65 (salamannopea)</div>
         </div>
       `;
 
