@@ -1226,8 +1226,7 @@
         name: "Klassinen tai urheiluhieronta 60 min", 
         price: "29,00 € (-47%, norm. 55 €)", 
         store: "Fysio Myyrmäki (Vantaa)", 
-        mainCat: "Muut",
-        url: "https://offerilla.com/vantaa/"
+        mainCat: "Muut"
       }
     ];
 
@@ -1280,69 +1279,434 @@
     }
 
     const DEFAULT_CATALOG = [
+      // Muut
       { name: "Sukkahousut", cat: "Muut" },
       { name: "Tarmo avainpiilo", cat: "Muut" },
       { name: "Kukkamulta", cat: "Muut" },
       { name: "Renkaanpaikkausaine CRC", cat: "Muut" },
       { name: "Sateenvarjo", cat: "Muut" },
       { name: "Ihmesekoituspussi", cat: "Muut" },
+
+      // Hevi
       { name: "YRITTI: Basilika (tuore)", cat: "Hevi" },
       { name: "YRITTI: Korianteri", cat: "Hevi" },
       { name: "YRITTI: Persilja", cat: "Hevi" },
+      { name: "YRITTI: Salvia", cat: "Hevi" },
+      { name: "YRITTI: Tuoreet yrtit", cat: "Hevi" },
       { name: "Chili", cat: "Hevi" },
       { name: "Herkkusieni", cat: "Hevi" },
+      { name: "Idut", cat: "Hevi" },
+      { name: "Inkivääri", cat: "Hevi" },
       { name: "Jäävuorisalaatti", cat: "Hevi" },
+      { name: "Kaali", cat: "Hevi" },
+      { name: "Kiinankaali", cat: "Hevi" },
+      { name: "Lehtikaali", cat: "Hevi" },
       { name: "Keltasipuli", cat: "Hevi" },
+      { name: "Kevätsipuli", cat: "Hevi" },
       { name: "Kirsikkatomaatti", cat: "Hevi" },
+      { name: "Miniluumutomaatti", cat: "Hevi" },
+      { name: "Kukkakaali", cat: "Hevi" },
       { name: "Kurkku", cat: "Hevi" },
+      { name: "Maissi", cat: "Hevi" },
+      { name: "Pavut", cat: "Hevi" },
       { name: "Punainen paprika", cat: "Hevi" },
+      { name: "Suippopaprika", cat: "Hevi" },
       { name: "Parsakaali", cat: "Hevi" },
+      { name: "Punasipuli", cat: "Hevi" },
+      { name: "Rucola", cat: "Hevi" },
+      { name: "Salaattisekoitus", cat: "Hevi" },
+      { name: "Salottisipuli", cat: "Hevi" },
+      { name: "Sitruunaruoho", cat: "Hevi" },
+      { name: "Sokeriherne", cat: "Hevi" },
       { name: "Tomaatti", cat: "Hevi" },
       { name: "Valkosipuli", cat: "Hevi" },
+
+      // Juurekset
+      { name: "Keittojuurekset (setti)", cat: "Juurekset" },
       { name: "Peruna (yleis / uusi)", cat: "Juurekset" },
+      { name: "Perunamuusiaines", cat: "Juurekset" },
       { name: "Porkkana", cat: "Juurekset" },
+
+      // Hedelmät
+      { name: "Ananas (tuore)", cat: "Hedelmät" },
+      { name: "Appelsiini (Tarocco)", cat: "Hedelmät" },
       { name: "Avokado", cat: "Hedelmät" },
       { name: "Banaani", cat: "Hedelmät" },
+      { name: "Kiwi", cat: "Hedelmät" },
       { name: "Lime", cat: "Hedelmät" },
-      { name: "Omenat", cat: "Hedelmät" },
+      { name: "Mandariini", cat: "Hedelmät" },
+      { name: "Satsuma", cat: "Hedelmät" },
+      { name: "Mango (tuore)", cat: "Hedelmät" },
+      { name: "Tuoreet mansikat", cat: "Hedelmät" },
+      { name: "Tuoreet mustikat", cat: "Hedelmät" },
+      { name: "Tuoreet vadelmat", cat: "Hedelmät" },
+      { name: "Cantaloupe-meloni", cat: "Hedelmät" },
+      { name: "Hunajameloni", cat: "Hedelmät" },
+      { name: "Vihreät omenat", cat: "Hedelmät" },
+      { name: "Punaiset omenat", cat: "Hedelmät" },
+      { name: "Persikka (lättänä)", cat: "Hedelmät" },
+      { name: "Rypäleet", cat: "Hedelmät" },
+      { name: "Vesimeloni", cat: "Hedelmät" },
+
+      // Liha
+      { name: "Grillitassu", cat: "Liha" },
       { name: "Jauheliha", cat: "Liha" },
       { name: "Kanafile", cat: "Liha" },
-      { name: "Lohi (tuore)", cat: "Liha" },
-      { name: "Silakkafilee (tuore)", cat: "Liha" },
-      { name: "Tuore muikku", cat: "Liha" },
+      { name: "Kanakoipi", cat: "Liha" },
+      { name: "Chicken wings", cat: "Liha" },
+      { name: "Kanasuikaleet", cat: "Liha" },
       { name: "Kuve (Flank steak)", cat: "Liha" },
+      { name: "Naudan minuuttipihvi", cat: "Liha" },
+      { name: "Lohi (tuore)", cat: "Liha" },
       { name: "Possun ulkofile", cat: "Liha" },
+      { name: "Ribsit", cat: "Liha" },
+      { name: "Siika", cat: "Liha" },
+      { name: "Valkolihainen kala", cat: "Liha" },
+
+      // Leikkeleet
+      { name: "HK herkkumaksamakkara", cat: "Leikkeleet" },
+      { name: "Kallen mätitahna", cat: "Leikkeleet" },
+      { name: "Kylmäsavuporo", cat: "Leikkeleet" },
+      { name: "Ohuenohut kalkkunaleike", cat: "Leikkeleet" },
       { name: "Pekoni", cat: "Leikkeleet" },
+      { name: "Pippurimetvursti", cat: "Leikkeleet" },
+      { name: "Tulinen salami", cat: "Leikkeleet" },
+      { name: "Prosciutto", cat: "Leikkeleet" },
+
+      // Einekset
       { name: "Einarisalaatti kanacaesar", cat: "Einekset" },
+      { name: "Einarisalaatti taco", cat: "Einekset" },
+      { name: "Lettuja", cat: "Einekset" },
       { name: "Nakki", cat: "Einekset" },
-      { name: "Tofu (luomu / kiinteä)", cat: "Vegaaniset" },
+
+      // Vegaaniset
+      { name: "Tofu (luomu / kiinteä / silken)", cat: "Vegaaniset" },
+      { name: "Muu jauhelihamuru", cat: "Vegaaniset" },
+      { name: "Hunajasuikaleet (vege)", cat: "Vegaaniset" },
+
+      // Maitotuotteet
       { name: "MAITO: Laktoositon kevyt (sininen)", cat: "Maitotuotteet" },
+      { name: "MAITO: Laktoositon rasvaton", cat: "Maitotuotteet" },
+      { name: "MAITO: Laktoositon täys (punainen)", cat: "Maitotuotteet" },
       { name: "MAITO: Barista kauramaito", cat: "Maitotuotteet" },
+      { name: "MAITO: Kauramaito (no sugars)", cat: "Maitotuotteet" },
+      { name: "MAITO: Mantelimaito", cat: "Maitotuotteet" },
+      { name: "MAITO: Piimä", cat: "Maitotuotteet" },
+
       { name: "VOI: Voi", cat: "Maitotuotteet" },
+      { name: "VOI: Voimariini", cat: "Maitotuotteet" },
+      { name: "VOI: Eleplant", cat: "Maitotuotteet" },
+
       { name: "KERMA: Kuohukerma", cat: "Maitotuotteet" },
+      { name: "KERMA: Vispikerma", cat: "Maitotuotteet" },
+      { name: "KERMA: Kermaviili", cat: "Maitotuotteet" },
+      { name: "KERMA: Crème fraîche", cat: "Maitotuotteet" },
+      { name: "KERMA: Oatly ruokakerma", cat: "Maitotuotteet" },
+      { name: "KERMA: Vege vispikerma", cat: "Maitotuotteet" },
+
       { name: "JOGURTTI: Kreikkalainen jogurtti", cat: "Maitotuotteet" },
+      { name: "JOGURTTI: Turkkilainen jogurtti", cat: "Maitotuotteet" },
+      { name: "JOGURTTI: Oatly kaurajogurtti", cat: "Maitotuotteet" },
+      { name: "JOGURTTI: Danonino Mansikka", cat: "Maitotuotteet" },
+      { name: "JOGURTTI: Danonino Vanilja Dino", cat: "Maitotuotteet" },
+      { name: "JOGURTTI: Viilis", cat: "Maitotuotteet" },
+
+      { name: "RAHKA: Maitorahka pehmeä", cat: "Maitotuotteet" },
+      { name: "RAHKA: Proteiinirahka", cat: "Maitotuotteet" },
+      { name: "RAHKA: Raejuusto", cat: "Maitotuotteet" },
+
       { name: "MUNA: Kananmunat", cat: "Maitotuotteet" },
-      { name: "Oltermanni", cat: "Juustot" },
+
+      { name: "JUOMA: Frezza double trouble kylmäkahvi", cat: "Maitotuotteet" },
+      { name: "JUOMA: Jungle Juice Bar smoothie", cat: "Maitotuotteet" },
+      { name: "JUOMA: Froosh smoothie", cat: "Maitotuotteet" },
+      { name: "JUOMA: Alpro suklaajuoma", cat: "Maitotuotteet" },
+      { name: "JUOMA: Alpro plant protein", cat: "Maitotuotteet" },
+      { name: "JUOMA: Profeel proteiinijuoma", cat: "Maitotuotteet" },
+      { name: "JUOMA: Profeel proteiinimousse", cat: "Maitotuotteet" },
+      { name: "JUOMA: Oatly matchajuoma", cat: "Maitotuotteet" },
+      { name: "JUOMA: Benecol juomia", cat: "Maitotuotteet" },
+
+      // Juustot
+      { name: "Emmental (pala)", cat: "Juustot" },
+      { name: "Emmental (viipale)", cat: "Juustot" },
+      { name: "Emmental (raaste)", cat: "Juustot" },
+      { name: "Eränkävijä", cat: "Juustot" },
+      { name: "Fetajuusto laktoositon", cat: "Juustot" },
+      { name: "Halloumi", cat: "Juustot" },
+      { name: "Keisarinna (kiteinen Gouda)", cat: "Juustot" },
+      { name: "Kermajuusto", cat: "Juustot" },
+      { name: "Manchego", cat: "Juustot" },
+      { name: "Mascarpone", cat: "Juustot" },
+      { name: "Tuorejuusto", cat: "Juustot" },
       { name: "Mozzarellapallo", cat: "Juustot" },
+      { name: "Mozzarellaraaste", cat: "Juustot" },
+      { name: "Oltermanni", cat: "Juustot" },
       { name: "Parmesan (pala)", cat: "Juustot" },
+      { name: "Pecorino", cat: "Juustot" },
+      { name: "Savuporotuorejuusto", cat: "Juustot" },
+
+      // Kuivat
       { name: "RIISI: Basmati", cat: "Kuivat" },
+      { name: "RIISI: Jasmin", cat: "Kuivat" },
+      { name: "RIISI: Risotto", cat: "Kuivat" },
+      { name: "MAUSTE: Basilika", cat: "Kuivat" },
+      { name: "MAUSTE: Hieno merisuola", cat: "Kuivat" },
+      { name: "MAUSTE: Kanaliemikuutiot", cat: "Kuivat" },
+      { name: "MAUSTE: Karkea merisuola", cat: "Kuivat" },
+      { name: "MAUSTE: Kasvisliemikuutiot", cat: "Kuivat" },
+      { name: "MAUSTE: Lihaliemikuutiot", cat: "Kuivat" },
+      { name: "MAUSTE: Mustapippuri", cat: "Kuivat" },
+      { name: "MAUSTE: Oregano", cat: "Kuivat" },
+      { name: "MAUSTE: Paprikajauhe", cat: "Kuivat" },
+      { name: "MAUSTE: Rakuuna", cat: "Kuivat" },
+      { name: "MAUSTE: Ribs rub", cat: "Kuivat" },
+      { name: "MAUSTE: Sipulijauhe", cat: "Kuivat" },
+      { name: "MAUSTE: Valkosipulijauhe", cat: "Kuivat" },
+      { name: "PASTA: Fusilli", cat: "Kuivat" },
+      { name: "PASTA: Gluteeniton pasta", cat: "Kuivat" },
+      { name: "PASTA: Lasagnelevyt", cat: "Kuivat" },
+      { name: "PASTA: Makaroni", cat: "Kuivat" },
+      { name: "PASTA: Penne", cat: "Kuivat" },
       { name: "PASTA: Spagetti", cat: "Kuivat" },
+      { name: "KAHVI: Caramel latte jauhepussit", cat: "Kuivat" },
+      { name: "KAHVI: Dolce Gusto kapselit", cat: "Kuivat" },
+      { name: "KAHVI: Espressopavut", cat: "Kuivat" },
+      { name: "KAHVI: Iced latte jauhepussit", cat: "Kuivat" },
+      { name: "KAHVI: Nespresso kapselit", cat: "Kuivat" },
+      { name: "KAHVI: Pikakahvi / Jauhekahvi", cat: "Kuivat" },
       { name: "KAHVI: Presidentti Sapphire", cat: "Kuivat" },
+      { name: "TEE: Maustettu tee", cat: "Kuivat" },
+      { name: "TEE: Rooibos-tee", cat: "Kuivat" },
+      { name: "HIUTALE: Kauraleseet", cat: "Kuivat" },
       { name: "HIUTALE: Puurohiutaleet", cat: "Kuivat" },
+      { name: "MURO: Cheerios", cat: "Kuivat" },
+      { name: "MURO: Granola", cat: "Kuivat" },
+      { name: "MURO: Mysli", cat: "Kuivat" },
+      { name: "MURO: Nesquik", cat: "Kuivat" },
+      { name: "MURO: Rice Krispies", cat: "Kuivat" },
+      { name: "LEIVONTA: Oboy", cat: "Kuivat" },
+      { name: "LEIVONTA: Tumma leivontakaakao", cat: "Kuivat" },
+      { name: "TARVIKE: Suodatinpussit", cat: "Kuivat" },
+
+      // Kuivat (mutta märät)
+      { name: "Ananassäilyke", cat: "Kuivat (mutta märät)" },
+      { name: "Barbielonkero", cat: "Kuivat (mutta märät)" },
+      { name: "Happy Joe -siideri", cat: "Kuivat (mutta märät)" },
+      { name: "Ella's vauvanruokasose", cat: "Kuivat (mutta märät)" },
+      { name: "MUMs vauvanruokasose", cat: "Kuivat (mutta märät)" },
+      { name: "Hernekeitto", cat: "Kuivat (mutta märät)" },
+      { name: "Lihapullapurkki", cat: "Kuivat (mutta märät)" },
+      { name: "HP-kastike", cat: "Kuivat (mutta märät)" },
+      { name: "Hunaja", cat: "Kuivat (mutta märät)" },
+      { name: "Vaahterasiirappi", cat: "Kuivat (mutta märät)" },
+      { name: "Ketsuppi", cat: "Kuivat (mutta märät)" },
+      { name: "Dijon-sinappi", cat: "Kuivat (mutta märät)" },
+      { name: "Majoneesi", cat: "Kuivat (mutta märät)" },
+      { name: "Sushimajoneesi", cat: "Kuivat (mutta märät)" },
+      { name: "Mustaherukkamehu", cat: "Kuivat (mutta märät)" },
+      { name: "Omenamehu", cat: "Kuivat (mutta märät)" },
+      { name: "Sekamehu", cat: "Kuivat (mutta märät)" },
       { name: "Mutti tomaattimurska", cat: "Kuivat (mutta märät)" },
+      { name: "Mutti tomaattipyree", cat: "Kuivat (mutta märät)" },
       { name: "Oliiviöljy", cat: "Kuivat (mutta märät)" },
+      { name: "Rypsiöljy", cat: "Kuivat (mutta märät)" },
+      { name: "Vaalea olut", cat: "Kuivat (mutta märät)" },
+      { name: "Tumma olut", cat: "Kuivat (mutta märät)" },
+      { name: "Puolukkahillo", cat: "Kuivat (mutta märät)" },
+      { name: "Punaviini", cat: "Kuivat (mutta märät)" },
+      { name: "Ribsien marinointikastike", cat: "Kuivat (mutta märät)" },
+      { name: "Sitruunamehutiiviste", cat: "Kuivat (mutta märät)" },
+      { name: "Limemehutiiviste", cat: "Kuivat (mutta märät)" },
+      { name: "Tonnikala vedessä", cat: "Kuivat (mutta märät)" },
+      { name: "Vissy", cat: "Kuivat (mutta märät)" },
+
+      // Jauhot & Leivonta
+      { name: "JAUHO: Durumvehnäjauho", cat: "Jauhot" },
+      { name: "JAUHO: Gluteeniton jauhoseos", cat: "Jauhot" },
+      { name: "JAUHO: Korppujauho", cat: "Jauhot" },
+      { name: "JAUHO: Pankojauho", cat: "Jauhot" },
+      { name: "JAUHO: Perunajauho", cat: "Jauhot" },
+      { name: "JAUHO: Pizzajauho", cat: "Jauhot" },
       { name: "JAUHO: Puolikarkea vehnäjauho", cat: "Jauhot" },
+      { name: "JAUHO: Tipo 00 -jauho", cat: "Jauhot" },
+      { name: "LEIVONTA: Fariinisokeri", cat: "Jauhot" },
+      { name: "LEIVONTA: Kuivahiiva", cat: "Jauhot" },
+      { name: "LEIVONTA: Leivinjauhe", cat: "Jauhot" },
+      { name: "LEIVONTA: Maizena", cat: "Jauhot" },
+      { name: "LEIVONTA: Sokeri", cat: "Jauhot" },
+      { name: "LEIVONTA: Vaniljasokeri", cat: "Jauhot" },
+      { name: "PÄHKINÄ / SIEMEN: Cashewpähkinät", cat: "Jauhot" },
+      { name: "PÄHKINÄ / SIEMEN: Chia-siemenet", cat: "Jauhot" },
+      { name: "PÄHKINÄ / SIEMEN: Mantelit", cat: "Jauhot" },
+      { name: "PÄHKINÄ / SIEMEN: Pekaanipähkinät", cat: "Jauhot" },
+      { name: "PÄHKINÄ / SIEMEN: Pellavansiemenrouhe", cat: "Jauhot" },
+      { name: "PÄHKINÄ / SIEMEN: Saksanpähkinät", cat: "Jauhot" },
+      { name: "Ranskalainen sipulikeitto -pussi", cat: "Jauhot" },
+
+      // Aasia / Texmex
+      { name: "Chiliöljy", cat: "Aasia / Texmex" },
+      { name: "Paahdettu seesamiöljy", cat: "Aasia / Texmex" },
+      { name: "Kalakastike", cat: "Aasia / Texmex" },
+      { name: "Osterikastike", cat: "Aasia / Texmex" },
+      { name: "Kiukkutahna (chilitahna)", cat: "Aasia / Texmex" },
+      { name: "Garam masala", cat: "Aasia / Texmex" },
+      { name: "Panang curry -tahna", cat: "Aasia / Texmex" },
+      { name: "Kookosmaito", cat: "Aasia / Texmex" },
+      { name: "Korean chicken powder mix", cat: "Aasia / Texmex" },
+      { name: "Ramen-nuudelit", cat: "Aasia / Texmex" },
+      { name: "Kuppinuudelit", cat: "Aasia / Texmex" },
+      { name: "Riisinuudelit", cat: "Aasia / Texmex" },
+      { name: "Riisiviinietikka", cat: "Aasia / Texmex" },
+      { name: "Shaoxing-viini", cat: "Aasia / Texmex" },
       { name: "Soijakastike", cat: "Aasia / Texmex" },
+      { name: "Dark soy sauce", cat: "Aasia / Texmex" },
+      { name: "Sriracha", cat: "Aasia / Texmex" },
+      { name: "Sriracha mayo", cat: "Aasia / Texmex" },
+      { name: "Sweet chili -kastike", cat: "Aasia / Texmex" },
+      { name: "Teriyaki-kastike", cat: "Aasia / Texmex" },
+      { name: "TEXMEX nachot", cat: "Aasia / Texmex" },
       { name: "TEXMEX tortillat", cat: "Aasia / Texmex" },
-      { name: "Pakastepizzat", cat: "Pakasteet" },
+
+      // Pakasteet
+      { name: "Edamamepavut", cat: "Pakasteet" },
+      { name: "Pakasteherneet", cat: "Pakasteet" },
+      { name: "Vaniljajäätelö", cat: "Pakasteet" },
+      { name: "Jäätelöpuikot / -tuutit", cat: "Pakasteet" },
+      { name: "Kalapuikot", cat: "Pakasteet" },
+      { name: "Kananugetit", cat: "Pakasteet" },
+      { name: "Karjalanpiirakka (Moilanen)", cat: "Pakasteet" },
+      { name: "Lohkoperunat", cat: "Pakasteet" },
+      { name: "Ranskalaiset (Oolannin)", cat: "Pakasteet" },
+      { name: "Mozzarellatikut", cat: "Pakasteet" },
+      { name: "Mutakakku (Pirkka)", cat: "Pakasteet" },
+      { name: "Mämmi", cat: "Pakasteet" },
+      { name: "Pakastemansikat", cat: "Pakasteet" },
+      { name: "Pakastemustikat", cat: "Pakasteet" },
+      { name: "Pakastevadelmat", cat: "Pakasteet" },
+      { name: "Kuningatarmarjat (pakaste)", cat: "Pakasteet" },
+      { name: "Pakastemango", cat: "Pakasteet" },
+      { name: "Pakastesmoothie-hedelmät", cat: "Pakasteet" },
+      { name: "Pakastepizza", cat: "Pakasteet" },
+      { name: "Thai Cube", cat: "Pakasteet" },
+      { name: "Hatsapuri / Prata", cat: "Pakasteet" },
+      { name: "Torttutaikina", cat: "Pakasteet" },
+
+      // Leivät
+      { name: "Esipaistettu patonki", cat: "Leivät" },
+      { name: "Gluteeniton paahtoleipä", cat: "Leivät" },
+      { name: "Hapankorppu", cat: "Leivät" },
+      { name: "Juustosämpylä", cat: "Leivät" },
+      { name: "Jälkiuunikauraleipä pala", cat: "Leivät" },
+      { name: "Kauraleipä (Puikula / Vaasan)", cat: "Leivät" },
+      { name: "Paahtoleipä (kaura / vehnä)", cat: "Leivät" },
+      { name: "Reissumies tosi ohut kaura", cat: "Leivät" },
       { name: "Ruisleipä", cat: "Leivät" },
-      { name: "Paahtoleipä", cat: "Leivät" },
+      { name: "Sitkas ruis", cat: "Leivät" },
+      { name: "Vaalea leipä", cat: "Leivät" },
+
+      // Herkut
+      { name: "Corny-välipalapatukat", cat: "Herkut" },
+      { name: "Elovena välipalakeksit", cat: "Herkut" },
+      { name: "Dippijauhe", cat: "Herkut" },
       { name: "Sipsit", cat: "Herkut" },
+      { name: "Juustonaksut", cat: "Herkut" },
+      { name: "Geisha", cat: "Herkut" },
+      { name: "Oreo-keksit", cat: "Herkut" },
+      { name: "Daim-rakeet", cat: "Herkut" },
+      { name: "Haribo-karkit", cat: "Herkut" },
+      { name: "Mynthon", cat: "Herkut" },
+      { name: "Irtokarkit / Karkkipussi", cat: "Herkut" },
+      { name: "Keksit juustoille", cat: "Herkut" },
+      { name: "Prinsessakeksit", cat: "Herkut" },
+      { name: "Leivontasuklaa", cat: "Herkut" },
+      { name: "Tumma suklaa", cat: "Herkut" },
+      { name: "Maissikakut", cat: "Herkut" },
+      { name: "Nutella", cat: "Herkut" },
+      { name: "Pelivälipaloja", cat: "Herkut" },
+      { name: "Purukumi", cat: "Herkut" },
+      { name: "Tuc Bake Rolls", cat: "Herkut" },
+      { name: "Suolakeksit", cat: "Herkut" },
+
+      // Hygienia
+      { name: "Biojätepussit", cat: "Hygienia" },
+      { name: "Roskapussit", cat: "Hygienia" },
+      { name: "Bliw käsisaippua (refill)", cat: "Hygienia" },
+      { name: "Braun pesuneste", cat: "Hygienia" },
+      { name: "Dödö spray", cat: "Hygienia" },
+      { name: "Dödö stick", cat: "Hygienia" },
+      { name: "Väkiviinaetikka", cat: "Hygienia" },
+      { name: "Tolu / Yleispuhdistusaine", cat: "Hygienia" },
+      { name: "WC-pönttöaine", cat: "Hygienia" },
+      { name: "Hammasharjat", cat: "Hygienia" },
+      { name: "Sähköhammasharjan vaihtopäät", cat: "Hygienia" },
+      { name: "Hammaslanka", cat: "Hygienia" },
+      { name: "Hammastahna", cat: "Hygienia" },
+      { name: "Hammastikut", cat: "Hygienia" },
+      { name: "Tuorekelmu", cat: "Hygienia" },
+      { name: "Folio", cat: "Hygienia" },
+      { name: "Leivinpaperi", cat: "Hygienia" },
+      { name: "Paistopussit", cat: "Hygienia" },
+      { name: "Kynsilakanpoistoaine", cat: "Hygienia" },
+      { name: "Vanulaput", cat: "Hygienia" },
+      { name: "Lumene puhdistusvaahto", cat: "Hygienia" },
+      { name: "Lumene micellar-vesi", cat: "Hygienia" },
+      { name: "Puuteri", cat: "Hygienia" },
+      { name: "Paristot / Patterit", cat: "Hygienia" },
+      { name: "Tulitikut", cat: "Hygienia" },
+      { name: "Lautasliinat / Servetit", cat: "Hygienia" },
+      { name: "Shampoo", cat: "Hygienia" },
+      { name: "Hoitoaine", cat: "Hygienia" },
+      { name: "Tarraharjan rullat", cat: "Hygienia" },
+      { name: "Tiskiharjan vaihtopäät", cat: "Hygienia" },
+      { name: "Suihkusaippua Dove", cat: "Hygienia" },
       { name: "Talouspaperi", cat: "Hygienia" },
       { name: "WC-paperi", cat: "Hygienia" },
+      { name: "Konetiskiaine", cat: "Hygienia" },
+      { name: "Käsitiskiaine", cat: "Hygienia" },
+      { name: "Tiskisienet", cat: "Hygienia" },
+      { name: "Topz-puikot", cat: "Hygienia" },
+      { name: "Vanish tahranpoisto", cat: "Hygienia" },
+      { name: "Pyykinpesuaine", cat: "Hygienia" },
+
+      // Apteekki
+      { name: "ACO Face Day -voide", cat: "Apteekki" },
+      { name: "Avène Hydrance -voide", cat: "Apteekki" },
+      { name: "Berocca", cat: "Apteekki" },
+      { name: "Monivitamiini / D-vitamiini", cat: "Apteekki" },
+      { name: "Rautalisä", cat: "Apteekki" },
       { name: "Burana / Ibuxin", cat: "Apteekki" },
+      { name: "Pamol F", cat: "Apteekki" },
+      { name: "Desinfiointiaine", cat: "Apteekki" },
+      { name: "Dexal elektrolyytit", cat: "Apteekki" },
+      { name: "Magnesium", cat: "Apteekki" },
+      { name: "Kurkkusuihke / Imeskelytabletit", cat: "Apteekki" },
+      { name: "Lactrase GO", cat: "Apteekki" },
+      { name: "Imodium", cat: "Apteekki" },
+      { name: "Melatoniini", cat: "Apteekki" },
+      { name: "Unilääke", cat: "Apteekki" },
+      { name: "Movex kylmä-kuumageeli", cat: "Apteekki" },
+      { name: "Nenäsumute (Otrivin)", cat: "Apteekki" },
+      { name: "Allergianenäsumute", cat: "Apteekki" },
+      { name: "Proteiinijauhe (vege)", cat: "Apteekki" },
+      { name: "Proteiinipatukat", cat: "Apteekki" },
+      { name: "Puhdas+ Kollageeni", cat: "Apteekki" },
+      { name: "Hyaluronihappo", cat: "Apteekki" },
+
+      // IKEA
       { name: "Kruunukynttilät", cat: "IKEA" },
-      { name: "Ilmastointiteippi", cat: "Rautakauppa" }
+      { name: "Lämpökynttilät (tuikut)", cat: "IKEA" },
+      { name: "Lautasliinat / Servetit IKEA", cat: "IKEA" },
+      { name: "Säilytyslaatikot & purnukat", cat: "IKEA" },
+      { name: "Paristot IKEA", cat: "IKEA" },
+
+      // Rautakauppa
+      { name: "Maalarinteippi", cat: "Rautakauppa" },
+      { name: "Ilmastointiteippi", cat: "Rautakauppa" },
+      { name: "Ruuvit ja proput", cat: "Rautakauppa" },
+      { name: "Kiinnikkeet", cat: "Rautakauppa" },
+      { name: "Hiomapaperi", cat: "Rautakauppa" },
+      { name: "Silikoni / Asennusliima", cat: "Rautakauppa" }
     ];
 
     const STORE_LAYOUTS = {
@@ -1397,12 +1761,84 @@
       return num >= 50 ? `${num} g` : `${num} kpl`;
     }
 
+    // Yhdistää paikallisen tallennuksen ja täyden DEFAULT_CATALOGin
+    // Säilyttää käyttäjän valinnat (active, done, qty) ja tuo kaikki vakiotuotteet takaisin
+    function mergeCatalogWithSavedItems(savedItems) {
+      if (!Array.isArray(savedItems) || savedItems.length === 0) {
+        return DEFAULT_CATALOG.map(p => ({ ...p, active: false, done: false, qty: null }));
+      }
+
+      const merged = [];
+      const savedMap = new Map();
+      savedItems.forEach(item => {
+        if (item && item.name) {
+          savedMap.set(item.name.toLowerCase().trim(), item);
+        }
+      });
+
+      // 1. Käydään läpi täysi DEFAULT_CATALOG ja liitetään aiempi käyttäjätila jos löytyy
+      DEFAULT_CATALOG.forEach(catItem => {
+        const key = catItem.name.toLowerCase().trim();
+        if (savedMap.has(key)) {
+          const s = savedMap.get(key);
+          merged.push({
+            name: catItem.name,
+            cat: catItem.cat,
+            active: !!s.active,
+            done: !!s.done,
+            qty: s.qty || null
+          });
+          savedMap.delete(key);
+        } else {
+          merged.push({
+            name: catItem.name,
+            cat: catItem.cat,
+            active: false,
+            done: false,
+            qty: null
+          });
+        }
+      });
+
+      // 2. Lisätään käyttäjän mahdollisesti itse luomat omat lisätuotteet tai tarjoukset
+      savedMap.forEach(customItem => {
+        merged.unshift(customItem);
+      });
+
+      return merged;
+    }
+
     function initData() {
       const local = localStorage.getItem("perheen_kauppalappu_data");
       if (local) {
         try {
           const parsed = JSON.parse(local);
-          if (parsed && Array.isArray(parsed.items)) appState = parsed;
+          if (parsed && Array.isArray(parsed.items)) {
+            // Palautetaan täsmälleen alkuperäinen vakiovalikoima säilyttäen käyttäjän aktiivisuustilat ja määrät
+            const savedMap = new Map();
+            parsed.items.forEach(item => {
+              if (item && item.name) savedMap.set(item.name, item);
+            });
+
+            const merged = DEFAULT_CATALOG.map(def => {
+              const saved = savedMap.get(def.name);
+              return {
+                ...def,
+                active: saved ? !!saved.active : false,
+                done: saved ? !!saved.done : false,
+                qty: saved && saved.qty !== undefined ? saved.qty : null
+              };
+            });
+
+            // Säilytetään lisäksi käyttäjän itse erikseen lisäämät tuotteet tai valitut tarjoukset
+            parsed.items.forEach(item => {
+              if (item && item.name && !DEFAULT_CATALOG.some(d => d.name === item.name)) {
+                merged.unshift(item);
+              }
+            });
+
+            appState = { items: merged };
+          }
         } catch(e){}
       }
       initFirebaseFromStorage();
@@ -1428,7 +1864,13 @@
 
         firestoreUnsub = onSnapshot(docRef, (snap) => {
           if (snap.exists()) {
-            appState = snap.data();
+            const data = snap.data();
+            if (data && Array.isArray(data.items)) {
+              // Yhdistetään myös pilvidata täyteen vakiokatalogiin
+              appState.items = mergeCatalogWithSavedItems(data.items);
+            } else {
+              appState = data;
+            }
             saveLocal();
             render();
           } else {
