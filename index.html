@@ -879,7 +879,7 @@
       border-radius: 18px;
       padding: 18px;
       width: 100%;
-      max-width: 380px;
+      max-width: 400px;
       box-shadow: var(--shadow-lg);
     }
 
@@ -963,11 +963,21 @@
     </div>
   </div>
 
-  <!-- Diagnostics Modal for Badges -->
+  <!-- Diagnostics & Settings Modal -->
   <div class="modal-overlay" id="diag-modal" style="display: none;">
     <div class="modal-panel">
-      <h3 style="font-size: 1.05rem; margin-bottom: 8px;">⚙️ Corsia Järjestelmätila</h3>
-      <div id="diag-content-box" style="font-size: 0.82rem; line-height: 1.5; color: #334155; margin-bottom: 14px;"></div>
+      <h3 style="font-size: 1.05rem; margin-bottom: 8px; color:#1e293b;">⚙️ Corsia Järjestelmä & Avain</h3>
+      <div id="diag-content-box" style="font-size: 0.82rem; line-height: 1.5; color: #334155; margin-bottom: 12px;"></div>
+      
+      <div style="background:#f1f5f9; border-radius:10px; padding:10px; margin-bottom:12px;">
+        <label style="font-size:0.75rem; font-weight:800; color:#475569; display:block; margin-bottom:4px;">🔑 Gemini API-avain (AQ... tai AIza...):</label>
+        <input type="text" id="manual-api-key-input" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:0.78rem; font-family:monospace; outline:none;" placeholder="Liitä tähän tarvittaessa uusi avain">
+        <div style="display:flex; justify-content:flex-end; gap:6px; margin-top:6px;">
+          <button onclick="resetDefaultKey()" style="padding:4px 8px; border-radius:6px; border:1px solid #cbd5e1; background:#ffffff; font-size:0.72rem; cursor:pointer;">Palauta oletus</button>
+          <button onclick="saveManualApiKey()" style="padding:4px 10px; border-radius:6px; border:none; background:#16a34a; color:white; font-size:0.72rem; font-weight:800; cursor:pointer;">Tallenna avain</button>
+        </div>
+      </div>
+
       <button onclick="closeDiagModal()" style="width: 100%; padding: 9px; border-radius: 9px; background: #0284c7; color: white; border: none; font-weight: 800; font-size: 0.84rem; cursor: pointer;">Sulje</button>
     </div>
   </div>
@@ -1178,7 +1188,7 @@
       if (lower.includes("leipä") || lower.includes("paahto")) return "🍞";
       if (lower.includes("kahvi")) return "☕";
       if (lower.includes("pasta") || lower.includes("spagetti")) return "🍝";
-      if (lower.includes("olut") || lower.includes("kalja")) return "🍺";
+      if (lower.includes("olut") || lower.includes("kalja") || lower.includes("karhu") || lower.includes("koff")) return "🍺";
       if (lower.includes("suklaa") || lower.includes("sipsi")) return "🍫";
       if (lower.includes("wc") || lower.includes("paperi")) return "🧻";
       if (lower.includes("pesu") || lower.includes("tolu")) return "🧼";
@@ -1374,7 +1384,7 @@
                 <span class="status-dot"></span> PILVI OK
               </div>
               <div class="status-pill" onclick="openDiagnostics('ai')">
-                ⚙️ AI & ALGORITMIT OK
+                ⚙️ AI & AVAIN
               </div>
             </div>
           </div>
@@ -1721,7 +1731,7 @@
         const apiKey = getEffectiveGeminiKey();
         if (apiKey) {
           const prompt = "Hae Vantaan Tammiston ja Jumbon K-Citymarketin ja Prisman tämän viikon parhaat tarjoukset (lohi, liha, kahvi jne.). Palauta VAIN JSON-lista: [{\"id\":\"d1\",\"cat\":\"Kategoria\",\"name\":\"Tuote\",\"price\":\"Hinta\",\"store\":\"Kauppa\",\"mainCat\":\"Liha\"}]";
-          const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`, {
+          const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -2024,7 +2034,6 @@
       }
     };
 
-    // KUVAN OPTIMOINTI JA KEVENNYS GEMINI-ANALYYSIÄ VARTEN
     function compressImageForVision(file, maxDimension = 800, quality = 0.65) {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -2086,21 +2095,17 @@
       showUndoBar("📷 Tiivistetään kuvaa & haistellaan tekoälyllä...");
 
       try {
-        // Pienennetään iso kamerakuva kevyeen 800px muotoon viiveen minimoimiseksi
         const compressed = await compressImageForVision(file, 800, 0.65);
         const apiKey = getEffectiveGeminiKey();
         let parsedProducts = [];
 
-        const promptText = `Tunnista tästä kuvasta tuotteet ja niiden määrät selkeällä suomen kielellä.
-Kuvassa voi olla:
-- Fyysinen tuote tai pakkaus kotona/sohvalla (esim. Oluttölkki, kahvipaketti, leipä, maitotölkki).
-- Käsinkirjoitettu muistilappu tai painettu kauppakuitti.
-
-Päättelyohje: Jos kuvassa on esine/tuote, päätteles sen selkeä nimi (esim. "Karhu olut", "Kauramaito", "Banaani").
+        const promptText = `Olet kokenut suomalainen ruokakauppa-apuri. Tunnista kuvasta tuotteet ja niiden määrät.
+Kuvassa voi olla loppunut pakkaus kotona (esim. olut, kahvi, leipä, maito) tai käsinkirjoitettu kauppalappu / kuitti.
+Päättele tuotteelle selkeä, yleinen suomenkielinen nimi (esim. "Karhu olut", "Kauramaito", "Banaani").
 
 Sallitut kategoriat: Hevi, Juurekset, Hedelmät, Liha, Leikkeleet, Einekset, Vegaaniset, Maitotuotteet, Juustot, Kuivat, Kuivat (mutta märät), Jauhot, Aasia / Texmex, Pakasteet, Leivät, Herkut, Hygienia, Apteekki, IKEA, Rautakauppa, Muut.
 
-Palauta AINOASTAAN puhas JSON-taulukko ilman markdownia tai muuta tekstiä:
+Palauta VAIN JSON-taulukko muodossa:
 [{"name": "Tuotteen nimi", "cat": "Kategoria", "qty": 1}]`;
 
         let lastHttpError = "";
@@ -2125,16 +2130,15 @@ Palauta AINOASTAAN puhas JSON-taulukko ilman markdownia tai muuta tekstiä:
             }
           };
 
-          // Käytetään Gemini Native -endpointtia puhtaasti x-goog-api-key -otsakkeella ilman tupla-autentikointia
-          const models = ["gemini-1.5-flash", "gemini-2.5-flash"];
+          // Kokeillaan malleja natiivilla ?key=-parametrilla (toimii luotettavimmin kaikille avaintyypeille ilman CORS preflight -virheitä)
+          const models = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash"];
 
           for (const model of models) {
             try {
-              const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+              const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`, {
                 method: "POST",
                 headers: {
-                  "Content-Type": "application/json",
-                  "x-goog-api-key": apiKey
+                  "Content-Type": "application/json"
                 },
                 body: JSON.stringify(payload)
               });
@@ -2159,10 +2163,12 @@ Palauta AINOASTAAN puhas JSON-taulukko ilman markdownia tai muuta tekstiä:
               console.warn("Gemini attempt note:", netErr);
             }
           }
+        } else {
+          lastHttpError = "Ei API-avainta asetettu";
         }
 
         if (!parsedProducts || parsedProducts.length === 0) {
-          showUndoBar(`⚠️ Tunnistus epäonnistui ${lastHttpError ? '(' + lastHttpError.substring(0, 45) + ')' : ''}`);
+          showUndoBar(`⚠️ Tunnistus epäonnistui ${lastHttpError ? '(' + lastHttpError.substring(0, 48) + ')' : ''}`);
           return;
         }
 
@@ -2224,25 +2230,53 @@ Palauta AINOASTAAN puhas JSON-taulukko ilman markdownia tai muuta tekstiä:
     window.openDiagnostics = function(type) {
       const modal = document.getElementById("diag-modal");
       const content = document.getElementById("diag-content-box");
+      const keyInp = document.getElementById("manual-api-key-input");
       if (!modal || !content) return;
 
       const onlineStr = navigator.onLine ? "🟢 Yhdistetty verkkoon" : "🔴 Ei verkkoyhteyttä";
       const cloudStr = cloudSynced ? "🟢 Firebase Firestore aktiivinen" : "🟡 Yhdistetään pilveen...";
       const speechStr = (window.SpeechRecognition || window.webkitSpeechRecognition) ? "🟢 Tuettu (Web Speech API)" : "🔴 Ei selain-tukea";
-      const hasKey = getEffectiveGeminiKey() ? "🟢 Avain aktiivinen" : "🟡 Ei avainta";
+      const effKey = getEffectiveGeminiKey();
+      const maskedKey = effKey ? (effKey.substring(0, 6) + "..." + effKey.substring(effKey.length - 4)) : "Ei asetettu";
 
       content.innerHTML = `
         <div style="display:flex; flex-direction:column; gap:6px;">
           <div><strong>Verkkoyhteys:</strong> ${onlineStr}</div>
           <div><strong>Pilvitietokanta:</strong> ${cloudStr}</div>
           <div><strong>Puhesanelu:</strong> ${speechStr}</div>
-          <div><strong>Tekoälymoottori:</strong> 🟢 Gemini Vision AI</div>
-          <div><strong>API-tila:</strong> ${hasKey}</div>
-          <div><strong>Tuotekatalogi:</strong> 150+ vakioartikkelia</div>
-          <div><strong>Reittioptimointi:</strong> Prisma Jumbo & K-Citymarketit</div>
+          <div><strong>Tekoälymoottori:</strong> 🟢 Gemini Vision (v1beta REST)</div>
+          <div><strong>Aktiivinen avain:</strong> <code>${maskedKey}</code></div>
+          <div><strong>Kuvien kompressio:</strong> 800px / JPEG 0.65 (salamannopea)</div>
         </div>
       `;
+
+      if (keyInp) {
+        keyInp.value = localStorage.getItem("corsia_gemini_api_key") || "";
+      }
+
       modal.style.display = "flex";
+    };
+
+    window.saveManualApiKey = function() {
+      const keyInp = document.getElementById("manual-api-key-input");
+      if (!keyInp) return;
+      const val = keyInp.value.trim();
+      if (val) {
+        localStorage.setItem("corsia_gemini_api_key", val);
+        showUndoBar("✓ Uusi API-avain tallennettu!");
+      } else {
+        localStorage.removeItem("corsia_gemini_api_key");
+        showUndoBar("Oletusavain palautettu");
+      }
+      closeDiagModal();
+    };
+
+    window.resetDefaultKey = function() {
+      localStorage.removeItem("corsia_gemini_api_key");
+      const keyInp = document.getElementById("manual-api-key-input");
+      if (keyInp) keyInp.value = "";
+      showUndoBar("Käytetään koodin sisäistä avainta");
+      closeDiagModal();
     };
 
     window.closeDiagModal = function() {
