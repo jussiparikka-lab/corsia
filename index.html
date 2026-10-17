@@ -950,7 +950,52 @@
     </div>
   </div>
 
-  <!-- OCR / Kameran tunnistusikkuna -->
+  <!-- UUSI: Älykäs Tuotekuva & Gemini Vision -modaali -->
+  <div class="modal-overlay" id="vision-modal" style="display: none;">
+    <div class="modal" style="max-width: 400px;">
+      <h3 style="margin-top: 0; color: #0284c7; display: flex; align-items: center; gap: 6px;">
+        <span>🔍</span> Älykäs Tuotetunnistus
+      </h3>
+      <p style="margin-bottom: 8px; font-size: 0.8rem; color: #475569;">
+        Tekoäly analysoi kuvan tuotteesta (brändi, pakkauskoko ja kategoria):
+      </p>
+
+      <div id="vision-preview-container" style="display: none; text-align: center; margin-bottom: 10px;">
+        <img id="vision-preview-img" src="" alt="Esikatselu" style="max-height: 140px; border-radius: 8px; border: 1px solid #cbd5e1; object-fit: contain;">
+      </div>
+
+      <div class="ocr-status-box" id="vision-status-box" style="display: flex;">
+        <div class="ocr-spinner"></div>
+        <span id="vision-status-text">Analysoidaan kuvaa tekoälyllä...</span>
+      </div>
+
+      <div id="vision-result-fields" style="display: none; margin-top: 10px;">
+        <label style="font-size: 0.76rem; font-weight: 700; color: #475569; display: block; margin-bottom: 3px;">Tunnistettu tuote & brändi:</label>
+        <input type="text" id="vision-item-name" class="input-field" style="margin-bottom: 6px;">
+        
+        <div style="display: flex; gap: 6px; margin-bottom: 6px;">
+          <div style="flex: 1;">
+            <label style="font-size: 0.76rem; font-weight: 700; color: #475569; display: block; margin-bottom: 3px;">Määrä:</label>
+            <input type="number" id="vision-item-qty" class="qty-field" style="width: 100%;">
+          </div>
+          <div style="flex: 1;">
+            <label style="font-size: 0.76rem; font-weight: 700; color: #475569; display: block; margin-bottom: 3px;">Kategoria:</label>
+            <select id="vision-item-cat" class="select-field" style="padding: 9px 6px;"></select>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-actions" style="margin-top: 12px;">
+        <button class="btn-secondary" onclick="closeVisionModal()">Peruuta</button>
+        <button class="btn-primary" id="btn-vision-accept" onclick="executeVisionAccept()" disabled>Vie ostoslistalle ✓</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Piilotettu tiedostokenttä jääkaappi- ja WhatsApp-tuotekuville -->
+  <input type="file" id="vision-file-input" accept="image/*" style="display: none;" onchange="handleProductImageSelected(event)">
+
+  <!-- OCR / Kuitti- ja paperilappuikkuna -->
   <div class="modal-overlay" id="ocr-modal" style="display: none;">
     <div class="modal" style="max-width: 400px;">
       <h3 style="margin-top: 0; color: #0284c7;">📷 Tunnistettu teksti kuvasta</h3>
@@ -973,10 +1018,22 @@
 
   <div class="modal-overlay" id="firebase-modal" style="display: none;">
     <div class="modal" style="max-width: 440px;">
-      <h3 style="margin-top: 0;">☁️ Pilvisynkronointi (Firebase)</h3>
+      <h3 style="margin-top: 0;">☁️ Pilvisynkronointi & AI-asetukset</h3>
       <p style="font-size: 0.85rem;">Synkronointi yhdistetty Corsia-perheen pilveen.</p>
-      <div class="modal-actions">
-        <button class="btn-primary" onclick="closeFirebaseSettings()">Sulje</button>
+      
+      <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #e2e8f0;">
+        <label style="font-size: 0.78rem; font-weight: 700; color: #334155; display: block; margin-bottom: 4px;">
+          Google Gemini API -avain (Kuvatunnistukseen):
+        </label>
+        <input type="password" id="gemini-api-key-input" class="input-field" placeholder="Syötä Gemini API -avain (AI Studio)" style="font-size: 0.8rem;">
+        <div style="font-size: 0.7rem; color: #64748b; margin-top: 4px;">
+          Tarvitaan jääkaappikuvien ja WhatsApp-tuotteiden tekoälytunnistukseen.
+        </div>
+      </div>
+
+      <div class="modal-actions" style="margin-top: 14px;">
+        <button class="btn-secondary" onclick="closeFirebaseSettings()">Sulje</button>
+        <button class="btn-primary" onclick="saveGeminiKey()">Tallenna avain</button>
       </div>
     </div>
   </div>
@@ -2141,6 +2198,7 @@
               <input type="text" id="new-item-name" class="input-field" placeholder="Tuote (tai sanele mikillä)">
               <input type="number" id="new-item-qty" class="qty-field" placeholder="Määrä (3/300)">
               <button class="btn-mic" id="btn-mic" onclick="startDictation()" title="Sanele useita tuotteita kerralla: 'maito ja lohi ja kurkku'">🎤</button>
+              <button class="btn-mic" id="btn-fridge-cam" onclick="triggerProductImageCapture()" title="Ota kuva jääkaapista tai valitse WhatsApp-kuva tuotteesta" style="color: #0284c7;">📷</button>
             </div>
             <select id="new-item-cat" class="select-field">
               ${categories.map(c => `<option value="${c}">${c}</option>`).join("")}
@@ -2444,11 +2502,235 @@
     };
 
     window.openFirebaseSettings = function() {
-      document.getElementById("firebase-modal").style.display = "flex";
+      const modal = document.getElementById("firebase-modal");
+      const keyInp = document.getElementById("gemini-api-key-input");
+      if (keyInp) {
+        keyInp.value = localStorage.getItem("corsia_gemini_api_key") || "";
+      }
+      if (modal) modal.style.display = "flex";
     };
 
     window.closeFirebaseSettings = function() {
       document.getElementById("firebase-modal").style.display = "none";
+    };
+
+    window.saveGeminiKey = function() {
+      const keyInp = document.getElementById("gemini-api-key-input");
+      const val = keyInp ? keyInp.value.trim() : "";
+      if (val) {
+        localStorage.setItem("corsia_gemini_api_key", val);
+        showUndoBar("Gemini API -avain tallennettu!");
+      } else {
+        localStorage.removeItem("corsia_gemini_api_key");
+        showUndoBar("Gemini API -avain poistettu.");
+      }
+      closeFirebaseSettings();
+    };
+
+    /* ==========================================
+       ÄLYKÄS TUOTEKUVATUNNISTUS (GEMINI VISION)
+       Jääkaappikuvat ja WhatsApp-kuvat
+       ========================================== */
+    window.triggerProductImageCapture = function() {
+      const fileInput = document.getElementById("vision-file-input");
+      if (fileInput) {
+        fileInput.value = "";
+        fileInput.click();
+      }
+    };
+
+    window.closeVisionModal = function() {
+      document.getElementById("vision-modal").style.display = "none";
+    };
+
+    async function handleProductImageSelected(e) {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+
+      const modal = document.getElementById("vision-modal");
+      const previewCont = document.getElementById("vision-preview-container");
+      const previewImg = document.getElementById("vision-preview-img");
+      const statusBox = document.getElementById("vision-status-box");
+      const statusText = document.getElementById("vision-status-text");
+      const resultFields = document.getElementById("vision-result-fields");
+      const btnAccept = document.getElementById("btn-vision-accept");
+      const nameInput = document.getElementById("vision-item-name");
+      const qtyInput = document.getElementById("vision-item-qty");
+      const catSelect = document.getElementById("vision-item-cat");
+
+      modal.style.display = "flex";
+      previewCont.style.display = "none";
+      resultFields.style.display = "none";
+      statusBox.style.display = "flex";
+      statusText.innerText = "Käsitellään kuvaa ja analysoidaan tuotetta...";
+      btnAccept.disabled = true;
+
+      // Popukoidaan kategoriat alasvetovalikkoon
+      catSelect.innerHTML = STANDARD_CATEGORIES.map(c => `<option value="${c}">${c}</option>`).join("");
+
+      try {
+        const { base64Data, dataUrl } = await convertAndCompressImage(file);
+        previewImg.src = dataUrl;
+        previewCont.style.display = "block";
+
+        const apiKey = localStorage.getItem("corsia_gemini_api_key") || "";
+
+        if (apiKey) {
+          statusText.innerText = "Tunnistetaan tuotetta ja brändiä (Gemini AI)...";
+          const identified = await identifyProductWithGemini(base64Data, apiKey);
+
+          nameInput.value = identified.name || "Tuntematon tuote";
+          qtyInput.value = identified.qty || 1;
+          const matchedCat = resolveStandardCategory(identified.category, identified.name);
+          catSelect.value = matchedCat;
+
+          statusBox.style.display = "none";
+          resultFields.style.display = "block";
+          btnAccept.disabled = false;
+        } else {
+          // Varajärjestelmä (OCR), jos käyttäjä ei ole vielä asettanut omaa Gemini-avainta
+          statusText.innerText = "Gemini API -avain puuttuu (Asetukset). Luetaan teksti paikallisesti...";
+          
+          if (typeof Tesseract === "undefined") {
+            throw new Error("Tesseract.js ei saatavilla eikä Gemini API -avainta ole asetettu.");
+          }
+
+          const worker = await Tesseract.createWorker("fin", 1);
+          const { data: { text } } = await worker.recognize(dataUrl);
+          await worker.terminate();
+
+          const lines = text.split("\n").map(l => l.trim()).filter(l => l.length >= 3);
+          const bestGuess = lines.length > 0 ? lines[0] : "Tuote kuvasta";
+          
+          nameInput.value = bestGuess;
+          qtyInput.value = 1;
+          catSelect.value = resolveStandardCategory("Muut", bestGuess);
+
+          statusBox.style.display = "none";
+          resultFields.style.display = "block";
+          btnAccept.disabled = false;
+        }
+      } catch (err) {
+        console.error("Tuotekuvatunnistus epäonnistui:", err);
+        statusBox.style.display = "flex";
+        statusText.innerText = "Tunnistus epäonnistui: " + (err.message || "Tuntematon virhe");
+        btnAccept.disabled = true;
+      }
+    }
+
+    async function identifyProductWithGemini(base64Jpeg, apiKey) {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+
+      const promptText = `
+        Toimi suomalaisen ruokakauppasovelluksen konenäkömoottorina.
+        Katso kuvaa, joka on otettu jääkaapista, ruokakaapista tai WhatsApp-viestistä.
+        Tunnista kuvassa keskeisin elintarvike tai kauppatuote mahdollisimman tarkasti:
+        1. Tuotteen nimi ja brändi (esim. "Valio Oivariini vähemmän suolaa", "Oatly Barista Kaurajuoma", "Felix Ketsuppi", "Fazer Puikula Täysjyväruis").
+        2. Kategoria jokin näistä: ${STANDARD_CATEGORIES.join(", ")}.
+        3. Arvioitu määrä kappaleina (oletus 1).
+
+        Palauta VAIN ja AINOASTAAN JSON-muodossa ilman markdown-koodiblokkeja:
+        {"name": "Brändi ja tuotteen nimi", "category": "Kategoria", "qty": 1}
+      `;
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { text: promptText },
+              { inlineData: { mimeType: "image/jpeg", data: base64Jpeg } }
+            ]
+          }],
+          generationConfig: {
+            temperature: 0.1,
+            responseMimeType: "application/json"
+          }
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Gemini API vastasi koodilla ${response.status}`);
+      }
+
+      const resData = await response.json();
+      const rawJson = resData.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!rawJson) throw new Error("Tyhjä vastaus tekoälyltä");
+
+      return JSON.parse(rawJson);
+    }
+
+    function convertAndCompressImage(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = function(evt) {
+          const img = new Image();
+          img.onload = function() {
+            const canvas = document.createElement("canvas");
+            const maxDim = 1000;
+            let width = img.width;
+            let height = img.height;
+
+            if (width > maxDim || height > maxDim) {
+              if (width > height) {
+                height = Math.round((height * maxDim) / width);
+                width = maxDim;
+              } else {
+                width = Math.round((width * maxDim) / height);
+                height = maxDim;
+              }
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(img, 0, 0, width, height);
+
+            const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+            const base64Data = dataUrl.split(",")[1];
+            resolve({ base64Data, dataUrl });
+          };
+          img.onerror = reject;
+          img.src = evt.target.result;
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    window.executeVisionAccept = function() {
+      const nameInput = document.getElementById("vision-item-name");
+      const qtyInput = document.getElementById("vision-item-qty");
+      const catSelect = document.getElementById("vision-item-cat");
+
+      const name = nameInput ? nameInput.value.trim() : "";
+      const cat = catSelect ? catSelect.value : "Muut";
+      const qty = qtyInput && qtyInput.value ? Number(qtyInput.value) : 1;
+
+      if (!name) return;
+
+      const lower = name.toLowerCase();
+      const existing = appState.items.find(i => i.name.toLowerCase() === lower);
+
+      if (existing) {
+        existing.active = true;
+        existing.done = false;
+        existing.qty = qty;
+      } else {
+        appState.items.unshift({
+          name: name,
+          cat: resolveStandardCategory(cat, name),
+          active: true,
+          done: false,
+          qty: qty
+        });
+      }
+
+      pushToCloud();
+      render();
+      closeVisionModal();
+      showUndoBar(`📷 Lisätty listalle: ${name}`);
     };
 
     window.handleWhatsAppImport = function() {
