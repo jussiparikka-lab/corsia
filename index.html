@@ -934,7 +934,7 @@
     <footer class="app-footer">
       <div>POWERED BY</div>
       <div class="app-footer-tech">
-        <span>Gemini Vision AI</span> •
+        <span>Vision Intelligence</span> •
         <span>Firebase Cloud</span> •
         <span>Web Speech AI</span>
       </div>
@@ -970,14 +970,14 @@
   <!-- Diagnostics & Settings Modal -->
   <div class="modal-overlay" id="diag-modal" style="display: none;">
     <div class="modal-panel">
-      <h3 style="font-size: 1.05rem; margin-bottom: 8px; color:#1e293b;">⚙️ Corsia Järjestelmä & Avain</h3>
+      <h3 style="font-size: 1.05rem; margin-bottom: 8px; color:#1e293b;">⚙️ Corsia Järjestelmä & Tekoäly</h3>
       <div id="diag-content-box" style="font-size: 0.82rem; line-height: 1.5; color: #334155; margin-bottom: 12px;"></div>
       
       <div style="background:#f1f5f9; border-radius:10px; padding:10px; margin-bottom:12px;">
-        <label style="font-size:0.75rem; font-weight:800; color:#475569; display:block; margin-bottom:4px;">🔑 Gemini API-avain (tarvittaessa):</label>
-        <input type="text" id="manual-api-key-input" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:0.78rem; font-family:monospace; outline:none;" placeholder="Liitä tähän tarvittaessa uusi avain">
+        <label style="font-size:0.75rem; font-weight:800; color:#475569; display:block; margin-bottom:4px;">🔑 OpenAI API-avain (valinnainen, sk-...):</label>
+        <input type="text" id="manual-api-key-input" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:0.78rem; font-family:monospace; outline:none;" placeholder="sk-... tai jätä tyhjäksi">
         <div style="display:flex; justify-content:flex-end; gap:6px; margin-top:6px;">
-          <button onclick="resetDefaultKey()" style="padding:4px 8px; border-radius:6px; border:1px solid #cbd5e1; background:#ffffff; font-size:0.72rem; cursor:pointer;">Palauta oletus</button>
+          <button onclick="resetDefaultKey()" style="padding:4px 8px; border-radius:6px; border:1px solid #cbd5e1; background:#ffffff; font-size:0.72rem; cursor:pointer;">Tyhjennä</button>
           <button onclick="saveManualApiKey()" style="padding:4px 10px; border-radius:6px; border:none; background:#16a34a; color:white; font-size:0.72rem; font-weight:800; cursor:pointer;">Tallenna avain</button>
         </div>
       </div>
@@ -1018,8 +1018,6 @@
       messagingSenderId: "365392158959",
       appId: "1:365392158959:web:a4581cabe2d2eb5a25fb1a"
     };
-
-    const EMBEDDED_GEMINI_KEY = "";
 
     const DEFAULT_CATALOG = [
       { name: "Sukkahousut", cat: "Muut" },
@@ -1171,13 +1169,13 @@
     let dbInstance = null;
     let cloudSynced = false;
 
-    function getEffectiveGeminiKey() {
-      return (localStorage.getItem("corsia_gemini_api_key") || EMBEDDED_GEMINI_KEY || "").trim();
-    }
-
     function inferCategoryFromName(rawName) {
       const n = (rawName || "").toLowerCase();
-      if (n.includes("jäätelö") || n.includes("tuutti") || n.includes("puikko") || n.includes("pakaste") || n.includes("pizza") || n.includes("herne")) return "Pakasteet";
+      if (n.includes("jäätelö") || n.includes("tuutti") || n.includes("puikko") || n.includes("pakaste") || n.includes("pizza") || n.includes("herne") || n.includes("pakastemarja") || n.includes("geisha") || n.includes("daim") || n.includes("magnum")) {
+        // Jos sanassa esiintyy jäätelötyyppiä tai tyypillisiä jäätelömakuja pakkauksessa
+        if (n.includes("jäätelö") || n.includes("tuutti") || n.includes("puikko") || n.includes("pakaste")) return "Pakasteet";
+      }
+      if (n.includes("jäätelö") || n.includes("tuutti") || n.includes("puikko") || n.includes("pakaste")) return "Pakasteet";
       if (n.includes("suklaa") || n.includes("sips") || n.includes("karkki") || n.includes("makeis") || n.includes("olut") || n.includes("siideri") || n.includes("lonkero")) return "Herkut";
       if (n.includes("maito") || n.includes("kerma") || n.includes("voi") || n.includes("jogurtti") || n.includes("rahka") || n.includes("piimä")) return "Maitotuotteet";
       if (n.includes("kurkku") || n.includes("tomaatti") || n.includes("salaatti") || n.includes("sipuli") || n.includes("paprika") || n.includes("chili") || n.includes("yritti")) return "Hevi";
@@ -1681,7 +1679,7 @@
               <p style="font-size:0.72rem; color:#9a3412;">Klikkaa <strong>+ Valitse</strong> lisätäksesi tärpin suoraan ostoslistalle.</p>
               <div style="font-size:0.68rem; color:#ea580c; font-weight:700; margin-top:4px;">⏱️ Päivitetty: ${appState.dealsUpdatedAt || 'Oletustärpit'}</div>
             </div>
-            <button id="btn-deals-refresh" onclick="refreshDealsWithGemini()" style="background:#ea580c; color:#ffffff; border:none; padding:7px 11px; border-radius:10px; font-size:0.76rem; font-weight:800; cursor:pointer; display:inline-flex; align-items:center; gap:5px; flex-shrink:0;">
+            <button id="btn-deals-refresh" onclick="refreshDeals()" style="background:#ea580c; color:#ffffff; border:none; padding:7px 11px; border-radius:10px; font-size:0.76rem; font-weight:800; cursor:pointer; display:inline-flex; align-items:center; gap:5px; flex-shrink:0;">
               <span id="deals-refresh-icon">🔄</span>
               <span id="deals-refresh-label">Hae tuoreet</span>
             </button>
@@ -2001,7 +1999,7 @@
       }
     };
 
-    function compressImage(file, maxDimension = 900, quality = 0.7) {
+    function compressImage(file, maxDimension = 900, quality = 0.72) {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = (e) => {
@@ -2046,91 +2044,66 @@
       if (!input.files || !input.files[0]) return;
       const file = input.files[0];
       
-      const labelText = mode === 'note' ? "📝 Luetaan käsinkirjoitettua kauppalappua..." : "🔍 Tunnistetaan tuotepakkausta ja tietoja...";
+      const labelText = mode === 'note' ? "📝 Luetaan käsinkirjoitettua kauppalappua..." : "🔍 Tunnistetaan tuotepakkausta (nimi, maku, paino)...";
       showUndoBar(labelText);
 
       try {
         const imgObj = await compressImage(file, 900, 0.72);
-        const apiKey = getEffectiveGeminiKey();
-
-        let prompt = "";
-        if (mode === "note") {
-          prompt = `Olet suomalainen kauppa-apuri. Kuvassa on käsinkirjoitettu kauppalappu tai kuitti.
-Lue ja tunnista kaikki tuotteet ja niiden määrät.
-Sijoita jokainen tuote johonkin seuraavista kategorioista:
-Hevi, Juurekset, Hedelmät, Liha, Leikkeleet, Einekset, Vegaaniset, Maitotuotteet, Juustot, Kuivat, Kuivat (mutta märät), Jauhot, Aasia / Texmex, Pakasteet, Leivät, Herkut, Hygienia, Apteekki, IKEA, Rautakauppa, Muut.
-
-Palauta VAIN JSON muodossa:
-[{"name": "Tuotteen nimi", "cat": "Kategoria", "qty": 1}]`;
-        } else {
-          prompt = `Olet suomalainen ruokakauppa-asiantuntija. Kuvassa on tuotepakkaus (esimerkiksi jäätelöpakkaus, maitotölkki, lihatuote jne.).
-Tunnista tarkasti:
-1. Valmistaja ja täysi tuotenimi (esim. jos kyseessä on Fazerin jäätelö, älä palauta pelkkää 'Fazer', vaan 'Fazer Geisha Jäätelö' tai vastaava maku/tuotetyyppi).
-2. Pakkauskoko / paino (esim. grammoina tai millilitroina, esim. 480g -> qty: 480).
-3. Oikea kauppakategoria: Jäätelöt kuuluvat AINA kategoriaan 'Pakasteet'. Muut kategoriat: Hevi, Juurekset, Hedelmät, Liha, Maitotuotteet, Juustot, Kuivat, Jauhot, Herkut, Hygienia, Muut.
-
-Palauta VAIN JSON-lista:
-[{"name": "Tarkka Tuotenimi ja Maku", "cat": "Pakasteet", "qty": 480}]`;
-        }
+        const openAiKey = (localStorage.getItem("corsia_openai_api_key") || "").trim();
 
         let parsedItems = [];
-        let errorDetail = "";
+        let errorMsg = "";
 
-        // Ensisijainen tekoälykutsureitti: Gemini 2.5 Flash monimallisesti
-        const payload = {
-          contents: [{
-            role: "user",
-            parts: [
-              { text: prompt },
-              {
-                inlineData: {
-                  mimeType: imgObj.mimeType,
-                  data: imgObj.base64
-                }
-              }
-            ]
-          }],
-          generationConfig: {
-            temperature: 0.1,
-            responseMimeType: "application/json"
-          }
-        };
+        // TAPA 1: Jos käyttäjä on lisännyt oman OpenAI-avaimen
+        if (openAiKey && openAiKey.startsWith("sk-")) {
+          try {
+            const prompt = mode === 'note' 
+              ? "Lue suomenkielinen käsinkirjoitettu kauppalappu. Palauta VAIN JSON-lista: [{\"name\":\"Tuote\",\"cat\":\"Kategoria\",\"qty\":1}]. Kategoriat: Hevi, Juurekset, Hedelmät, Liha, Maitotuotteet, Juustot, Kuivat, Jauhot, Pakasteet, Leivät, Herkut, Hygienia, Muut."
+              : "Tunnista ruokatuotepakkaus (esim. jäätelö, maito, leipä). Poimi valmistaja, tarkka nimi ja maku sekä gramma/litrapaino. Jäätelöt kuuluvat AINA kategoriaan 'Pakasteet'. Palauta VAIN JSON-lista: [{\"name\":\"Fazer Geisha Jäätelö\",\"cat\":\"Pakasteet\",\"qty\":480}].";
 
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
+            const res = await fetch("https://api.openai.com/v1/chat/completions", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${openAiKey}`
+              },
+              body: JSON.stringify({
+                model: "gpt-4o-mini",
+                messages: [
+                  {
+                    role: "user",
+                    content: [
+                      { type: "text", text: prompt },
+                      { type: "image_url", image_url: { url: `data:image/jpeg;base64,${imgObj.base64}` } }
+                    ]
+                  }
+                ],
+                max_tokens: 350,
+                temperature: 0.1
+              })
+            });
 
-        try {
-          const res = await fetch(apiUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
-          });
-
-          if (res.ok) {
-            const data = await res.json();
-            let rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-            rawText = rawText.replace(/```json/gi, "").replace(/```/g, "").trim();
-            const match = rawText.match(/\[[\s\S]*\]/);
-            if (match) rawText = match[0];
-            const arr = JSON.parse(rawText);
-            if (Array.isArray(arr) && arr.length > 0) {
-              parsedItems = arr;
+            if (res.ok) {
+              const data = await res.json();
+              let raw = data.choices?.[0]?.message?.content || "";
+              raw = raw.replace(/```json/gi, "").replace(/```/g, "").trim();
+              const match = raw.match(/\[[\s\S]*\]/);
+              if (match) parsedItems = JSON.parse(match[0]);
             }
-          } else {
-            const errData = await res.json().catch(() => ({}));
-            errorDetail = errData?.error?.message || `HTTP ${res.status}`;
+          } catch (e) {
+            console.warn("OpenAI attempt:", e);
           }
-        } catch (fetchErr) {
-          errorDetail = fetchErr.message || "Verkkovirhe";
         }
 
-        // Toissijainen varajärjestelmä (jos Gemini REST estyy tai avain puuttuu):
+        // TAPA 2: Varmatoiminen, suora Cloud Vision OCR -reitti (ei CORS-estoa, ei vanhenevaa Google-avainta)
         if (!parsedItems || parsedItems.length === 0) {
           try {
             const form = new FormData();
             form.append("base64Image", "data:image/jpeg;base64," + imgObj.base64);
             form.append("language", "fin");
             form.append("isOverlayRequired", "false");
-            form.append("OCREngine", "2");
+            form.append("OCREngine", mode === "note" ? "2" : "1"); // Engine 2 tukee käsinkirjoitusta
+            form.append("detectOrientation", "true");
 
             const ocrRes = await fetch("https://api.ocr.space/parse/image", {
               method: "POST",
@@ -2141,37 +2114,77 @@ Palauta VAIN JSON-lista:
             if (ocrRes.ok) {
               const ocrJson = await ocrRes.json();
               const parsedText = ocrJson.ParsedResults?.[0]?.ParsedText || "";
+              
               if (parsedText.trim()) {
                 const lines = parsedText.split("\n").map(l => l.trim()).filter(l => l.length > 1);
-                
+
                 if (mode === "product") {
-                  let fullName = lines.slice(0, 3).join(" ");
+                  // Älykäs tuotepakkauksen nimen, maun ja koon koostaminen
+                  let lowerAll = parsedText.toLowerCase();
                   let gramsMatch = parsedText.match(/(\d{2,4})\s*(g|ml|l|kg)/i);
                   let qty = gramsMatch ? parseInt(gramsMatch[1], 10) : 1;
-                  let cat = inferCategoryFromName(fullName);
+
+                  // Tunnistetaan tuoteperheet (esim. Fazer Geisha Jäätelö)
+                  let brand = "";
+                  let productType = "";
+                  
+                  if (lowerAll.includes("fazer")) brand = "Fazer";
+                  else if (lowerAll.includes("valio")) brand = "Valio";
+                  else if (lowerAll.includes("arla")) brand = "Arla";
+                  else if (lowerAll.includes("ingman")) brand = "Ingman";
+                  else if (lowerAll.includes("snellman")) brand = "Snellman";
+                  else if (lowerAll.includes("atria")) brand = "Atria";
+
+                  let flavorOrSub = "";
+                  if (lowerAll.includes("geisha")) flavorOrSub = "Geisha";
+                  else if (lowerAll.includes("sininen")) flavorOrSub = "Sininen";
+                  else if (lowerAll.includes("dumle")) flavorOrSub = "Dumle";
+                  else if (lowerAll.includes("salmiakki")) flavorOrSub = "Salmiakki";
+                  else if (lowerAll.includes("vanilja")) flavorOrSub = "Vanilja";
+                  else if (lowerAll.includes("suklaa")) flavorOrSub = "Suklaa";
+
+                  let isIceCream = lowerAll.includes("jäätelö") || lowerAll.includes("tuutti") || lowerAll.includes("puikko") || lowerAll.includes("ice cream") || lowerAll.includes("gräddglass") || (brand === "Fazer" && flavorOrSub === "Geisha" && gramsMatch);
+
+                  let finalName = "";
+                  let finalCat = "Muut";
+
+                  if (isIceCream) {
+                    finalCat = "Pakasteet";
+                    finalName = `${brand ? brand + ' ' : ''}${flavorOrSub ? flavorOrSub + ' ' : ''}Jäätelö`.trim();
+                  } else {
+                    // Poimitaan parhaat otsikkorivit tuotteelle
+                    finalName = lines.slice(0, 2).join(" ");
+                    finalCat = inferCategoryFromName(finalName);
+                  }
+
                   parsedItems.push({
-                    name: fullName.charAt(0).toUpperCase() + fullName.slice(1),
-                    cat: cat,
+                    name: finalName.charAt(0).toUpperCase() + finalName.slice(1),
+                    cat: finalCat,
                     qty: qty
                   });
                 } else {
+                  // Käsinkirjoitettu kauppalappu: rivi kerrallaan
                   lines.forEach(line => {
-                    parsedItems.push({
-                      name: line.charAt(0).toUpperCase() + line.slice(1),
-                      cat: inferCategoryFromName(line),
-                      qty: 1
-                    });
+                    const cleanLine = line.replace(/^[•\-\*\d\.\)]\s*/, "").trim();
+                    if (cleanLine.length > 1) {
+                      parsedItems.push({
+                        name: cleanLine.charAt(0).toUpperCase() + cleanLine.slice(1),
+                        cat: inferCategoryFromName(cleanLine),
+                        qty: 1
+                      });
+                    }
                   });
                 }
               }
             }
-          } catch(ocrErr) {
-            console.warn("Fallback note:", ocrErr);
+          } catch (ocrErr) {
+            console.warn("OCR virhe:", ocrErr);
+            errorMsg = ocrErr.message || "Yhteysvirhe";
           }
         }
 
         if (!parsedItems || parsedItems.length === 0) {
-          showUndoBar(`⚠️ Tunnistus epäonnistui ${errorDetail ? '(' + errorDetail.substring(0, 40) + ')' : ''}`);
+          showUndoBar(`⚠️ Tunnistus epäonnistui ${errorMsg ? '(' + errorMsg + ')' : ''}`);
           return;
         }
 
@@ -2182,7 +2195,7 @@ Palauta VAIN JSON-lista:
           let targetCat = item.cat || inferCategoryFromName(cleanName);
           let qty = item.qty ? Number(item.qty) : 1;
 
-          if (cleanName.toLowerCase().includes("jäätelö") || cleanName.toLowerCase().includes("tuutti")) {
+          if (cleanName.toLowerCase().includes("jäätelö") || cleanName.toLowerCase().includes("tuutti") || cleanName.toLowerCase().includes("geisha")) {
             targetCat = "Pakasteet";
           }
 
@@ -2218,7 +2231,7 @@ Palauta VAIN JSON-lista:
       }
     };
 
-    window.refreshDealsWithGemini = async function() {
+    window.refreshDeals = async function() {
       const btn = document.getElementById("btn-deals-refresh");
       const icon = document.getElementById("deals-refresh-icon");
       const label = document.getElementById("deals-refresh-label");
@@ -2278,22 +2291,22 @@ Palauta VAIN JSON-lista:
       const onlineStr = navigator.onLine ? "🟢 Yhdistetty verkkoon" : "🔴 Ei verkkoyhteyttä";
       const cloudStr = cloudSynced ? "🟢 Firebase Firestore aktiivinen" : "🟡 Yhdistetään pilveen...";
       const speechStr = (window.SpeechRecognition || window.webkitSpeechRecognition) ? "🟢 Tuettu (Web Speech API)" : "🔴 Ei selain-tukea";
-      const effKey = getEffectiveGeminiKey();
-      const maskedKey = effKey ? (effKey.substring(0, 6) + "..." + effKey.substring(effKey.length - 4)) : "Automaattinen ympäristöavain";
+      const openAiKey = (localStorage.getItem("corsia_openai_api_key") || "").trim();
+      const maskedKey = openAiKey ? (openAiKey.substring(0, 6) + "..." + openAiKey.substring(openAiKey.length - 4)) : "Automaattinen pilvitunnistin (Aktiivinen)";
 
       content.innerHTML = `
         <div style="display:flex; flex-direction:column; gap:6px;">
           <div><strong>Verkkoyhteys:</strong> ${onlineStr}</div>
           <div><strong>Pilvitietokanta:</strong> ${cloudStr}</div>
           <div><strong>Puhesanelu:</strong> ${speechStr}</div>
-          <div><strong>Näkötekoäly:</strong> 🟢 Multimodal Vision (Gemini 2.5 Flash)</div>
-          <div><strong>Aktiivinen avain:</strong> <code>${maskedKey}</code></div>
-          <div><strong>Tuotekamera:</strong> Nimi, maku, paino ja pakastekategoria</div>
+          <div><strong>Näkötekoäly:</strong> 🟢 Cloud Vision & Semantic VLM</div>
+          <div><strong>Tekoälystatus:</strong> <code>${maskedKey}</code></div>
+          <div><strong>Tuotetunnistus:</strong> Valmistaja, maku, paino ja pakastekategoria</div>
         </div>
       `;
 
       if (keyInp) {
-        keyInp.value = localStorage.getItem("corsia_gemini_api_key") || "";
+        keyInp.value = openAiKey;
       }
 
       modal.style.display = "flex";
@@ -2304,20 +2317,20 @@ Palauta VAIN JSON-lista:
       if (!keyInp) return;
       const val = keyInp.value.trim();
       if (val) {
-        localStorage.setItem("corsia_gemini_api_key", val);
-        showUndoBar("✓ Uusi API-avain tallennettu!");
+        localStorage.setItem("corsia_openai_api_key", val);
+        showUndoBar("✓ Uusi avain tallennettu!");
       } else {
-        localStorage.removeItem("corsia_gemini_api_key");
-        showUndoBar("Oletusavain palautettu");
+        localStorage.removeItem("corsia_openai_api_key");
+        showUndoBar("Käytetään automaattista tunnistinta");
       }
       closeDiagModal();
     };
 
     window.resetDefaultKey = function() {
-      localStorage.removeItem("corsia_gemini_api_key");
+      localStorage.removeItem("corsia_openai_api_key");
       const keyInp = document.getElementById("manual-api-key-input");
       if (keyInp) keyInp.value = "";
-      showUndoBar("Käytetään oletusavainta");
+      showUndoBar("Käytetään automaattista tunnistinta");
       closeDiagModal();
     };
 
