@@ -1830,9 +1830,7 @@ Palauta VAIN JSON-lista ilman mitään markdownia tai ylimääräistä tekstiä:
     function renderStoreLogo(key) {
       if (key === "prisma_jumbo") {
         return `<svg viewBox="0 0 120 40" style="width:100%; height:100%;">
-          <circle cx="18" cy="20" r="14" fill="none" stroke="#009944" stroke-width="4"/>
-          <circle cx="18" cy="20" r="6" fill="#009944"/>
-          <text x="38" y="26" font-family="Arial, Helvetica, sans-serif" font-weight="900" font-size="18" fill="#009944" letter-spacing="0.5">PRISMA</text>
+          <text x="60" y="26" dominant-baseline="middle" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="900" font-size="24" fill="#009944" letter-spacing="1">PRISMA</text>
         </svg>`;
       }
       if (key === "cm_jumbo" || key === "cm_tammisto") {
@@ -1968,6 +1966,10 @@ Palauta VAIN JSON-lista ilman mitään markdownia tai ylimääräistä tekstiä:
 
       let html = `
         <div class="main-content" style="padding-top: 14px;">
+          <div style="padding: 0 0 14px;">
+            <input type="text" id="soffa-search-input" placeholder="🔍 Hae tuotteita..." style="width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); font-size: 0.9rem; font-family: inherit; outline: none; box-shadow: inset 0 1px 2px rgba(0,0,0,0.04);" oninput="filterSoffaItems(this.value)">
+          </div>
+
           <div class="add-widget-card">
             <div class="add-widget-header">
               <span class="add-widget-title">Lisää uusi tuote ostoslistaan</span>
@@ -1983,10 +1985,6 @@ Palauta VAIN JSON-lista ilman mitään markdownia tai ylimääräistä tekstiä:
               ${catOptionsHtml}
             </select>
             <button class="btn-submit-add" onclick="addNewProductFromInput()">+ Lisää kauppalappuun</button>
-          </div>
-
-          <div style="padding: 0 4px 14px;">
-            <input type="text" id="soffa-search-input" placeholder="🔍 Hae tuotteita..." style="width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); font-size: 0.9rem; font-family: inherit; outline: none; box-shadow: inset 0 1px 2px rgba(0,0,0,0.04);" oninput="filterSoffaItems(this.value)">
           </div>
 
           <div style="display: flex; justify-content: space-between; align-items: center; margin: 0 4px 8px;">
