@@ -173,6 +173,7 @@ async function describeGeminiError(res) {
   if (!res) return "Tekoälyyn ei saatu yhteyttä";
   const err = await res.json().catch(() => ({}));
   const msg = String(err?.error?.message || res.statusText || "");
+  try { localStorage.setItem("corsia_last_ai_error", `${new Date().toLocaleString("fi-FI")} – ${res.status}: ${msg}`.substring(0, 400)); } catch (e) {}
   if (res.status === 400 && /api key|API_KEY/i.test(msg)) return "API-avain ei kelpaa – tarkista avain";
   if (res.status === 401 || res.status === 403) return "API-avaimella ei ole oikeutta Gemini API:in";
   if (res.status === 404) return "Gemini-mallia ei löytynyt tälle avaimelle";
@@ -680,6 +681,7 @@ Vastaa PELKÄLLÄ JSON-taulukolla, ei muuta tekstiä eikä lähdeviitteitä. Jok
     } catch (e) {
       console.warn("Deals search error:", e);
       lastError = "Haku epäonnistui – tarkista verkkoyhteys";
+      try { localStorage.setItem("corsia_last_ai_error", `${new Date().toLocaleString("fi-FI")} – ${e?.message || e}`); } catch (e2) {}
     }
   }
 
@@ -1049,6 +1051,7 @@ window.openDiagnostics = function() {
       <div><strong>Verkkoyhteys:</strong> ${onlineStr}</div>
       <div><strong>Pilvitietokanta:</strong> ${cloudStr}</div>
       <div><strong>Puhesanelu:</strong> ${speechStr}</div>
+      <div><strong>Viimeisin tekoälyvirhe:</strong> <span style="word-break:break-word;">${esc(localStorage.getItem("corsia_last_ai_error") || "ei virheitä")}</span></div>
       <div><strong>Tekoälymalli:</strong> ${esc(localStorage.getItem("corsia_gemini_model") || "valitaan automaattisesti")}</div>
       <div><strong>API-avain:</strong> ${keyStatusStr}</div>
     </div>
