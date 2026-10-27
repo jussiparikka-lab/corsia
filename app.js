@@ -635,46 +635,68 @@ window.refreshDealsWithGemini = async function() {
   }
 
   const cats = Object.keys(CATEGORY_THEMES).join(", ");
-  const prompt = `Hae ajankohtaiset päivittäistavaratarjoukset ja ruokatarjoukset Vantaan alueelta (K-Citymarket Tammisto, Prisma Jumbo, K-Citymarket Jumbo ja Neste K Tammisto autopesu). Keskity erityisesti kalatarjouksiin (esim. lohi, siika) ja muihin todella hyviin ruokatarjouksiin Tammiston alueella. Hae 6-10 aitoa tarjousta.
+  const today = new Date().toLocaleDateString("fi-FI", { weekday: "long", day: "numeric", month: "numeric", year: "numeric" });
+  const prompt = `Tänään on ${today}. Etsi Google-haulla tämän viikon voimassa olevia ruoka- ja päivittäistavaratarjouksia näistä kaupoista: K-Citymarket Tammisto (Vantaa), Prisma Jumbo (Vantaa), K-Citymarket Jumbo (Vantaa). Hyviä lähteitä: k-ruoka.fi/kauppa/k-citymarket-vantaa-tammisto/tarjoukset, k-ruoka.fi/kauppa/k-citymarket-vantaa-jumbo/tarjoukset, s-kaupat.fi/myymala/prisma-jumbo, sekä kauppojen viikkomainokset. Jos juuri näiden kauppojen tarjouksia ei löydy, käytä K-Citymarketin ja Prisman valtakunnallisia viikkotarjouksia. Painota kala- ja lihatarjouksia. Anna 6-10 tarjousta.
 
-Palauta VAIN JSON-taulukko ilman markdownia tai muuta tekstiä. Jokaisella alkiolla kentät:
-"cat" (lyhyt otsikko emojilla, esim. "🐟 Kalaruoka"), "name" (tuote), "price" (esim. "12,90 €/kg"), "store" (kaupan nimi), "mainCat" (yksi näistä: ${cats}).`;
+Vastaa PELKÄLLÄ JSON-taulukolla, ei muuta tekstiä eikä lähdeviitteitä. Jokaisella alkiolla kentät:
+"cat" (lyhyt otsikko emojilla, esim. "🐟 Kala"), "name" (tuote), "price" (esim. "12,90 €/kg"), "store" (kaupan nimi), "mainCat" (yksi näistä: ${cats}).`;
+
+  // Poimii tarjoukset vastauksesta, vaikka mukana olisi selitystekstiä tai lähdeviitteitä.
+  const parseDeals = (data) => {
+    const text = (data?.candidates?.[0]?.content?.parts || [])
+      .filter(p => !p.thought)
+      .map(p => p.text || "").join("")
+      .replace(/```json/gi, "").replace(/```/g, "");
+    const start = text.indexOf("["), end = text.lastIndexOf("]");
+    if (start >= 0 && end > start) {
+      try {
+        const arr = JSON.parse(text.slice(start, end + 1));
+        if (Array.isArray(arr)) return arr;
+      } catch (e) { /* jatketaan alla */ }
+    }
+    // Varalla: yksittäiset {...}-objektit
+    const objs = [];
+    (text.match(/\{[^{}]*\}/g) || []).forEach(s => { try { objs.push(JSON.parse(s)); } catch (e) {} });
+    return objs;
+  };
 
   let status = "";
-  try {
-    // googleSearch ei toimi yhdessä JSON-vastausmuodon kanssa, joten JSON pyydetään promptissa
-    const response = await callGemini({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      tools: [{ googleSearch: {} }]
-    });
-
-    if (!response || !response.ok) {
-      status = "⚠️ " + await describeGeminiError(response);
-    } else {
-      const data = await response.json();
-      const text = (data.candidates?.[0]?.content?.parts || []).map(p => p.text || "").join("");
-      const match = text.replace(/```json/gi, "").replace(/```/g, "").match(/\[[\s\S]*\]/);
-      const parsed = match ? JSON.parse(match[0]) : [];
-
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        appState.deals = parsed.filter(d => d && d.name).map((d, i) => ({
-          id: "ai" + i,
-          cat: d.cat || "🔥 Tärppi",
-          name: String(d.name),
-          price: String(d.price || ""),
-          store: String(d.store || ""),
-          mainCat: normalizeCategory(d.mainCat) || categorizeProductName(d.name)
-        }));
-        appState.dealsUpdatedAt = new Date().toLocaleDateString("fi-FI") + " klo " +
-          new Date().toLocaleTimeString("fi-FI", { hour: "2-digit", minute: "2-digit" });
-        status = "✓ Päivän tärpit päivitetty!";
-      } else {
-        status = "⚠️ Tarjouksia ei löytynyt";
+  let deals = [];
+  let lastError = "";
+  // 1) Google-haulla (tuoreet tarjoukset), 2) ilman hakua, jos haku ei ole avaimella käytössä tai ei löytänyt mitään
+  const attempts = [
+    { tools: [{ googleSearch: {} }] },
+    { generationConfig: { responseMimeType: "application/json", temperature: 0.3 } }
+  ];
+  for (const extra of attempts) {
+    try {
+      const response = await callGemini({ contents: [{ role: "user", parts: [{ text: prompt }] }], ...extra });
+      if (!response || !response.ok) {
+        lastError = await describeGeminiError(response);
+        continue;
       }
+      deals = parseDeals(await response.json()).filter(d => d && d.name);
+      if (deals.length > 0) break;
+    } catch (e) {
+      console.warn("Deals search error:", e);
+      lastError = "Haku epäonnistui – tarkista verkkoyhteys";
     }
-  } catch (e) {
-    console.warn("Deals search error:", e);
-    status = "⚠️ Haku epäonnistui";
+  }
+
+  if (deals.length > 0) {
+    appState.deals = deals.slice(0, 12).map((d, i) => ({
+      id: "ai" + Date.now() + i,
+      cat: d.cat || "🔥 Tärppi",
+      name: String(d.name),
+      price: String(d.price || ""),
+      store: String(d.store || ""),
+      mainCat: normalizeCategory(d.mainCat) || categorizeProductName(d.name)
+    }));
+    appState.dealsUpdatedAt = new Date().toLocaleDateString("fi-FI") + " klo " +
+      new Date().toLocaleTimeString("fi-FI", { hour: "2-digit", minute: "2-digit" });
+    status = "✓ Päivän tärpit päivitetty!";
+  } else {
+    status = "⚠️ " + (lastError || "Tarjouksia ei löytynyt – yritä myöhemmin uudelleen");
   }
 
   await pushToCloud();
