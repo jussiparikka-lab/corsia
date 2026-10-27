@@ -9,8 +9,16 @@ const FIREBASE_CONFIG = {
   appId: "1:365392158959:web:a4581cabe2d2eb5a25fb1a"
 };
 
-// Vaihda tähän, jos malli poistuu käytöstä
-const GEMINI_MODEL = "gemini-2.5-flash";
+// Gemini-mallit kokeillaan järjestyksessä. Vanha gemini-2.5-flash antaa uusille avaimille 404-virheen,
+// joten uudemmat mallit ovat ensin. Jos mikään ei toimi, sovellus hakee avaimelle sallitut mallit itse.
+const GEMINI_MODEL_CANDIDATES = [
+  "gemini-3.8-flash",
+  "gemini-3.6-flash",
+  "gemini-3.5-flash-lite",
+  "gemini-flash-latest",
+  "gemini-2.5-flash"
+];
+const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
 
 const STORE_LAYOUTS = {
   "prisma_jumbo": [
@@ -102,14 +110,74 @@ function getEffectiveGeminiKey() {
   return (localStorage.getItem("corsia_gemini_api_key") || "").trim();
 }
 
-function callGemini(payload) {
+// Hakee avaimelle sallitut Flash-mallit (uusin ensin).
+async function discoverGeminiModels(key) {
+  try {
+    const r = await fetch(`${GEMINI_BASE_URL}/models?pageSize=200`, { headers: { "x-goog-api-key": key } });
+    if (!r.ok) return [];
+    const d = await r.json();
+    return (d.models || [])
+      .filter(m => (m.supportedGenerationMethods || []).includes("generateContent"))
+      .map(m => String(m.name || "").replace(/^models\//, ""))
+      .filter(n => /flash/i.test(n) && !/(tts|image|live|audio|embed|thinking-exp)/i.test(n))
+      .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+  } catch (e) {
+    return [];
+  }
+}
+
+// Avain lähetetään aina x-goog-api-key -otsakkeessa (pakollinen uusille AQ.-avaimille, toimii myös AIza-avaimilla).
+// Jos malli antaa 404 (ei käytössä) tai 429/503 (ruuhka), kokeillaan seuraavaa mallia.
+async function callGemini(payload) {
   const key = getEffectiveGeminiKey();
-  const isAQ = key.startsWith("AQ.");
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`
-    + (isAQ ? "" : `?key=${encodeURIComponent(key)}`);
-  const headers = { "Content-Type": "application/json" };
-  if (isAQ) headers["x-goog-api-key"] = key;
-  return fetch(url, { method: "POST", headers, body: JSON.stringify(payload) });
+  const saved = localStorage.getItem("corsia_gemini_model");
+  const queue = [...new Set([saved, ...GEMINI_MODEL_CANDIDATES].filter(Boolean))];
+  const tried = new Set();
+  let discovered = false;
+  let lastRes = null;
+
+  while (queue.length > 0 || !discovered) {
+    if (queue.length === 0) {
+      discovered = true;
+      (await discoverGeminiModels(key)).forEach(m => { if (!tried.has(m)) queue.push(m); });
+      if (queue.length === 0) break;
+    }
+    const model = queue.shift();
+    if (tried.has(model)) continue;
+    tried.add(model);
+
+    let res;
+    try {
+      res = await fetch(`${GEMINI_BASE_URL}/models/${model}:generateContent`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+        body: JSON.stringify(payload)
+      });
+    } catch (e) {
+      throw e; // verkkovirhe – ei kannata kokeilla muita malleja
+    }
+
+    if (res.ok) {
+      localStorage.setItem("corsia_gemini_model", model);
+      return res;
+    }
+    lastRes = res;
+    if (![404, 429, 500, 503].includes(res.status)) break; // esim. väärä avain – muut mallit eivät auta
+    if (saved === model) localStorage.removeItem("corsia_gemini_model");
+  }
+  return lastRes;
+}
+
+// Selkokielinen virheilmoitus Geminin vastauksesta.
+async function describeGeminiError(res) {
+  if (!res) return "Tekoälyyn ei saatu yhteyttä";
+  const err = await res.json().catch(() => ({}));
+  const msg = String(err?.error?.message || res.statusText || "");
+  if (res.status === 400 && /api key|API_KEY/i.test(msg)) return "API-avain ei kelpaa – tarkista avain";
+  if (res.status === 401 || res.status === 403) return "API-avaimella ei ole oikeutta Gemini API:in";
+  if (res.status === 404) return "Gemini-mallia ei löytynyt tälle avaimelle";
+  if (res.status === 429) return "Tekoälyn käyttöraja täynnä – yritä hetken päästä";
+  return `Virhe ${res.status}: ${msg.substring(0, 40)}`;
 }
 
 // Täsmäosuma ensin, sitten "MAITO: " -etuliitteen jälkeinen nimi, viimeisenä yksiselitteinen osittainen osuma.
@@ -125,19 +193,166 @@ function findProduct(name) {
   return hits.length === 1 ? hits[0] : -1;
 }
 
+// Muuttaa tekoälyn antaman kategorian sovelluksen omaksi kategoriaksi (kirjainkoko, välilyönnit, synonyymit).
+const CATEGORY_ALIASES = [
+  [/vihann|hevi|salaat|yrtt/, "Hevi"],
+  [/juure/, "Juurekset"],
+  [/hedelm|marja/, "Hedelmät"],
+  [/leikkel|makkar/, "Leikkeleet"],
+  [/liha|kala|siipikarj|merenel/, "Liha"],
+  [/eines|valmisruo/, "Einekset"],
+  [/vegaan|kasvipro/, "Vegaaniset"],
+  [/maito|meijer|jogurt|muna/, "Maitotuotteet"],
+  [/juust/, "Juustot"],
+  [/märät|marat|säilyk|juoma|mehu|olut|siider|öljy|kastike/, "Kuivat (mutta märät)"],
+  [/jauho|leivont/, "Jauhot"],
+  [/aasia|texmex|tex-mex|meksik/, "Aasia / Texmex"],
+  [/pakaste|jääte/, "Pakasteet"],
+  [/leip|leivä/, "Leivät"],
+  [/herkku|herkut|makeis|karkk|snack|sipsi/, "Herkut"],
+  [/hygien|puhdist|pesuaine|kodinhoito|paperi/, "Hygienia"],
+  [/apteek|lääk|vitamiin/, "Apteekki"],
+  [/ikea|sisustus/, "IKEA"],
+  [/rauta|työkalu/, "Rautakauppa"],
+  [/kuiva|pasta|riisi|mauste|kahvi|tee|muro/, "Kuivat"]
+];
+
+function normalizeCategory(cat) {
+  if (!cat) return null;
+  const c = String(cat).trim();
+  if (CATEGORY_THEMES[c]) return c;
+  const lc = c.toLowerCase();
+  const exact = Object.keys(CATEGORY_THEMES).find(k => k.toLowerCase() === lc);
+  if (exact) return exact;
+  if (lc === "muut" || lc === "muu") return "Muut";
+  const alias = CATEGORY_ALIASES.find(([re]) => re.test(lc));
+  return alias ? alias[1] : null;
+}
+
+// Kevyt suomen taivutusten poisto: "maitoa" -> "maito", "banaaneja" -> "banaane"
+function stemFi(word) {
+  return word.replace(/(eita|eitä|ita|itä|ja|jä|ta|tä|a|ä|t)$/, "");
+}
+
+// Etsii katalogista samantapaisen tuotteen ja palauttaa sen kategorian.
+function catalogCategoryFor(rawName) {
+  const n = String(rawName || "").trim().toLowerCase();
+  if (n.length < 3) return null;
+  const stem = stemFi(n);
+  let best = null;
+  let bestScore = 0;
+  DEFAULT_CATALOG.forEach(item => {
+    const full = item.name.toLowerCase();
+    const base = full.split(": ").pop();
+    let score = 0;
+    if (full === n || base === n) score = 100;
+    else if (base.split(/[\s(/,-]+/).some(w => w && (w === n || w === stem))) score = 60;
+    else if (stem.length >= 4 && base.includes(stem)) score = 40;
+    else if (base.length >= 4 && n.includes(base)) score = 30;
+    if (score > bestScore) { bestScore = score; best = item.cat; }
+  });
+  return best;
+}
+
 function categorizeProductName(rawName) {
+  const fromCatalog = catalogCategoryFor(rawName);
+  if (fromCatalog) return fromCatalog;
   const n = (rawName || "").toLowerCase();
-  if (n.includes("olut") || n.includes("kalja") || n.includes("koff") || n.includes("karhu") || n.includes("siideri") || n.includes("lonkero") || n.includes("sips") || n.includes("suklaa")) return "Herkut";
-  if (n.includes("maito") || n.includes("kerma") || n.includes("voi") || n.includes("jogurtti") || n.includes("rahka")) return "Maitotuotteet";
-  if (n.includes("kurkku") || n.includes("tomaatti") || n.includes("salaatti") || n.includes("sipuli") || n.includes("paprika") || n.includes("chili")) return "Hevi";
-  if (n.includes("peruna") || n.includes("porkkana") || n.includes("juures")) return "Juurekset";
-  if (n.includes("banaani") || n.includes("omena") || n.includes("appelsiini") || n.includes("avokado")) return "Hedelmät";
-  if (n.includes("jauheliha") || n.includes("kana") || n.includes("lohi") || n.includes("kala") || n.includes("pihvi")) return "Liha";
-  if (n.includes("leipä") || n.includes("ruis") || n.includes("paahto")) return "Leivät";
-  if (n.includes("juusto") || n.includes("oltermanni")) return "Juustot";
-  if (n.includes("pasta") || n.includes("riisi") || n.includes("kahvi") || n.includes("jauho")) return "Kuivat";
-  if (n.includes("wc") || n.includes("paperi") || n.includes("pesu") || n.includes("shampoo")) return "Hygienia";
+  const has = (...words) => words.some(w => n.includes(w));
+  if (has("kananmun", "munat")) return "Maitotuotteet";
+  if (has("olut", "kalja", "koff", "karhu", "siideri", "lonkero", "mehu", "öljy", "säilyke", "purkki", "limu", "vissy")) return "Kuivat (mutta märät)";
+  if (has("sips", "suklaa", "karkki", "keksi", "naks")) return "Herkut";
+  if (has("juusto", "oltermanni")) return "Juustot";
+  if (has("maito", "kerma", "voi", "jogurtti", "rahka", "viili", "piimä")) return "Maitotuotteet";
+  if (has("pakaste", "jäätelö")) return "Pakasteet";
+  if (has("kinkku", "salami", "makkara", "pekoni", "leike")) return "Leikkeleet";
+  if (has("kurkku", "tomaatti", "salaatti", "sipuli", "paprika", "chili", "sieni", "kaali")) return "Hevi";
+  if (has("peruna", "porkkana", "juures", "punajuuri", "lanttu")) return "Juurekset";
+  if (has("banaani", "omena", "appelsiini", "avokado", "päärynä", "sitruuna", "meloni", "marja")) return "Hedelmät";
+  if (has("jauheliha", "kana", "lohi", "kala", "pihvi", "liha", "possu", "nauta")) return "Liha";
+  if (has("leipä", "ruis", "paahto", "sämpylä", "patonki")) return "Leivät";
+  if (has("jauho", "sokeri", "hiiva")) return "Jauhot";
+  if (has("pasta", "riisi", "kahvi", "tee", "mauste", "muro", "puuro")) return "Kuivat";
+  if (has("wc", "paperi", "pesu", "shampoo", "saippua", "hammas", "roskapussi")) return "Hygienia";
+  if (has("burana", "panadol", "pamol", "vitamiini", "laastari", "lääke")) return "Apteekki";
   return "Muut";
+}
+
+// Lisää tekoälyn tai tekstin tunnistamat tuotteet listalle oikeaan kategoriaan.
+function addParsedProducts(list) {
+  const catalogNames = new Set(DEFAULT_CATALOG.map(i => i.name));
+  const addedNames = [];
+  (list || []).forEach(p => {
+    if (!p || !p.name) return;
+    let name = String(p.name).trim();
+    if (!name) return;
+    const qtyNum = parseInt(p.qty, 10);
+    const qty = !isNaN(qtyNum) && qtyNum > 1 ? qtyNum : null;
+    const aiCat = normalizeCategory(p.cat);
+
+    const idx = findProduct(name);
+    if (idx >= 0) {
+      const it = appState.items[idx];
+      it.active = true;
+      it.done = false;
+      if (qty) it.qty = qty;
+      // Korjataan aiemmin väärään kategoriaan menneet omat tuotteet (katalogin tuotteiden kategoria pysyy)
+      if (!catalogNames.has(it.name) && aiCat && it.cat !== aiCat) it.cat = aiCat;
+      addedNames.push(it.name);
+    } else {
+      name = name.charAt(0).toUpperCase() + name.slice(1);
+      appState.items.push({
+        name,
+        cat: aiCat || categorizeProductName(name),
+        active: true,
+        done: false,
+        qty
+      });
+      addedNames.push(name);
+    }
+  });
+  return addedNames;
+}
+
+// Tekoälylle annettava ohje: kategoriat, kaupan oma luokittelu ja katalogin tarkat nimet.
+function buildProductPrompt(sourceDescription) {
+  const cats = Object.keys(CATEGORY_THEMES).join(", ");
+  const catalogLines = DEFAULT_CATALOG.map(i => `${i.name} = ${i.cat}`).join("\n");
+  return `Olet tarkka suomalainen kauppa-apuri. ${sourceDescription}
+
+Palauta JSON-lista: [{"name": "Tuotenimi", "cat": "Kategoria", "qty": 1}]
+
+SÄÄNNÖT:
+1. "cat" on AINA täsmälleen yksi näistä: ${cats}.
+2. Jos tuote vastaa alla olevan KATALOGIN tuotetta, käytä "name"-kentässä TÄSMÄLLEEN katalogin nimeä (myös etuliite, esim. "MAITO: Laktoositon kevyt (sininen)") ja sen kategoriaa.
+3. Jos tuotetta ei ole katalogissa, anna lyhyt suomenkielinen perusmuotoinen nimi (esim. "maitoa" -> "Maito") ja valitse kategoria saman tyyppisten katalogituotteiden mukaan. Tässä kaupassa:
+   - oluet, siiderit, lonkerot, mehut, öljyt, kastikkeet, säilykkeet = Kuivat (mutta märät)
+   - kananmunat, jogurtit, rahkat, kylmät maito- ja proteiinijuomat = Maitotuotteet
+   - kala ja kana = Liha; makkarat, kinkut ja leivänpäälliset = Leikkeleet
+   - vihannekset, salaatit ja tuoreet yrtit = Hevi; perunat ja juurekset = Juurekset
+   - pasta, riisi, mausteet, kahvi, tee, murot = Kuivat; jauhot, sokeri, pähkinät = Jauhot
+   - karkit, sipsit, keksit, suklaa = Herkut; lääkkeet, vitamiinit, proteiinijauhe = Apteekki
+   - pesuaineet, paperit, hammastahna, roskapussit = Hygienia
+4. "qty" on kappalemäärä kokonaislukuna (oletus 1). Älä keksi tuotteita, joita ei mainita.
+5. Jos tuotteita ei löydy, palauta [].
+
+KATALOGI (nimi = kategoria):
+${catalogLines}`;
+}
+
+// Kutsuu Geminiä ja palauttaa tunnistetut tuotteet. Heittää virheen selkokielisellä viestillä.
+async function aiParseProducts(parts) {
+  const res = await callGemini({
+    contents: [{ role: "user", parts }],
+    generationConfig: { temperature: 0.1, responseMimeType: "application/json" }
+  });
+  if (!res || !res.ok) throw new Error(await describeGeminiError(res));
+  const data = await res.json();
+  let raw = (data.candidates?.[0]?.content?.parts || []).map(p => p.text || "").join("");
+  raw = raw.replace(/```json/gi, "").replace(/```/g, "").trim();
+  const m = raw.match(/\[[\s\S]*\]/);
+  const parsed = JSON.parse(m ? m[0] : raw);
+  return Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.items) ? parsed.items : []);
 }
 
 // ---------- Tallennus: vain muutokset koodin katalogiin nähden ----------
@@ -433,9 +648,8 @@ Palauta VAIN JSON-taulukko ilman markdownia tai muuta tekstiä. Jokaisella alkio
       tools: [{ googleSearch: {} }]
     });
 
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      status = `Virhe ${response.status}: ${(err?.error?.message || response.statusText).substring(0, 40)}`;
+    if (!response || !response.ok) {
+      status = "⚠️ " + await describeGeminiError(response);
     } else {
       const data = await response.json();
       const text = (data.candidates?.[0]?.content?.parts || []).map(p => p.text || "").join("");
@@ -449,7 +663,7 @@ Palauta VAIN JSON-taulukko ilman markdownia tai muuta tekstiä. Jokaisella alkio
           name: String(d.name),
           price: String(d.price || ""),
           store: String(d.store || ""),
-          mainCat: CATEGORY_THEMES[d.mainCat] ? d.mainCat : "Muut"
+          mainCat: normalizeCategory(d.mainCat) || categorizeProductName(d.name)
         }));
         appState.dealsUpdatedAt = new Date().toLocaleDateString("fi-FI") + " klo " +
           new Date().toLocaleTimeString("fi-FI", { hour: "2-digit", minute: "2-digit" });
@@ -469,67 +683,172 @@ Palauta VAIN JSON-taulukko ilman markdownia tai muuta tekstiä. Jokaisella alkio
 };
 
 // ---------- Puhesanelu ja WhatsApp-tuonti ----------
+// Korjaus: jokainen sanelu on oma "istuntonsa". Vanhan tunnistimen myöhässä tulevat tapahtumat
+// ohitetaan, ja uusi sanelu odottaa että edellinen on oikeasti sulkenut mikrofonin.
+// Aiemmin vanha tunnistin jäi auki / sulki uuden sanelun, jolloin toinen äänitys ei toiminut.
 let voiceRecognition = null;
-let accumulatedVoiceText = "";
+let voiceSessionId = 0;
+let voiceText = "";
 let voiceSilenceTimer = null;
+let voiceStarting = false;
+let voicePrevEnded = Promise.resolve();
 
-window.startVoiceRecognition = function() {
+function stopVoiceEngine() {
+  const rec = voiceRecognition;
+  voiceRecognition = null;
+  if (voiceSilenceTimer) { clearTimeout(voiceSilenceTimer); voiceSilenceTimer = null; }
+  if (!rec) return;
+  voicePrevEnded = new Promise(resolve => {
+    const t = setTimeout(resolve, 1200);
+    rec.addEventListener("end", () => { clearTimeout(t); resolve(); }, { once: true });
+  });
+  rec.onresult = null;
+  rec.onerror = null;
+  rec.onend = null;
+  try { rec.abort(); } catch (e) {
+    try { rec.stop(); } catch (e2) {}
+  }
+}
+
+function hideVoiceModal() {
+  const modal = document.getElementById("voice-modal");
+  if (modal) modal.style.display = "none";
+}
+
+window.startVoiceRecognition = async function() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) {
     showUndoBar("⚠️ Selaimesi ei tue puhesanelua");
     return;
   }
+  if (voiceStarting) return;
+  voiceStarting = true;
 
-  accumulatedVoiceText = "";
+  const mySession = ++voiceSessionId;
+  stopVoiceEngine(); // varmistetaan ettei vanha tunnistin ole enää päällä
+  voiceText = "";
+
   const modal = document.getElementById("voice-modal");
   const transcriptBox = document.getElementById("voice-transcript-text");
   if (modal) modal.style.display = "flex";
   if (transcriptBox) transcriptBox.innerText = "Kuunnellaan...";
 
+  await voicePrevEnded;
+  if (mySession !== voiceSessionId) { voiceStarting = false; return; }
+
+  const rec = new SpeechRecognition();
+  rec.lang = "fi-FI";
+  rec.continuous = true;
+  rec.interimResults = true;
+  rec.maxAlternatives = 1;
+
+  rec.onresult = (event) => {
+    if (mySession !== voiceSessionId) return;
+    // Android Chrome toistaa välillä aiemmat tulokset – yhdistetään päällekkäiset pätkät
+    const pieces = [];
+    for (let i = 0; i < event.results.length; i++) {
+      const t = String(event.results[i][0].transcript || "").trim();
+      if (!t) continue;
+      const last = pieces[pieces.length - 1];
+      if (last && t.toLowerCase().startsWith(last.toLowerCase())) pieces[pieces.length - 1] = t;
+      else if (!last || !last.toLowerCase().endsWith(t.toLowerCase())) pieces.push(t);
+    }
+    voiceText = pieces.join(", ");
+    if (transcriptBox) transcriptBox.innerText = voiceText || "Kuunnellaan...";
+
+    if (voiceSilenceTimer) clearTimeout(voiceSilenceTimer);
+    voiceSilenceTimer = setTimeout(() => {
+      if (mySession === voiceSessionId) finishVoiceRecognition();
+    }, 3500);
+  };
+
+  rec.onerror = (ev) => {
+    if (mySession !== voiceSessionId) return;
+    const code = ev?.error;
+    console.warn("Speech error:", code);
+    if (code === "aborted") return;
+    if (code === "no-speech") {
+      if (transcriptBox && !voiceText) transcriptBox.innerText = "En kuullut puhetta – yritä uudelleen.";
+      return; // onend hoitaa sulkemisen
+    }
+    if (code === "not-allowed" || code === "service-not-allowed") {
+      cancelVoiceRecognition();
+      showUndoBar("⚠️ Mikrofonin käyttö on estetty selaimen asetuksista");
+      return;
+    }
+    if (code === "network") {
+      cancelVoiceRecognition();
+      showUndoBar("⚠️ Puheentunnistus vaatii verkkoyhteyden");
+    }
+  };
+
+  // Selain voi lopettaa kuuntelun itse (esim. hiljaisuus iPhonella). Silloin tuodaan se mitä kuultiin.
+  rec.onend = () => {
+    if (mySession !== voiceSessionId) return;
+    voiceRecognition = null;
+    voicePrevEnded = Promise.resolve();
+    if (voiceText.trim()) {
+      finishVoiceRecognition();
+    } else {
+      voiceSessionId++;
+      if (voiceSilenceTimer) { clearTimeout(voiceSilenceTimer); voiceSilenceTimer = null; }
+      hideVoiceModal();
+      showUndoBar("🎙️ Puhetta ei kuultu – kokeile uudelleen");
+    }
+  };
+
+  voiceRecognition = rec;
   try {
-    voiceRecognition = new SpeechRecognition();
-    voiceRecognition.lang = "fi-FI";
-    voiceRecognition.continuous = true;
-    voiceRecognition.interimResults = true;
-
-    voiceRecognition.onresult = (event) => {
-      let current = "";
-      for (let i = 0; i < event.results.length; i++) {
-        current += event.results[i][0].transcript + " ";
-      }
-      accumulatedVoiceText = current.trim();
-      if (transcriptBox) transcriptBox.innerText = accumulatedVoiceText;
-
-      if (voiceSilenceTimer) clearTimeout(voiceSilenceTimer);
-      voiceSilenceTimer = setTimeout(() => finishVoiceRecognition(), 3500);
-    };
-    voiceRecognition.onerror = (err) => console.warn("Speech error:", err);
-    voiceRecognition.start();
+    rec.start();
   } catch (err) {
     console.warn("Speech init error:", err);
+    voiceSessionId++;
+    voiceRecognition = null;
+    hideVoiceModal();
+    showUndoBar("⚠️ Sanelun käynnistys epäonnistui – yritä uudelleen");
   }
+  voiceStarting = false;
 };
 
 window.cancelVoiceRecognition = function() {
-  if (voiceRecognition) {
-    try { voiceRecognition.stop(); } catch (e) {}
-    voiceRecognition = null;
-  }
-  if (voiceSilenceTimer) clearTimeout(voiceSilenceTimer);
-  document.getElementById("voice-modal").style.display = "none";
+  voiceSessionId++;
+  stopVoiceEngine();
+  voiceText = "";
+  hideVoiceModal();
 };
 
 window.finishVoiceRecognition = function() {
-  if (voiceRecognition) {
-    try { voiceRecognition.stop(); } catch (e) {}
-    voiceRecognition = null;
-  }
-  if (voiceSilenceTimer) clearTimeout(voiceSilenceTimer);
-  document.getElementById("voice-modal").style.display = "none";
-  if (accumulatedVoiceText.trim()) processFinnishVoiceText(accumulatedVoiceText);
+  const text = voiceText.trim();
+  voiceSessionId++;
+  stopVoiceEngine();
+  voiceText = "";
+  hideVoiceModal();
+  if (text) processShoppingText(text, "🎙️");
 };
 
-function processFinnishVoiceText(rawText) {
+// Käsittelee puhutun tai liitetyn tekstin: tekoäly ensin (oikeat kategoriat), muuten paikallinen jäsennys.
+async function processShoppingText(rawText, icon = "🎙️") {
+  if (getEffectiveGeminiKey()) {
+    showUndoBar(`${icon} Tunnistetaan tuotteita...`);
+    try {
+      const products = await aiParseProducts([{
+        text: buildProductPrompt(`Poimi tästä suomenkielisestä ostoslistasta (puhuttu tai kirjoitettu) kaikki tuotteet ja määrät. Muuta taivutetut muodot perusmuotoon (esim. "kaksi maitoa" -> Maito, qty 2).\n\nTEKSTI: "${rawText.replace(/"/g, "'")}"`)
+      }]);
+      if (products.length > 0) {
+        const added = addParsedProducts(products);
+        await pushToCloud();
+        render();
+        showUndoBar(`${icon} Lisätty ${added.length} kpl: ${added.slice(0, 2).join(", ")}${added.length > 2 ? "…" : ""}`);
+        return;
+      }
+    } catch (e) {
+      console.warn("AI-jäsennys epäonnistui, käytetään paikallista:", e);
+    }
+  }
+  processFinnishVoiceText(rawText, icon);
+}
+
+function processFinnishVoiceText(rawText, icon = "🎙️") {
   const numberMap = {
     "yksi": 1, "kaksi": 2, "kolme": 3, "neljä": 4, "viisi": 5,
     "kuusi": 6, "seitsemän": 7, "kahdeksan": 8, "yhdeksän": 9, "kymmenen": 10
@@ -540,26 +859,21 @@ function processFinnishVoiceText(rawText) {
     .map(p => p.trim())
     .filter(p => p.length > 1);
 
-  let addedCount = 0;
-
-  phrases.forEach(phrase => {
+  const products = phrases.map(phrase => {
     let clean = phrase.toLowerCase();
     let qty = 1;
-
     const words = clean.split(/\s+/);
     if (words.length > 1) {
       if (numberMap[words[0]]) {
         qty = numberMap[words[0]];
         words.shift();
-        clean = words.join(" ");
       } else if (!isNaN(parseInt(words[0], 10))) {
         qty = parseInt(words[0], 10);
         words.shift();
-        clean = words.join(" ");
       }
+      clean = words.join(" ");
     }
-
-    let baseName = clean
+    const baseName = clean
       .replace(/banaaneja/g, "banaani")
       .replace(/omenoita/g, "omenat")
       .replace(/kurkkuja/g, "kurkku")
@@ -568,29 +882,13 @@ function processFinnishVoiceText(rawText) {
       .replace(/lohta/g, "lohi")
       .replace(/leipää/g, "ruisleipä")
       .replace(/perunoita/g, "peruna");
-
-    baseName = baseName.charAt(0).toUpperCase() + baseName.slice(1);
-
-    const existingIdx = findProduct(baseName);
-    if (existingIdx >= 0) {
-      appState.items[existingIdx].active = true;
-      appState.items[existingIdx].done = false;
-      if (qty > 1) appState.items[existingIdx].qty = qty;
-    } else {
-      appState.items.push({
-        name: baseName,
-        cat: categorizeProductName(baseName),
-        active: true,
-        done: false,
-        qty: qty > 1 ? qty : null
-      });
-    }
-    addedCount++;
+    return { name: baseName, cat: null, qty };
   });
 
+  const added = addParsedProducts(products);
   pushToCloud();
   render();
-  showUndoBar(`🎙️ Tunnistettu ${addedCount} tuotetta!`);
+  showUndoBar(`${icon} Tunnistettu ${added.length} tuotetta!`);
 }
 
 window.openWaModal = function() {
@@ -605,8 +903,9 @@ window.executeWaImport = function() {
   const area = document.getElementById("wa-text-input");
   const raw = area ? area.value.trim() : "";
   if (!raw) return;
-  processFinnishVoiceText(raw);
   closeWaModal();
+  area.value = "";
+  processShoppingText(raw, "💬");
 };
 
 // ---------- Kuvanluku ----------
@@ -658,80 +957,39 @@ function compressImageForVision(file, maxDimension = 1000, quality = 0.75) {
 window.handleReceiptImage = async function(input) {
   if (!input.files || !input.files[0]) return;
   const file = input.files[0];
-  showUndoBar("📷 Tunnistetaan kuvaa Gemini Visionilla...");
 
   if (!getEffectiveGeminiKey()) {
     showUndoBar("⚠️ Aseta API-avain yläpalkin ⚙️-valikosta");
     openDiagnostics();
     return;
   }
+  showUndoBar("📷 Tunnistetaan kuvaa tekoälyllä...");
 
   try {
-    const compressed = await compressImageForVision(file, 1000, 0.75);
+    const compressed = await compressImageForVision(file, 1200, 0.8);
+    const promptText = buildProductPrompt(
+      `Tunnista kuvasta kaikki ostettavat tuotteet ja niiden määrät. Kuvassa voi olla fyysinen tuote tai pakkaus (esim. oluttölkki, maitopurkki, leipäpussi), käsin kirjoitettu kauppalappu tai kuitti.`
+    );
 
-    const promptText = `Olet tarkka kauppa-apuri. Tunnista tästä kuvasta kaikki tuotteet ja niiden määrät.
-Kuvassa voi olla joko:
-1. Fyysinen tuote tai pakkaus (esim. olut, kaljatölkki, maitopurkki, leipäpussi).
-2. Käsinkirjoitettu kauppalappu tai kuitti.
+    const products = await aiParseProducts([
+      { text: promptText },
+      { inlineData: { mimeType: compressed.mimeType, data: compressed.base64 } }
+    ]);
 
-Kategoriat: Hevi, Juurekset, Hedelmät, Liha, Leikkeleet, Einekset, Vegaaniset, Maitotuotteet, Juustot, Kuivat, Kuivat (mutta märät), Jauhot, Aasia / Texmex, Pakasteet, Leivät, Herkut, Hygienia, Apteekki, IKEA, Rautakauppa, Muut.
-
-Palauta VAIN JSON-lista ilman mitään markdownia tai ylimääräistä tekstiä:
-[{"name": "Tuotenimi", "cat": "Kategoria", "qty": 1}]`;
-
-    const res = await callGemini({
-      contents: [{
-        role: "user",
-        parts: [
-          { text: promptText },
-          { inlineData: { mimeType: compressed.mimeType, data: compressed.base64 } }
-        ]
-      }],
-      generationConfig: { temperature: 0.1 }
-    });
-
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      const errMsg = errData?.error?.message || res.statusText;
-      showUndoBar(`Virhe ${res.status}: ${errMsg.substring(0, 35)}`);
-      return;
-    }
-
-    const data = await res.json();
-    let raw = (data.candidates?.[0]?.content?.parts || []).map(p => p.text || "").join("");
-    raw = raw.replace(/```json/gi, "").replace(/```/g, "").trim();
-    const m = raw.match(/\[[\s\S]*\]/);
-    const parsedProducts = JSON.parse(m ? m[0] : raw);
-
-    if (!Array.isArray(parsedProducts) || parsedProducts.length === 0) {
+    if (products.length === 0) {
       showUndoBar("⚠️ Kuvasta ei tunnistettu tuotteita");
       return;
     }
 
-    let addedCount = 0;
-    parsedProducts.forEach(item => {
-      if (!item || !item.name) return;
-      const cleanName = String(item.name).trim();
-      const targetCat = CATEGORY_THEMES[item.cat] ? item.cat : categorizeProductName(cleanName);
-      const qty = item.qty ? Number(item.qty) : 1;
-
-      const matchIdx = findProduct(cleanName);
-      if (matchIdx >= 0) {
-        appState.items[matchIdx].active = true;
-        appState.items[matchIdx].done = false;
-        if (qty) appState.items[matchIdx].qty = qty;
-      } else {
-        appState.items.push({ name: cleanName, cat: targetCat, active: true, done: false, qty });
-      }
-      addedCount++;
-    });
-
+    const added = addParsedProducts(products);
     await pushToCloud();
     render();
-    showUndoBar(`📷 Lisätty: ${parsedProducts[0]?.name || "Tuote"} (${addedCount} kpl)`);
+    showUndoBar(`📷 Lisätty ${added.length} kpl: ${added.slice(0, 2).join(", ")}${added.length > 2 ? "…" : ""}`);
   } catch (err) {
     console.warn("Kuvanlukuvirhe:", err);
-    showUndoBar("⚠️ Kuvan käsittely epäonnistui");
+    showUndoBar(`⚠️ ${err?.message && !/JSON/.test(err.message) ? err.message : "Kuvan käsittely epäonnistui"}`);
+  } finally {
+    input.value = ""; // sama kuva voidaan valita uudelleen
   }
 };
 
@@ -742,6 +1000,7 @@ window.saveApiKeyFromModal = function() {
   const val = inp.value.trim();
   if (val) {
     localStorage.setItem("corsia_gemini_api_key", val);
+    localStorage.removeItem("corsia_gemini_model"); // uusi avain -> malli valitaan uudelleen
     showUndoBar("✓ API-avain tallennettu tälle laitteelle!");
     inp.value = "";
   } else {
@@ -768,7 +1027,7 @@ window.openDiagnostics = function() {
       <div><strong>Verkkoyhteys:</strong> ${onlineStr}</div>
       <div><strong>Pilvitietokanta:</strong> ${cloudStr}</div>
       <div><strong>Puhesanelu:</strong> ${speechStr}</div>
-      <div><strong>Tekoälymoottori:</strong> 🟢 Gemini Multimodal Vision</div>
+      <div><strong>Tekoälymalli:</strong> ${esc(localStorage.getItem("corsia_gemini_model") || "valitaan automaattisesti")}</div>
       <div><strong>API-avain:</strong> ${keyStatusStr}</div>
     </div>
   `;
