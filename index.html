@@ -27,7 +27,7 @@
     })();
   </script>
 
-  <link rel="stylesheet" href="style.css?v=4">
+  <link rel="stylesheet" href="style.css?v=6">
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
@@ -118,6 +118,9 @@
   <!-- Camera File Input (Hidden) -->
   <input type="file" id="camera-file-input" accept="image/*" capture="environment" style="display: none;" onchange="handleReceiptImage(this)">
 
+  <!-- Ruokasuunnittelun kuvan valinta (Hidden) -->
+  <input type="file" id="foodplan-file-input" accept="image/*" capture="environment" style="display: none;" onchange="handleFoodPlanImage(this)">
+
   <!-- Undo Bar -->
   <div class="undo-bar-wrap" id="undo-bar" style="display: none;">
     <div id="undo-label-text" style="font-size: 0.82rem; font-weight: 600; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">Tuote kerätty</div>
@@ -125,8 +128,8 @@
   </div>
 
   <!-- Skriptit: järjestys on tärkeä (katalogi ensin) -->
-  <script src="catalog.js?v=4"></script>
-  <script src="app.js?v=4"></script>
-  <script src="views.js?v=4"></script>
+  <script src="catalog.js?v=6"></script>
+  <script src="app.js?v=6"></script>
+  <script src="views.js?v=6"></script>
 </body>
 </html>

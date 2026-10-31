@@ -270,3 +270,12 @@ body {
 .waveform-bar:nth-child(4) { animation-delay: 0.1s; }
 .waveform-bar:nth-child(5) { animation-delay: 0.3s; }
 @keyframes wave-anim { 0% { height: 8px; } 100% { height: 36px; } }
+
+/* Ruokasuunnittelu */
+.recipe-card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 12px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+
+/* Ruokasuunnittelu-pikapainike etusivun laskurin vieressä */
+.hero-foodplan-btn { margin-left: 6px; padding: 3px 9px; border-radius: 999px; border: none; background: #ffffff; color: #c2410c; font-weight: 800; font-size: 0.66rem; cursor: pointer; white-space: nowrap; font-family: inherit; }
+
+/* Tärppien kaupparyhmien otsikot */
+.deals-store-header { margin: 14px 4px 6px; font-size: 0.78rem; font-weight: 800; color: #c2410c; text-transform: uppercase; letter-spacing: 0.02em; }

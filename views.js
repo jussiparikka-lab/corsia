@@ -58,6 +58,7 @@ function renderHome() {
       <div class="hero-counter-tag">
         <span>Ostettavaa listalla:</span>
         <span class="hero-counter-val">${totalActive} kpl</span>
+        <button class="hero-foodplan-btn" onclick="navigate('foodplan')">🍳 Ruokasuunnittelu</button>
       </div>
     </div>
 
@@ -334,21 +335,33 @@ function renderStore(storeKey) {
 }
 
 function renderDeals() {
-  const dealsListHtml = appState.deals.map(deal => {
-    const isPicked = appState.items.some(i => i.name.toLowerCase() === deal.name.toLowerCase() && i.active && !i.done);
-    return `
-      <div class="live-deal-card">
-        <div style="flex: 1; min-width: 0;">
-          <div style="font-size: 0.7rem; font-weight: 800; color: #ea580c; text-transform: uppercase;">${esc(deal.store)}</div>
-          <div style="font-size: 0.9rem; font-weight: 800; color: #1e293b; margin: 1px 0;">${esc(deal.name)}</div>
-          <div style="font-size: 0.78rem; font-weight: 700; color: #16a34a;">${esc(deal.price)}</div>
+  // Ryhmitellään tarjoukset kaupoittain, kauppojen alkuperäinen järjestys säilyy.
+  const groups = {};
+  const storeOrder = [];
+  appState.deals.forEach(d => {
+    const store = d.store || "Muut tarjoukset";
+    if (!groups[store]) { groups[store] = []; storeOrder.push(store); }
+    groups[store].push(d);
+  });
+
+  let dealsListHtml = "";
+  storeOrder.forEach(store => {
+    dealsListHtml += `<div class="deals-store-header">🏪 ${esc(store)}</div>`;
+    dealsListHtml += groups[store].map(deal => {
+      const isPicked = appState.items.some(i => i.name.toLowerCase() === deal.name.toLowerCase() && i.active && !i.done);
+      return `
+        <div class="live-deal-card">
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-size: 0.9rem; font-weight: 800; color: #1e293b; margin: 1px 0;">${esc(deal.name)}</div>
+            <div style="font-size: 0.78rem; font-weight: 700; color: #16a34a;">${esc(deal.price)}</div>
+          </div>
+          <button class="btn-pick-deal ${isPicked ? "picked" : ""}" onclick="toggleDealPicked('${esc(deal.id)}')">
+            ${isPicked ? "✓ Listalla" : "+ Ota listalle"}
+          </button>
         </div>
-        <button class="btn-pick-deal ${isPicked ? "picked" : ""}" onclick="toggleDealPicked('${esc(deal.id)}')">
-          ${isPicked ? "✓ Listalla" : "+ Ota listalle"}
-        </button>
-      </div>
-    `;
-  }).join("");
+      `;
+    }).join("");
+  });
 
   return `
     <div class="main-content" style="padding-top: 14px;">
@@ -362,6 +375,100 @@ function renderDeals() {
         </button>
       </div>
       <div>${dealsListHtml}</div>
+    </div>
+  `;
+}
+
+function renderFoodPlan() {
+  const fp = foodPlan;
+  const effective = fp.diners * (fp.cookTwice ? 2 : 1);
+  const cuisineOptions = ["Aasialainen", "Pasta", "Wok", "Nopea", "Klassikko"];
+
+  const chipsHtml = cuisineOptions.map(c => {
+    const on = fp.cuisines.includes(c);
+    return `<button onclick="toggleFoodPlanCuisine('${c}')" style="padding: 7px 12px; border-radius: 999px; border: 1.5px solid ${on ? "#16a34a" : "#cbd5e1"}; background: ${on ? "#f0fdf4" : "#ffffff"}; color: ${on ? "#15803d" : "#475569"}; font-weight: 700; font-size: 0.78rem; cursor: pointer;">${on ? "✓ " : ""}${c}</button>`;
+  }).join("");
+
+  let recipesHtml = "";
+  if (fp.loading) {
+    recipesHtml = `
+      <div style="text-align: center; padding: 34px 10px; color: #64748b;">
+        <div style="font-size: 2.2rem; margin-bottom: 8px;">👨‍🍳</div>
+        <div style="font-weight: 800; color: #1e293b; font-size: 0.92rem;">Tekoäly suunnittelee reseptejä...</div>
+        <div style="font-size: 0.76rem; margin-top: 4px;">Tunnistetaan raaka-aineita ja skaalataan määriä ${effective} hengelle</div>
+      </div>
+    `;
+  } else if (fp.recipes.length > 0) {
+    recipesHtml = fp.recipes.map((r, idx) => {
+      const ings = Array.isArray(r.ingredients) ? r.ingredients.filter(i => i && i.name) : [];
+      const missing = ings.filter(i => !i.in_fridge);
+      const added = !!fp.addedRecipes[idx];
+      const ingRows = ings.map(i => {
+        const inFridge = !!i.in_fridge;
+        return `
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 8px; background: ${inFridge ? "#f0fdf4" : "#fff7ed"}; border: 1px solid ${inFridge ? "#bbf7d0" : "#fed7aa"}; margin-bottom: 4px;">
+            <span style="font-size: 0.8rem; font-weight: 700; color: #1e293b;">${inFridge ? "✓" : "🛒"} ${esc(i.name)}</span>
+            <span style="font-size: 0.74rem; font-weight: 700; color: ${inFridge ? "#15803d" : "#c2410c"}; white-space: nowrap;">${esc(i.amount || "")}${inFridge ? " · jääkaapissa" : ""}</span>
+          </div>
+        `;
+      }).join("");
+      return `
+        <div class="recipe-card">
+          <div style="font-size: 0.95rem; font-weight: 800; color: #0f172a;">${esc(r.recipe_title)}</div>
+          <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 5px; align-items: center;">
+            <span style="background: #ffedd5; color: #9a3412; font-size: 0.68rem; font-weight: 800; padding: 2px 8px; border-radius: 999px;">${esc(r.cuisine || "Resepti")}</span>
+            <span style="font-size: 0.7rem; color: #64748b; font-weight: 700;">🍽️ ${esc(String(r.target_servings || effective))} annosta</span>
+            ${r.source_url ? `<a href="${esc(r.source_url)}" target="_blank" rel="noopener" style="font-size: 0.7rem; color: #0284c7; font-weight: 700;">🔗 Reseptin lähde</a>` : ""}
+          </div>
+          ${r.instructions_brief ? `<div style="font-size: 0.76rem; color: #475569; margin: 8px 0 2px; line-height: 1.45;">${esc(r.instructions_brief)}</div>` : ""}
+          <div style="margin-top: 8px;">${ingRows}</div>
+          <button onclick="addRecipeToShoppingList(${idx})" ${added || missing.length === 0 ? "disabled" : ""} style="width: 100%; margin-top: 10px; padding: 10px; border-radius: 10px; border: none; font-weight: 800; font-size: 0.84rem; cursor: ${added || missing.length === 0 ? "default" : "pointer"}; background: ${added ? "#bbf7d0" : missing.length === 0 ? "#e2e8f0" : "#16a34a"}; color: ${added || missing.length === 0 ? "#166534" : "#ffffff"};">
+            ${added ? "✓ Lisätty kauppalapulle" : missing.length === 0 ? "✓ Kaikki ainekset jo jääkaapissa" : `🛒 Lisää puuttuvat aineet kauppalapulle (${missing.length} kpl)`}
+          </button>
+        </div>
+      `;
+    }).join("");
+  }
+
+  return `
+    <div class="main-content" style="padding-top: 14px;">
+      <div class="add-widget-card">
+        <div class="add-widget-header">
+          <span class="add-widget-title">Mitä jääkaapista löytyy?</span>
+          <span class="badge-quickadd">Tekoäly</span>
+        </div>
+        ${fp.image ? `<div style="margin-bottom: 10px;"><img src="${fp.image.previewUrl}" alt="Raaka-aineet" style="width: 100%; max-height: 180px; object-fit: cover; border-radius: 10px; border: 1px solid #e2e8f0;"></div>` : ""}
+        <button onclick="triggerFoodPlanCamera()" style="width: 100%; padding: 12px; border-radius: 10px; border: 1.5px dashed #94a3b8; background: #f8fafc; font-weight: 800; font-size: 0.86rem; color: #1e293b; cursor: pointer;">
+          📷 ${fp.image ? "Ota uusi kuva" : "Ota kuva raaka-aineista"}
+        </button>
+
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 14px;">
+          <span style="font-size: 0.82rem; font-weight: 800; color: #1e293b;">Ruokailijoiden määrä</span>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <button onclick="setFoodPlanDiners(-1)" style="width: 32px; height: 32px; border-radius: 9px; border: 1.5px solid #cbd5e1; background: #ffffff; font-weight: 800; font-size: 1rem; cursor: pointer; color: #334155;">−</button>
+            <span style="font-weight: 800; min-width: 22px; text-align: center; font-size: 1rem; color: #0f172a;">${fp.diners}</span>
+            <button onclick="setFoodPlanDiners(1)" style="width: 32px; height: 32px; border-radius: 9px; border: 1.5px solid #cbd5e1; background: #ffffff; font-weight: 800; font-size: 1rem; cursor: pointer; color: #334155;">+</button>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 12px;">
+          <span style="font-size: 0.82rem; font-weight: 800; color: #1e293b;">Syödään kahdesti (2x)</span>
+          <button onclick="toggleCookTwice()" style="padding: 7px 14px; border-radius: 999px; border: 1.5px solid ${fp.cookTwice ? "#ea580c" : "#cbd5e1"}; background: ${fp.cookTwice ? "#fff7ed" : "#ffffff"}; color: ${fp.cookTwice ? "#c2410c" : "#475569"}; font-weight: 800; font-size: 0.78rem; cursor: pointer;">
+            ${fp.cookTwice ? "✓ Päällä" : "Pois"}
+          </button>
+        </div>
+        ${fp.cookTwice ? `<div style="margin-top: 8px; background: #fff7ed; border: 1px solid #fed7aa; border-radius: 9px; padding: 7px 10px; font-size: 0.76rem; font-weight: 800; color: #c2410c;">🍽️ Skaalataan ${effective} hengelle</div>` : ""}
+
+        <div style="margin-top: 14px; font-size: 0.76rem; font-weight: 800; color: #64748b; text-transform: uppercase;">Makumaailma (valinnainen)</div>
+        <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px;">${chipsHtml}</div>
+
+        <button id="btn-find-recipes" onclick="searchFoodPlanRecipes()" ${fp.loading ? "disabled" : ""} style="width: 100%; margin-top: 14px; padding: 12px; border-radius: 10px; border: none; background: #ea580c; color: #ffffff; font-weight: 800; font-size: 0.9rem; cursor: pointer;">
+          ${fp.loading ? "⏳ Haetaan reseptejä..." : "🔍 Etsi reseptejä"}
+        </button>
+      </div>
+
+      ${fp.recipes.length > 0 && !fp.loading ? `<div class="section-headline" style="margin: 14px 4px 8px;">RESEPTIEHDOTUKSET (${fp.recipes.length} kpl)</div>` : ""}
+      ${recipesHtml}
     </div>
   `;
 }
@@ -389,5 +496,8 @@ function render() {
   } else if (currentView === "deals") {
     if (titleSlot) titleSlot.innerHTML = `<span>🔥 Päivän Tärpit</span>`;
     root.innerHTML = renderDeals();
+  } else if (currentView === "foodplan") {
+    if (titleSlot) titleSlot.innerHTML = `<span>🍳 Ruokasuunnittelija</span>`;
+    root.innerHTML = renderFoodPlan();
   }
 }

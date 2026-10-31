@@ -637,7 +637,9 @@ window.refreshDealsWithGemini = async function() {
 
   const cats = Object.keys(CATEGORY_THEMES).join(", ");
   const today = new Date().toLocaleDateString("fi-FI", { weekday: "long", day: "numeric", month: "numeric", year: "numeric" });
-  const prompt = `Tänään on ${today}. Etsi Google-haulla tämän viikon voimassa olevia ruoka- ja päivittäistavaratarjouksia näistä kaupoista: K-Citymarket Tammisto (Vantaa), Prisma Jumbo (Vantaa), K-Citymarket Jumbo (Vantaa). Hyviä lähteitä: k-ruoka.fi/kauppa/k-citymarket-vantaa-tammisto/tarjoukset, k-ruoka.fi/kauppa/k-citymarket-vantaa-jumbo/tarjoukset, s-kaupat.fi/myymala/prisma-jumbo, sekä kauppojen viikkomainokset. Jos juuri näiden kauppojen tarjouksia ei löydy, käytä K-Citymarketin ja Prisman valtakunnallisia viikkotarjouksia. Painota kala- ja lihatarjouksia. Anna 6-10 tarjousta.
+  const prompt = `Tänään on ${today}. Etsi Google-haulla tämän viikon voimassa olevia ruokatarjouksia Tammiston seudun kaupoista Vantaalla: K-Citymarket Tammisto, Lidl Tammisto, Prisma Jumbo ja K-Citymarket Jumbo. Hyviä lähteitä: k-ruoka.fi/kauppa/k-citymarket-vantaa-tammisto/tarjoukset, k-ruoka.fi/kauppa/k-citymarket-vantaa-jumbo/tarjoukset, s-kaupat.fi/myymala/prisma-jumbo, lidl.fi viikkomainos, sekä kauppojen viikkomainokset. Jos juuri näiden myymälöiden tarjouksia ei löydy, käytä kyseisten ketjujen valtakunnallisia viikkotarjouksia.
+
+Anna 2-3 KOVINTA tarjousta PER KAUPPA (yhteensä 8-12 tarjousta). Painota erityisesti kala- ja lihatarjouksia (lohi, kirjolohi, naudanliha, broileri, jauheliha) – vähintään puolet tarjouksista olkoon kalaa tai lihaa.
 
 Vastaa PELKÄLLÄ JSON-taulukolla, ei muuta tekstiä eikä lähdeviitteitä. Jokaisella alkiolla kentät:
 "cat" (lyhyt otsikko emojilla, esim. "🐟 Kala"), "name" (tuote), "price" (esim. "12,90 €/kg"), "store" (kaupan nimi), "mainCat" (yksi näistä: ${cats}).`;
@@ -1015,6 +1017,166 @@ window.handleReceiptImage = async function(input) {
   } finally {
     input.value = ""; // sama kuva voidaan valita uudelleen
   }
+};
+
+// ---------- Ruokasuunnittelu ----------
+// Kuvataan jääkaapin/kaapin sisältö, tekoäly ehdottaa reseptejä ja puuttuvat
+// ainekset voi lisätä suoraan kauppalapulle. Tila pidetään vain muistissa.
+let foodPlan = {
+  image: null,          // { base64, mimeType, previewUrl }
+  diners: 4,
+  cookTwice: false,
+  cuisines: ["Aasialainen"],
+  recipes: [],
+  loading: false,
+  addedRecipes: {}      // reseptin indeksi -> true kun ainekset lisätty listalle
+};
+
+window.triggerFoodPlanCamera = function() {
+  if (!getEffectiveGeminiKey()) {
+    showUndoBar("🔑 Syötä Gemini API -avain kuvanlukua varten");
+    openDiagnostics();
+    return;
+  }
+  const inp = document.getElementById("foodplan-file-input");
+  if (inp) {
+    inp.value = "";
+    inp.click();
+  }
+};
+
+window.handleFoodPlanImage = async function(input) {
+  if (!input.files || !input.files[0]) return;
+  try {
+    const c = await compressImageForVision(input.files[0], 1200, 0.8);
+    foodPlan.image = {
+      base64: c.base64,
+      mimeType: c.mimeType,
+      previewUrl: `data:${c.mimeType};base64,${c.base64}`
+    };
+    foodPlan.recipes = [];
+    foodPlan.addedRecipes = {};
+    render();
+  } catch (e) {
+    console.warn("Kuvan lukeminen epäonnistui:", e);
+    showUndoBar("⚠️ Kuvan lukeminen epäonnistui");
+  } finally {
+    input.value = ""; // sama kuva voidaan valita uudelleen
+  }
+};
+
+window.setFoodPlanDiners = function(delta) {
+  foodPlan.diners = Math.min(12, Math.max(1, foodPlan.diners + delta));
+  render();
+};
+
+window.toggleCookTwice = function() {
+  foodPlan.cookTwice = !foodPlan.cookTwice;
+  render();
+};
+
+window.toggleFoodPlanCuisine = function(c) {
+  const i = foodPlan.cuisines.indexOf(c);
+  if (i >= 0) foodPlan.cuisines.splice(i, 1);
+  else foodPlan.cuisines.push(c);
+  render();
+};
+
+window.searchFoodPlanRecipes = async function() {
+  if (!foodPlan.image) {
+    showUndoBar("📷 Ota ensin kuva raaka-aineista");
+    return;
+  }
+  if (!getEffectiveGeminiKey()) {
+    showUndoBar("🔑 Syötä Gemini API -avain asetuksista");
+    openDiagnostics();
+    return;
+  }
+
+  foodPlan.loading = true;
+  foodPlan.recipes = [];
+  render();
+
+  const effective = foodPlan.diners * (foodPlan.cookTwice ? 2 : 1);
+  const cats = Object.keys(CATEGORY_THEMES).join(", ");
+  const cuisineStr = foodPlan.cuisines.length > 0 ? foodPlan.cuisines.join(", ") : "vapaavalintainen";
+  const prompt = `Olet suomalainen keittiöapuri ja reseptiasiantuntija. Kuvassa on raaka-aineita jääkaapista tai ruokakaapista.
+
+TEHTÄVÄT:
+1. Tunnista kuvassa näkyvät raaka-aineet.
+2. Ehdota 3 aitoa, laadukasta reseptiä (kotimaisia ja kansainvälisiä), jotka hyödyntävät kuvan aineksia. Suosi tyylejä: ${cuisineStr}.
+3. Skaalaa ainesmäärät TÄSMÄLLEEN ${effective} hengelle (ruokailijoita ${foodPlan.diners}${foodPlan.cookTwice ? ", ruoka syödään kahdesti" : ""}).
+4. Käytä metrisiä yksiköitä (g, dl, rkl, kpl) ja pyöristä määrät järkeviin kaupan pakkauskokoihin.
+5. Merkitse jokaiselle ainekselle in_fridge=true, jos aines näkyy kuvassa, muuten false (se ostetaan).
+
+Vastaa PELKÄLLÄ JSON-taulukolla, ei muuta tekstiä. Jokaisella alkiolla kentät:
+"recipe_title" (suomeksi), "cuisine" (esim. "Aasialainen"), "source_url" (todellinen reseptilähde tai null), "original_servings" (luku), "target_servings" (${effective}), "ingredients" (lista objekteja: {"name": "aines perusmuodossa suomeksi", "amount": "esim. 400 g", "in_fridge": true/false, "cat": TÄSMÄLLEEN yksi näistä: ${cats}}), "instructions_brief" (2-3 lausetta suomeksi).`;
+
+  try {
+    const res = await callGemini({
+      contents: [{ role: "user", parts: [
+        { text: prompt },
+        { inlineData: { mimeType: foodPlan.image.mimeType, data: foodPlan.image.base64 } }
+      ]}],
+      generationConfig: { temperature: 0.4, responseMimeType: "application/json" }
+    });
+    if (!res || !res.ok) throw new Error(await describeGeminiError(res));
+
+    const data = await res.json();
+    let raw = (data.candidates?.[0]?.content?.parts || [])
+      .filter(p => !p.thought)
+      .map(p => p.text || "").join("");
+    raw = raw.replace(/```json/gi, "").replace(/```/g, "").trim();
+    const start = raw.indexOf("["), end = raw.lastIndexOf("]");
+    const parsed = JSON.parse(start >= 0 && end > start ? raw.slice(start, end + 1) : raw);
+    const recipes = (Array.isArray(parsed) ? parsed : []).filter(r => r && r.recipe_title);
+    if (recipes.length === 0) throw new Error("Reseptejä ei saatu – kokeile toista kuvaa");
+
+    foodPlan.recipes = recipes;
+    foodPlan.addedRecipes = {};
+    showUndoBar(`🍳 Löytyi ${recipes.length} reseptiä!`);
+  } catch (e) {
+    console.warn("Reseptihaku epäonnistui:", e);
+    showUndoBar(`⚠️ ${e?.message && !/JSON/.test(e.message) ? e.message : "Reseptien haku epäonnistui"}`);
+  } finally {
+    foodPlan.loading = false;
+    render();
+  }
+};
+
+// Lisää reseptin puuttuvat ainekset kauppalapulle oikeisiin kategorioihin.
+window.addRecipeToShoppingList = function(idx) {
+  const r = foodPlan.recipes[idx];
+  if (!r) return;
+  const missing = (Array.isArray(r.ingredients) ? r.ingredients : []).filter(i => i && !i.in_fridge && i.name);
+  if (missing.length === 0) {
+    showUndoBar("✓ Kaikki ainekset löytyvät jo jääkaapista!");
+    return;
+  }
+
+  const added = [];
+  missing.forEach(ing => {
+    const name = String(ing.name).trim();
+    const amount = String(ing.amount || "").trim();
+    const cat = normalizeCategory(ing.cat) || categorizeProductName(name);
+    const existing = findProduct(name);
+    if (existing >= 0) {
+      const it = appState.items[existing];
+      it.active = true;
+      it.done = false;
+      added.push(it.name);
+    } else {
+      const base = name.charAt(0).toUpperCase() + name.slice(1);
+      const label = amount ? `${base} (${amount})` : base;
+      appState.items.push({ name: label, cat, active: true, done: false, qty: null });
+      added.push(label);
+    }
+  });
+
+  foodPlan.addedRecipes[idx] = true;
+  pushToCloud();
+  render();
+  showUndoBar(`🛒 Lisätty ${added.length} ainesta kauppalapulle`);
 };
 
 // ---------- Asetukset ----------
