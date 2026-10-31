@@ -4,8 +4,9 @@
 const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
 const GEMINI_MODEL_CANDIDATES = [
   process.env.GEMINI_MODEL,
-  "gemini-3.8-flash",
+  "gemini-3.7-flash",
   "gemini-3.6-flash",
+  "gemini-3.5-flash",
   "gemini-3.5-flash-lite",
   "gemini-flash-latest",
   "gemini-2.5-flash"
@@ -59,6 +60,8 @@ async function callGemini(key, payload) {
   const tried = new Set();
   let discovered = false;
   let last = { status: 502, msg: "Tekoälyyn ei saatu yhteyttä" };
+  let firstOther = null;   // ensimmäinen muu virhe kuin 404 (esim. 429 kiintiö) – se on kertovampi kuin viimeisen mallin 404
+  const attempts = [];
 
   while (queue.length > 0 || !discovered) {
     if (queue.length === 0) {
@@ -81,10 +84,15 @@ async function callGemini(key, payload) {
     }
     const err = await res.json().catch(() => ({}));
     last = { status: res.status, msg: String(err?.error?.message || res.statusText || "") };
+    attempts.push(`${model} ${res.status}`);
+    if (res.status !== 404 && !firstOther) firstOther = last;
     if (!RETRYABLE.includes(res.status)) break; // esim. väärä avain tai ei-tuettu työkalu
     if (workingModel === model) workingModel = null;
   }
-  throw new ApiError(last.status, last.msg, true);
+  const pick = firstOther || last;
+  const error = new ApiError(pick.status, pick.msg, true);
+  error.attempts = attempts.join(", ").slice(0, 160);
+  throw error;
 }
 
 // Ensin Google-haulla maadoitettu kutsu, sitten puhdas JSON-tila. parse(data) palauttaa listan.
@@ -149,7 +157,8 @@ function createHandler(work) {
       return res.status(200).json(await work(key, body));
     } catch (e) {
       const status = e instanceof ApiError && e.status >= 400 && e.status < 600 ? e.status : 500;
-      const message = e instanceof ApiError && e.fromGemini ? describeError(status, e.message) : (e?.message || "Palvelinvirhe");
+      let message = e instanceof ApiError && e.fromGemini ? describeError(status, e.message) : (e?.message || "Palvelinvirhe");
+      if (e?.attempts) message += ` (kokeiltu: ${e.attempts})`;
       console.error(req.url, status, e?.message);
       return res.status(status).json({ error: message });
     }
