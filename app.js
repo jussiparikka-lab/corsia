@@ -9,16 +9,8 @@ const FIREBASE_CONFIG = {
   appId: "1:365392158959:web:a4581cabe2d2eb5a25fb1a"
 };
 
-// Gemini-mallit kokeillaan järjestyksessä. Vanha gemini-2.5-flash antaa uusille avaimille 404-virheen,
-// joten uudemmat mallit ovat ensin. Jos mikään ei toimi, sovellus hakee avaimelle sallitut mallit itse.
-const GEMINI_MODEL_CANDIDATES = [
-  "gemini-3.8-flash",
-  "gemini-3.6-flash",
-  "gemini-3.5-flash-lite",
-  "gemini-flash-latest",
-  "gemini-2.5-flash"
-];
-const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
+// Kaikki tekoälykutsut kulkevat Corsian omien palvelinreittien kautta (kansio api/).
+// Selain ei kutsu Geminiä suoraan, joten CORS- ja avainongelmia ei ole.
 
 const STORE_LAYOUTS = {
   "prisma_jumbo": [
@@ -87,10 +79,18 @@ const CATEGORY_THEMES = {
 };
 
 // ---------- Tila ----------
+const WEEK_DAYS = ["Ma", "Ti", "Ke", "To", "Pe", "La", "Su"];
+const WEEK_DAY_NAMES = { Ma: "Maanantai", Ti: "Tiistai", Ke: "Keskiviikko", To: "Torstai", Pe: "Perjantai", La: "Lauantai", Su: "Sunnuntai" };
+function emptyWeekPlan() {
+  return Object.fromEntries(WEEK_DAYS.map(d => [d, null]));
+}
+
 let appState = {
   items: DEFAULT_CATALOG.map(i => ({ ...i, active: false, done: false, qty: null })),
   deals: [...DAILY_DEALS],
-  dealsUpdatedAt: "Oletustärpit"
+  dealsUpdatedAt: "Oletustärpit",
+  favorites: [],              // tallennetut suosikkireseptit (synkronoidaan Firebaseen)
+  weekPlan: emptyWeekPlan()   // viikon ruokalista: päivä -> resepti tai null
 };
 
 let currentView = "home";
@@ -110,75 +110,27 @@ function getEffectiveGeminiKey() {
   return (localStorage.getItem("corsia_gemini_api_key") || "").trim();
 }
 
-// Hakee avaimelle sallitut Flash-mallit (uusin ensin).
-async function discoverGeminiModels(key) {
+// Kutsuu Corsian palvelinreittiä (esim. "/api/parse-products"). Palvelin käyttää ympäristömuuttujaa
+// GEMINI_API_KEY; siirtymäaikana selaimeen aiemmin tallennettu avain lähetetään varalle otsakkeessa.
+async function postApi(path, body) {
+  const headers = { "Content-Type": "application/json" };
+  const legacyKey = getEffectiveGeminiKey();
+  if (legacyKey) headers["x-gemini-key"] = legacyKey;
+
+  let res;
   try {
-    const r = await fetch(`${GEMINI_BASE_URL}/models?pageSize=200`, { headers: { "x-goog-api-key": key } });
-    if (!r.ok) return [];
-    const d = await r.json();
-    return (d.models || [])
-      .filter(m => (m.supportedGenerationMethods || []).includes("generateContent"))
-      .map(m => String(m.name || "").replace(/^models\//, ""))
-      .filter(n => /flash/i.test(n) && !/(tts|image|live|audio|embed|thinking-exp)/i.test(n))
-      .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+    res = await fetch(path, { method: "POST", headers, body: JSON.stringify(body) });
   } catch (e) {
-    return [];
+    throw new Error(navigator.onLine ? "Palvelimeen ei saatu yhteyttä" : "Ei verkkoyhteyttä");
   }
-}
-
-// Avain lähetetään aina x-goog-api-key -otsakkeessa (pakollinen uusille AQ.-avaimille, toimii myös AIza-avaimilla).
-// Jos malli antaa 404 (ei käytössä) tai 429/503 (ruuhka), kokeillaan seuraavaa mallia.
-async function callGemini(payload) {
-  const key = getEffectiveGeminiKey();
-  const saved = localStorage.getItem("corsia_gemini_model");
-  const queue = [...new Set([saved, ...GEMINI_MODEL_CANDIDATES].filter(Boolean))];
-  const tried = new Set();
-  let discovered = false;
-  let lastRes = null;
-
-  while (queue.length > 0 || !discovered) {
-    if (queue.length === 0) {
-      discovered = true;
-      (await discoverGeminiModels(key)).forEach(m => { if (!tried.has(m)) queue.push(m); });
-      if (queue.length === 0) break;
-    }
-    const model = queue.shift();
-    if (tried.has(model)) continue;
-    tried.add(model);
-
-    let res;
-    try {
-      res = await fetch(`${GEMINI_BASE_URL}/models/${model}:generateContent`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-        body: JSON.stringify(payload)
-      });
-    } catch (e) {
-      throw e; // verkkovirhe – ei kannata kokeilla muita malleja
-    }
-
-    if (res.ok) {
-      localStorage.setItem("corsia_gemini_model", model);
-      return res;
-    }
-    lastRes = res;
-    if (![404, 429, 500, 503].includes(res.status)) break; // esim. väärä avain – muut mallit eivät auta
-    if (saved === model) localStorage.removeItem("corsia_gemini_model");
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    const msg = data?.error || (res.status === 413 ? "Kuva on liian suuri" : `Palvelinvirhe ${res.status}`);
+    try { localStorage.setItem("corsia_last_ai_error", `${new Date().toLocaleString("fi-FI")} – ${res.status}: ${msg}`.substring(0, 400)); } catch (e) {}
+    throw new Error(msg);
   }
-  return lastRes;
-}
-
-// Selkokielinen virheilmoitus Geminin vastauksesta.
-async function describeGeminiError(res) {
-  if (!res) return "Tekoälyyn ei saatu yhteyttä";
-  const err = await res.json().catch(() => ({}));
-  const msg = String(err?.error?.message || res.statusText || "");
-  try { localStorage.setItem("corsia_last_ai_error", `${new Date().toLocaleString("fi-FI")} – ${res.status}: ${msg}`.substring(0, 400)); } catch (e) {}
-  if (res.status === 400 && /api key|API_KEY/i.test(msg)) return "API-avain ei kelpaa – tarkista avain";
-  if (res.status === 401 || res.status === 403) return "API-avaimella ei ole oikeutta Gemini API:in";
-  if (res.status === 404) return "Gemini-mallia ei löytynyt tälle avaimelle";
-  if (res.status === 429) return "Tekoälyn käyttöraja täynnä – yritä hetken päästä";
-  return `Virhe ${res.status}: ${msg.substring(0, 40)}`;
+  if (!data) throw new Error("Palvelimen vastaus oli virheellinen");
+  return data;
 }
 
 // Täsmäosuma ensin, sitten "MAITO: " -etuliitteen jälkeinen nimi, viimeisenä yksiselitteinen osittainen osuma.
@@ -315,45 +267,15 @@ function addParsedProducts(list) {
   return addedNames;
 }
 
-// Tekoälylle annettava ohje: kategoriat, kaupan oma luokittelu ja katalogin tarkat nimet.
-function buildProductPrompt(sourceDescription) {
-  const cats = Object.keys(CATEGORY_THEMES).join(", ");
-  const catalogLines = DEFAULT_CATALOG.map(i => `${i.name} = ${i.cat}`).join("\n");
-  return `Olet tarkka suomalainen kauppa-apuri. ${sourceDescription}
-
-Palauta JSON-lista: [{"name": "Tuotenimi", "cat": "Kategoria", "qty": 1}]
-
-SÄÄNNÖT:
-1. "cat" on AINA täsmälleen yksi näistä: ${cats}.
-2. Jos tuote vastaa alla olevan KATALOGIN tuotetta, käytä "name"-kentässä TÄSMÄLLEEN katalogin nimeä (myös etuliite, esim. "MAITO: Laktoositon kevyt (sininen)") ja sen kategoriaa.
-3. Jos tuotetta ei ole katalogissa, anna lyhyt suomenkielinen perusmuotoinen nimi (esim. "maitoa" -> "Maito") ja valitse kategoria saman tyyppisten katalogituotteiden mukaan. Tässä kaupassa:
-   - oluet, siiderit, lonkerot, mehut, öljyt, kastikkeet, säilykkeet = Kuivat (mutta märät)
-   - kananmunat, jogurtit, rahkat, kylmät maito- ja proteiinijuomat = Maitotuotteet
-   - kala ja kana = Liha; makkarat, kinkut ja leivänpäälliset = Leikkeleet
-   - vihannekset, salaatit ja tuoreet yrtit = Hevi; perunat ja juurekset = Juurekset
-   - pasta, riisi, mausteet, kahvi, tee, murot = Kuivat; jauhot, sokeri, pähkinät = Jauhot
-   - karkit, sipsit, keksit, suklaa = Herkut; lääkkeet, vitamiinit, proteiinijauhe = Apteekki
-   - pesuaineet, paperit, hammastahna, roskapussit = Hygienia
-4. "qty" on kappalemäärä kokonaislukuna (oletus 1). Älä keksi tuotteita, joita ei mainita.
-5. Jos tuotteita ei löydy, palauta [].
-
-KATALOGI (nimi = kategoria):
-${catalogLines}`;
-}
-
-// Kutsuu Geminiä ja palauttaa tunnistetut tuotteet. Heittää virheen selkokielisellä viestillä.
-async function aiParseProducts(parts) {
-  const res = await callGemini({
-    contents: [{ role: "user", parts }],
-    generationConfig: { temperature: 0.1, responseMimeType: "application/json" }
+// Tunnistaa tuotteet tekstistä ({ text }) tai kuvasta ({ image }) palvelimella.
+// Katalogi lähetetään mukaan, jotta tekoäly käyttää samoja nimiä ja kategorioita kuin sovellus.
+async function aiParseProducts(input) {
+  const data = await postApi("/api/parse-products", {
+    ...input,
+    categories: Object.keys(CATEGORY_THEMES),
+    catalog: DEFAULT_CATALOG.map(i => [i.name, i.cat])
   });
-  if (!res || !res.ok) throw new Error(await describeGeminiError(res));
-  const data = await res.json();
-  let raw = (data.candidates?.[0]?.content?.parts || []).map(p => p.text || "").join("");
-  raw = raw.replace(/```json/gi, "").replace(/```/g, "").trim();
-  const m = raw.match(/\[[\s\S]*\]/);
-  const parsed = JSON.parse(m ? m[0] : raw);
-  return Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.items) ? parsed.items : []);
+  return Array.isArray(data.products) ? data.products : [];
 }
 
 // ---------- Tallennus: vain muutokset koodin katalogiin nähden ----------
@@ -367,7 +289,9 @@ function serializeState() {
     custom: appState.items.filter(i => !base.has(i.name)).map(i => ({ name: i.name, cat: i.cat })),
     removed: DEFAULT_CATALOG.filter(i => !present.has(i.name)).map(i => i.name),
     deals: appState.deals,
-    dealsUpdatedAt: appState.dealsUpdatedAt
+    dealsUpdatedAt: appState.dealsUpdatedAt,
+    favorites: appState.favorites,
+    weekPlan: appState.weekPlan
   };
 }
 
@@ -403,6 +327,8 @@ function hydrateState(data) {
   appState.items = items;
   if (data.deals) appState.deals = data.deals;
   if (data.dealsUpdatedAt) appState.dealsUpdatedAt = data.dealsUpdatedAt;
+  if (Array.isArray(data.favorites)) appState.favorites = data.favorites;
+  if (data.weekPlan && typeof data.weekPlan === "object") appState.weekPlan = { ...emptyWeekPlan(), ...data.weekPlan };
 }
 
 window.loadLocalState = function() {
@@ -626,68 +552,12 @@ window.toggleDealPicked = function(dealId) {
 
 window.refreshDealsWithGemini = async function() {
   const btn = document.getElementById("btn-refresh-deals");
-  if (btn) btn.innerText = "⏳ Haetaan tuoreita...";
+  if (btn) { btn.innerText = "⏳ Haetaan tuoreita..."; btn.disabled = true; }
 
-  if (!getEffectiveGeminiKey()) {
-    showUndoBar("⚠️ Aseta API-avain asetuksista");
-    openDiagnostics();
-    if (btn) btn.innerText = "🔄 Hae tuoreet";
-    return;
-  }
-
-  const cats = Object.keys(CATEGORY_THEMES).join(", ");
-  const today = new Date().toLocaleDateString("fi-FI", { weekday: "long", day: "numeric", month: "numeric", year: "numeric" });
-  const prompt = `Tänään on ${today}. Etsi Google-haulla tämän viikon voimassa olevia ruokatarjouksia Tammiston seudun kaupoista Vantaalla: K-Citymarket Tammisto, Lidl Tammisto, Prisma Jumbo ja K-Citymarket Jumbo. Hyviä lähteitä: k-ruoka.fi/kauppa/k-citymarket-vantaa-tammisto/tarjoukset, k-ruoka.fi/kauppa/k-citymarket-vantaa-jumbo/tarjoukset, s-kaupat.fi/myymala/prisma-jumbo, lidl.fi viikkomainos, sekä kauppojen viikkomainokset. Jos juuri näiden myymälöiden tarjouksia ei löydy, käytä kyseisten ketjujen valtakunnallisia viikkotarjouksia.
-
-Anna 2-3 KOVINTA tarjousta PER KAUPPA (yhteensä 8-12 tarjousta). Painota erityisesti kala- ja lihatarjouksia (lohi, kirjolohi, naudanliha, broileri, jauheliha) – vähintään puolet tarjouksista olkoon kalaa tai lihaa.
-
-Vastaa PELKÄLLÄ JSON-taulukolla, ei muuta tekstiä eikä lähdeviitteitä. Jokaisella alkiolla kentät:
-"cat" (lyhyt otsikko emojilla, esim. "🐟 Kala"), "name" (tuote), "price" (esim. "12,90 €/kg"), "store" (kaupan nimi), "mainCat" (yksi näistä: ${cats}).`;
-
-  // Poimii tarjoukset vastauksesta, vaikka mukana olisi selitystekstiä tai lähdeviitteitä.
-  const parseDeals = (data) => {
-    const text = (data?.candidates?.[0]?.content?.parts || [])
-      .filter(p => !p.thought)
-      .map(p => p.text || "").join("")
-      .replace(/```json/gi, "").replace(/```/g, "");
-    const start = text.indexOf("["), end = text.lastIndexOf("]");
-    if (start >= 0 && end > start) {
-      try {
-        const arr = JSON.parse(text.slice(start, end + 1));
-        if (Array.isArray(arr)) return arr;
-      } catch (e) { /* jatketaan alla */ }
-    }
-    // Varalla: yksittäiset {...}-objektit
-    const objs = [];
-    (text.match(/\{[^{}]*\}/g) || []).forEach(s => { try { objs.push(JSON.parse(s)); } catch (e) {} });
-    return objs;
-  };
-
-  let status = "";
-  let deals = [];
-  let lastError = "";
-  // 1) Google-haulla (tuoreet tarjoukset), 2) ilman hakua, jos haku ei ole avaimella käytössä tai ei löytänyt mitään
-  const attempts = [
-    { tools: [{ googleSearch: {} }] },
-    { generationConfig: { responseMimeType: "application/json", temperature: 0.3 } }
-  ];
-  for (const extra of attempts) {
-    try {
-      const response = await callGemini({ contents: [{ role: "user", parts: [{ text: prompt }] }], ...extra });
-      if (!response || !response.ok) {
-        lastError = await describeGeminiError(response);
-        continue;
-      }
-      deals = parseDeals(await response.json()).filter(d => d && d.name);
-      if (deals.length > 0) break;
-    } catch (e) {
-      console.warn("Deals search error:", e);
-      lastError = "Haku epäonnistui – tarkista verkkoyhteys";
-      try { localStorage.setItem("corsia_last_ai_error", `${new Date().toLocaleString("fi-FI")} – ${e?.message || e}`); } catch (e2) {}
-    }
-  }
-
-  if (deals.length > 0) {
+  try {
+    const data = await postApi("/api/refresh-deals", { categories: Object.keys(CATEGORY_THEMES) });
+    const deals = (Array.isArray(data.deals) ? data.deals : []).filter(d => d && d.name);
+    if (deals.length === 0) throw new Error("Tarjouksia ei löytynyt – yritä myöhemmin uudelleen");
     appState.deals = deals.slice(0, 12).map((d, i) => ({
       id: "ai" + Date.now() + i,
       cat: d.cat || "🔥 Tärppi",
@@ -698,14 +568,14 @@ Vastaa PELKÄLLÄ JSON-taulukolla, ei muuta tekstiä eikä lähdeviitteitä. Jok
     }));
     appState.dealsUpdatedAt = new Date().toLocaleDateString("fi-FI") + " klo " +
       new Date().toLocaleTimeString("fi-FI", { hour: "2-digit", minute: "2-digit" });
-    status = "✓ Päivän tärpit päivitetty!";
-  } else {
-    status = "⚠️ " + (lastError || "Tarjouksia ei löytynyt – yritä myöhemmin uudelleen");
+    await pushToCloud();
+    render();
+    showToast("✓ Päivän tärpit päivitetty!", "success");
+  } catch (e) {
+    console.warn("Tarjoushaku epäonnistui:", e);
+    render();
+    showToast(`⚠️ ${e?.message || "Tarjousten haku epäonnistui"}`, "error");
   }
-
-  await pushToCloud();
-  render();
-  showUndoBar(status);
 };
 
 // ---------- Puhesanelu ja WhatsApp-tuonti ----------
@@ -854,22 +724,18 @@ window.finishVoiceRecognition = function() {
 
 // Käsittelee puhutun tai liitetyn tekstin: tekoäly ensin (oikeat kategoriat), muuten paikallinen jäsennys.
 async function processShoppingText(rawText, icon = "🎙️") {
-  if (getEffectiveGeminiKey()) {
-    showUndoBar(`${icon} Tunnistetaan tuotteita...`);
-    try {
-      const products = await aiParseProducts([{
-        text: buildProductPrompt(`Poimi tästä suomenkielisestä ostoslistasta (puhuttu tai kirjoitettu) kaikki tuotteet ja määrät. Muuta taivutetut muodot perusmuotoon (esim. "kaksi maitoa" -> Maito, qty 2).\n\nTEKSTI: "${rawText.replace(/"/g, "'")}"`)
-      }]);
-      if (products.length > 0) {
-        const added = addParsedProducts(products);
-        await pushToCloud();
-        render();
-        showUndoBar(`${icon} Lisätty ${added.length} kpl: ${added.slice(0, 2).join(", ")}${added.length > 2 ? "…" : ""}`);
-        return;
-      }
-    } catch (e) {
-      console.warn("AI-jäsennys epäonnistui, käytetään paikallista:", e);
+  showUndoBar(`${icon} Tunnistetaan tuotteita...`);
+  try {
+    const products = await aiParseProducts({ text: rawText });
+    if (products.length > 0) {
+      const added = addParsedProducts(products);
+      await pushToCloud();
+      render();
+      showUndoBar(`${icon} Lisätty ${added.length} kpl: ${added.slice(0, 2).join(", ")}${added.length > 2 ? "…" : ""}`);
+      return;
     }
+  } catch (e) {
+    console.warn("AI-jäsennys epäonnistui, käytetään paikallista:", e);
   }
   processFinnishVoiceText(rawText, icon);
 }
@@ -936,11 +802,6 @@ window.executeWaImport = function() {
 
 // ---------- Kuvanluku ----------
 window.triggerCameraInput = function() {
-  if (!getEffectiveGeminiKey()) {
-    showUndoBar("🔑 Syötä Gemini API -avain kuvanlukua varten");
-    openDiagnostics();
-    return;
-  }
   const fileInp = document.getElementById("camera-file-input");
   if (fileInp) {
     fileInp.value = "";
@@ -948,7 +809,8 @@ window.triggerCameraInput = function() {
   }
 };
 
-function compressImageForVision(file, maxDimension = 1000, quality = 0.75) {
+// Pienentää kuvan (pisin sivu max 1024 px) ja pakkaa JPEG-muotoon (laatu 0,7) ennen lähetystä.
+function compressImageForVision(file, maxDimension = 1024, quality = 0.7) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (readerEvent) => {
@@ -984,23 +846,11 @@ window.handleReceiptImage = async function(input) {
   if (!input.files || !input.files[0]) return;
   const file = input.files[0];
 
-  if (!getEffectiveGeminiKey()) {
-    showUndoBar("⚠️ Aseta API-avain yläpalkin ⚙️-valikosta");
-    openDiagnostics();
-    return;
-  }
-  showUndoBar("📷 Tunnistetaan kuvaa tekoälyllä...");
-
   try {
-    const compressed = await compressImageForVision(file, 1200, 0.8);
-    const promptText = buildProductPrompt(
-      `Tunnista kuvasta kaikki ostettavat tuotteet ja niiden määrät. Kuvassa voi olla fyysinen tuote tai pakkaus (esim. oluttölkki, maitopurkki, leipäpussi), käsin kirjoitettu kauppalappu tai kuitti.`
-    );
-
-    const products = await aiParseProducts([
-      { text: promptText },
-      { inlineData: { mimeType: compressed.mimeType, data: compressed.base64 } }
-    ]);
+    showUndoBar("📷 Tiivistetään kuvaa...");
+    const compressed = await compressImageForVision(file, 1024, 0.7);
+    showUndoBar("📷 Tunnistetaan tuotteita...");
+    const products = await aiParseProducts({ image: compressed });
 
     if (products.length === 0) {
       showUndoBar("⚠️ Kuvasta ei tunnistettu tuotteita");
@@ -1013,31 +863,58 @@ window.handleReceiptImage = async function(input) {
     showUndoBar(`📷 Lisätty ${added.length} kpl: ${added.slice(0, 2).join(", ")}${added.length > 2 ? "…" : ""}`);
   } catch (err) {
     console.warn("Kuvanlukuvirhe:", err);
-    showUndoBar(`⚠️ ${err?.message && !/JSON/.test(err.message) ? err.message : "Kuvan käsittely epäonnistui"}`);
+    showToast(`⚠️ ${err?.message || "Kuvan käsittely epäonnistui"}`, "error");
   } finally {
     input.value = ""; // sama kuva voidaan valita uudelleen
   }
 };
 
 // ---------- Ruokasuunnittelu ----------
-// Kuvataan jääkaapin/kaapin sisältö, tekoäly ehdottaa reseptejä ja puuttuvat
-// ainekset voi lisätä suoraan kauppalapulle. Tila pidetään vain muistissa.
+// Kuvataan jääkaapin/kaapin sisältö, palvelin (/api/generate-recipes) tunnistaa raaka-aineet ja
+// hakee reseptejä Geminillä. Selain ei kutsu Geminiä suoraan. Puuttuvat ainekset voi lisätä
+// suoraan kauppalapulle (appState + Firebase pushToCloud).
+const RECIPE_API_URL = "/api/generate-recipes";
+const FOODPLAN_STAGES = {
+  compress: "Tiivistetään kuvaa...",
+  identify: "Tunnistetaan raaka-aineita...",
+  recipes: "Haetaan reseptejä..."
+};
+// Viikon automaattiehdotuksen vaiheet (kuvavaiheet vain, jos kuva on otettu)
+const WEEK_STAGES = {
+  compress: "Tiivistetään kuvaa...",
+  identify: "Tunnistetaan raaka-aineita...",
+  week: "Suunnitellaan viikon ruokalistaa..."
+};
+
 let foodPlan = {
-  image: null,          // { base64, mimeType, previewUrl }
+  image: null,          // { file, previewUrl } – pakataan vasta haun yhteydessä
   diners: 4,
   cookTwice: false,
   cuisines: ["Aasialainen"],
   recipes: [],
+  detected: [],         // tunnistetut raaka-aineet
   loading: false,
-  addedRecipes: {}      // reseptin indeksi -> true kun ainekset lisätty listalle
+  stage: null,          // "compress" | "identify" | "recipes"
+  error: null,
+  addedRecipes: {},     // reseptin indeksi -> true kun ainekset lisätty listalle
+  tab: "search",        // "search" | "week" | "favorites"
+  loadingKind: null,    // "search" | "week" – kumpi haku on käynnissä
+  weekError: null,      // viikon automaattiehdotuksen virhe
+  weekAdded: false      // viikon ainekset lisätty kauppalapulle
+};
+
+// Ilmoitus ilman PERU-painiketta (virheet ja onnistumiset).
+window.showToast = function(text, type = "info") {
+  const el = document.getElementById("app-toast");
+  if (!el) { showUndoBar(text); return; }
+  el.textContent = text;
+  el.className = `app-toast app-toast-${type}`;
+  el.style.display = "block";
+  clearTimeout(window._toastTimer);
+  window._toastTimer = setTimeout(() => { el.style.display = "none"; }, type === "error" ? 6000 : 3500);
 };
 
 window.triggerFoodPlanCamera = function() {
-  if (!getEffectiveGeminiKey()) {
-    showUndoBar("🔑 Syötä Gemini API -avain kuvanlukua varten");
-    openDiagnostics();
-    return;
-  }
   const inp = document.getElementById("foodplan-file-input");
   if (inp) {
     inp.value = "";
@@ -1045,24 +922,22 @@ window.triggerFoodPlanCamera = function() {
   }
 };
 
-window.handleFoodPlanImage = async function(input) {
+window.handleFoodPlanImage = function(input) {
   if (!input.files || !input.files[0]) return;
-  try {
-    const c = await compressImageForVision(input.files[0], 1200, 0.8);
-    foodPlan.image = {
-      base64: c.base64,
-      mimeType: c.mimeType,
-      previewUrl: `data:${c.mimeType};base64,${c.base64}`
-    };
-    foodPlan.recipes = [];
-    foodPlan.addedRecipes = {};
-    render();
-  } catch (e) {
-    console.warn("Kuvan lukeminen epäonnistui:", e);
-    showUndoBar("⚠️ Kuvan lukeminen epäonnistui");
-  } finally {
-    input.value = ""; // sama kuva voidaan valita uudelleen
+  const file = input.files[0];
+  if (!/^image\//.test(file.type || "image/")) {
+    showToast("⚠️ Valitse kuvatiedosto", "error");
+    input.value = "";
+    return;
   }
+  if (foodPlan.image?.previewUrl) URL.revokeObjectURL(foodPlan.image.previewUrl);
+  foodPlan.image = { file, previewUrl: URL.createObjectURL(file) };
+  foodPlan.recipes = [];
+  foodPlan.detected = [];
+  foodPlan.error = null;
+  foodPlan.addedRecipes = {};
+  input.value = ""; // sama kuva voidaan valita uudelleen
+  render();
 };
 
 window.setFoodPlanDiners = function(delta) {
@@ -1082,102 +957,393 @@ window.toggleFoodPlanCuisine = function(c) {
   render();
 };
 
+function setFoodPlanStage(stage) {
+  foodPlan.stage = stage;
+  render();
+}
+
 window.searchFoodPlanRecipes = async function() {
+  if (foodPlan.loading) return;
   if (!foodPlan.image) {
-    showUndoBar("📷 Ota ensin kuva raaka-aineista");
-    return;
-  }
-  if (!getEffectiveGeminiKey()) {
-    showUndoBar("🔑 Syötä Gemini API -avain asetuksista");
-    openDiagnostics();
+    showToast("📷 Ota ensin kuva raaka-aineista", "info");
     return;
   }
 
   foodPlan.loading = true;
+  foodPlan.loadingKind = "search";
   foodPlan.recipes = [];
-  render();
-
-  const effective = foodPlan.diners * (foodPlan.cookTwice ? 2 : 1);
-  const cats = Object.keys(CATEGORY_THEMES).join(", ");
-  const cuisineStr = foodPlan.cuisines.length > 0 ? foodPlan.cuisines.join(", ") : "vapaavalintainen";
-  const prompt = `Olet suomalainen keittiöapuri ja reseptiasiantuntija. Kuvassa on raaka-aineita jääkaapista tai ruokakaapista.
-
-TEHTÄVÄT:
-1. Tunnista kuvassa näkyvät raaka-aineet.
-2. Ehdota 3 aitoa, laadukasta reseptiä (kotimaisia ja kansainvälisiä), jotka hyödyntävät kuvan aineksia. Suosi tyylejä: ${cuisineStr}.
-3. Skaalaa ainesmäärät TÄSMÄLLEEN ${effective} hengelle (ruokailijoita ${foodPlan.diners}${foodPlan.cookTwice ? ", ruoka syödään kahdesti" : ""}).
-4. Käytä metrisiä yksiköitä (g, dl, rkl, kpl) ja pyöristä määrät järkeviin kaupan pakkauskokoihin.
-5. Merkitse jokaiselle ainekselle in_fridge=true, jos aines näkyy kuvassa, muuten false (se ostetaan).
-
-Vastaa PELKÄLLÄ JSON-taulukolla, ei muuta tekstiä. Jokaisella alkiolla kentät:
-"recipe_title" (suomeksi), "cuisine" (esim. "Aasialainen"), "source_url" (todellinen reseptilähde tai null), "original_servings" (luku), "target_servings" (${effective}), "ingredients" (lista objekteja: {"name": "aines perusmuodossa suomeksi", "amount": "esim. 400 g", "in_fridge": true/false, "cat": TÄSMÄLLEEN yksi näistä: ${cats}}), "instructions_brief" (2-3 lausetta suomeksi).`;
+  foodPlan.detected = [];
+  foodPlan.error = null;
+  foodPlan.addedRecipes = {};
 
   try {
-    const res = await callGemini({
-      contents: [{ role: "user", parts: [
-        { text: prompt },
-        { inlineData: { mimeType: foodPlan.image.mimeType, data: foodPlan.image.base64 } }
-      ]}],
-      generationConfig: { temperature: 0.4, responseMimeType: "application/json" }
-    });
-    if (!res || !res.ok) throw new Error(await describeGeminiError(res));
+    // 1) Pakkaus selaimessa: max 1024 px, JPEG 0,7
+    setFoodPlanStage("compress");
+    const compressed = await compressImageForVision(foodPlan.image.file, 1024, 0.7)
+      .catch(() => { throw new Error("Kuvan tiivistäminen epäonnistui – kokeile toista kuvaa"); });
 
-    const data = await res.json();
-    let raw = (data.candidates?.[0]?.content?.parts || [])
-      .filter(p => !p.thought)
-      .map(p => p.text || "").join("");
-    raw = raw.replace(/```json/gi, "").replace(/```/g, "").trim();
-    const start = raw.indexOf("["), end = raw.lastIndexOf("]");
-    const parsed = JSON.parse(start >= 0 && end > start ? raw.slice(start, end + 1) : raw);
-    const recipes = (Array.isArray(parsed) ? parsed : []).filter(r => r && r.recipe_title);
+    // 2) Raaka-aineiden tunnistus (palvelin)
+    setFoodPlanStage("identify");
+    const idRes = await postApi(RECIPE_API_URL, { step: "identify", image: compressed });
+    foodPlan.detected = Array.isArray(idRes.ingredients) ? idRes.ingredients : [];
+
+    // 3) Reseptien haku ja skaalaus (palvelin, ei kuvaa -> pieni pyyntö)
+    setFoodPlanStage("recipes");
+    const recRes = await postApi(RECIPE_API_URL, {
+      step: "recipes",
+      ingredients: foodPlan.detected,
+      diners: foodPlan.diners,
+      cook_twice: foodPlan.cookTwice,
+      cuisines: foodPlan.cuisines,
+      categories: Object.keys(CATEGORY_THEMES),
+      deals: dealNamesForPrompt()
+    });
+    const recipes = (Array.isArray(recRes.recipes) ? recRes.recipes : []).filter(r => r && r.recipe_title);
     if (recipes.length === 0) throw new Error("Reseptejä ei saatu – kokeile toista kuvaa");
 
     foodPlan.recipes = recipes;
-    foodPlan.addedRecipes = {};
-    showUndoBar(`🍳 Löytyi ${recipes.length} reseptiä!`);
+    showToast(`🍳 Löytyi ${recipes.length} reseptiä!`, "success");
   } catch (e) {
     console.warn("Reseptihaku epäonnistui:", e);
-    showUndoBar(`⚠️ ${e?.message && !/JSON/.test(e.message) ? e.message : "Reseptien haku epäonnistui"}`);
+    foodPlan.error = e?.message || "Reseptien haku epäonnistui";
+    showToast(`⚠️ ${foodPlan.error}`, "error");
   } finally {
     foodPlan.loading = false;
+    foodPlan.stage = null;
     render();
   }
 };
 
-// Lisää reseptin puuttuvat ainekset kauppalapulle oikeisiin kategorioihin.
-window.addRecipeToShoppingList = function(idx) {
-  const r = foodPlan.recipes[idx];
-  if (!r) return;
-  const missing = (Array.isArray(r.ingredients) ? r.ingredients : []).filter(i => i && !i.in_fridge && i.name);
-  if (missing.length === 0) {
-    showUndoBar("✓ Kaikki ainekset löytyvät jo jääkaapista!");
+// ---------- Viikon automaattiehdotus ----------
+// Täyttää viikon TYHJÄT päivät tekoälyllä: jääkaappikuva (jos otettu), makumaailma, ruokailijat ja tarjoukset.
+window.autoFillWeek = async function() {
+  if (foodPlan.loading) return;
+  const days = WEEK_DAYS.filter(d => !appState.weekPlan[d]);
+  if (days.length === 0) {
+    showToast("Viikko on jo täynnä – poista päivä, jonka haluat ehdottaa uudelleen", "info");
     return;
+  }
+
+  foodPlan.loading = true;
+  foodPlan.loadingKind = "week";
+  foodPlan.weekError = null;
+  try {
+    // Kuva on valinnainen; jos raaka-aineet on jo tunnistettu, niitä ei tunnisteta uudelleen.
+    if (foodPlan.image && foodPlan.detected.length === 0) {
+      setFoodPlanStage("compress");
+      const compressed = await compressImageForVision(foodPlan.image.file, 1024, 0.7)
+        .catch(() => { throw new Error("Kuvan tiivistäminen epäonnistui – kokeile toista kuvaa"); });
+      setFoodPlanStage("identify");
+      const idRes = await postApi(RECIPE_API_URL, { step: "identify", image: compressed });
+      foodPlan.detected = Array.isArray(idRes.ingredients) ? idRes.ingredients : [];
+    }
+
+    setFoodPlanStage("week");
+    const res = await postApi(RECIPE_API_URL, {
+      step: "week",
+      days,
+      ingredients: foodPlan.detected,
+      diners: foodPlan.diners,
+      cook_twice: foodPlan.cookTwice,
+      cuisines: foodPlan.cuisines,
+      categories: Object.keys(CATEGORY_THEMES),
+      deals: dealNamesForPrompt(),
+      avoid: WEEK_DAYS.map(d => appState.weekPlan[d]?.recipe_title).filter(Boolean)
+    });
+    const recipes = (Array.isArray(res.recipes) ? res.recipes : []).filter(r => r && r.recipe_title);
+    if (recipes.length === 0) throw new Error("Ruokalistaa ei saatu – yritä uudelleen");
+    const resDays = Array.isArray(res.days) ? res.days : days;
+    recipes.forEach((r, i) => {
+      const d = resDays[i] || days[i];
+      if (d && !appState.weekPlan[d]) appState.weekPlan[d] = r;
+    });
+    foodPlan.weekAdded = false;
+    await pushToCloud();
+    showToast(`✨ Viikolle lisätty ${recipes.length} reseptiä`, "success");
+  } catch (e) {
+    console.warn("Viikon ehdotus epäonnistui:", e);
+    foodPlan.weekError = e?.message || "Viikon ehdotus epäonnistui";
+    showToast(`⚠️ ${foodPlan.weekError}`, "error");
+  } finally {
+    foodPlan.loading = false;
+    foodPlan.stage = null;
+    render();
+  }
+};
+
+// ---------- Tarjoukset resepteihin ----------
+// Tunnistaa, onko aines päivän tärpeissä. Verrataan aineksen merkitseviä sanoja (stemmattuna) tarjouksen nimeen.
+const DEAL_STOPWORDS = new Set(["tuore", "tuoreet", "kotimainen", "suomalainen", "pakaste", "luomu", "kevyt", "rasvaton"]);
+function dealForIngredient(name) {
+  const words = String(name || "").toLowerCase().split(/[\s(),/-]+/)
+    .filter(w => w.length >= 4 && !DEAL_STOPWORDS.has(w))
+    .map(w => stemFi(w))
+    .filter(w => w.length >= 4);
+  if (words.length === 0) return null;
+  return (appState.deals || []).find(d => {
+    const dn = String(d.name || "").toLowerCase();
+    return words.some(w => dn.includes(w));
+  }) || null;
+}
+window.dealForIngredient = dealForIngredient;
+
+function dealNamesForPrompt() {
+  return (appState.deals || []).slice(0, 12).map(d => `${d.name} ${d.price || ""} (${d.store || ""})`.trim());
+}
+
+// ---------- Suosikin annosmäärän muutos ----------
+// Skaalaa määrämerkkijonon ensimmäisen luvun ("400 g", "1,5 dl", "1/2 tl", "2-3 kpl").
+function formatAmountNumber(n, unit) {
+  const u = String(unit || "").toLowerCase();
+  let v;
+  if (/^(g|ml)\b/.test(u)) v = n >= 100 ? Math.round(n / 10) * 10 : Math.max(5, Math.round(n / 5) * 5);
+  else if (/^(kpl|prk|pkt|tlk|rs|pss|nippu|kynt)/.test(u)) v = Math.max(0.5, Math.round(n * 2) / 2);
+  else v = n >= 10 ? Math.round(n) : Math.round(n * 10) / 10;
+  return String(v).replace(".", ",");
+}
+function scaleAmount(amount, factor) {
+  const s = String(amount || "");
+  if (!s || factor === 1) return s;
+  return s.replace(/(\d+(?:[.,]\d+)?)(?:\s*\/\s*(\d+))?(?:\s*-\s*(\d+(?:[.,]\d+)?))?(\s*[a-zA-ZäöåÄÖÅ]*)/, (m, a, den, hi, unit) => {
+    const toNum = x => parseFloat(String(x).replace(",", "."));
+    const base = den ? toNum(a) / toNum(den) : toNum(a);
+    const lo = formatAmountNumber(base * factor, unit.trim());
+    const range = hi ? `-${formatAmountNumber(toNum(hi) * factor, unit.trim())}` : "";
+    return `${lo}${range}${unit}`;
+  });
+}
+
+window.setFavoriteServings = function(idx, delta) {
+  const f = appState.favorites[idx];
+  if (!f) return;
+  // Alkuperäiset ainekset talteen ensimmäisellä kerralla, jotta toistuva skaalaus ei kerrytä pyöristysvirhettä.
+  if (!Array.isArray(f.base_ingredients)) {
+    f.base_ingredients = JSON.parse(JSON.stringify(f.ingredients || []));
+    f.base_servings = Number(f.target_servings) || 4;
+  }
+  const next = Math.min(24, Math.max(1, (Number(f.target_servings) || f.base_servings) + delta));
+  if (next === Number(f.target_servings)) return;
+  const factor = next / f.base_servings;
+  f.target_servings = next;
+  f.ingredients = f.base_ingredients.map(i => {
+    const amount = scaleAmount(i.amount_needed, factor);
+    return {
+      ...i,
+      amount_needed: amount,
+      to_shopping_list: i.in_fridge ? "" : (amount ? `${i.name} (${amount})` : i.name)
+    };
+  });
+  pushToCloud();
+  render();
+};
+
+// ---------- Viikkolistan jako ----------
+async function shareText(title, text) {
+  if (navigator.share) {
+    try { await navigator.share({ title, text }); return; }
+    catch (e) { if (e?.name === "AbortError") return; }
+  }
+  window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener");
+}
+
+window.shareWeekPlan = function() {
+  const planned = WEEK_DAYS.filter(d => appState.weekPlan[d]);
+  if (planned.length === 0) {
+    showToast("Viikon ruokalista on tyhjä", "info");
+    return;
+  }
+  const menu = planned.map(d => {
+    const r = appState.weekPlan[d];
+    return `${WEEK_DAY_NAMES[d]}: ${r.recipe_title}${r.source_url ? `\n   🔗 ${r.source_url}` : ""}`;
+  }).join("\n");
+  const shopping = combinedWeekIngredients().map(i => {
+    const deal = dealForIngredient(i.name);
+    return `• ${i.to_shopping_list}${deal ? ` 🔥 ${deal.price} ${deal.store}` : ""}`;
+  }).join("\n");
+  const text = `📅 Viikon ruokalista\n\n${menu}${shopping ? `\n\n🛒 Kauppalappu:\n${shopping}` : ""}\n\n– Corsia`;
+  shareText("Viikon ruokalista", text);
+};
+
+// ---------- Reseptien apufunktiot (haku, suosikit, viikko) ----------
+// source: "result" = hakutulos, "fav" = suosikki
+function getRecipe(source, idx) {
+  return source === "fav" ? appState.favorites[idx] : foodPlan.recipes[idx];
+}
+
+function missingIngredients(r) {
+  return (Array.isArray(r?.ingredients) ? r.ingredients : [])
+    .filter(i => i && !i.in_fridge && String(i.to_shopping_list || i.name || "").trim());
+}
+
+const sameRecipe = (a, b) => String(a?.recipe_title || "").toLowerCase() === String(b?.recipe_title || "").toLowerCase();
+
+window.isFavoriteRecipe = function(r) {
+  return appState.favorites.some(f => sameRecipe(f, r));
+};
+
+window.setFoodPlanTab = function(tab) {
+  foodPlan.tab = tab;
+  render();
+};
+
+// Lisää reseptin kaikki to_shopping_list-rivit pääkauppalapulle oikeisiin kategorioihin.
+window.addRecipeToShoppingList = async function(idx) {
+  const r = foodPlan.recipes[idx];
+  if (!r || foodPlan.addedRecipes[idx]) return;
+  const count = await addIngredientsToList(missingIngredients(r));
+  if (count > 0) {
+    foodPlan.addedRecipes[idx] = true;
+    render();
+  }
+};
+
+window.addFavoriteToShoppingList = function(idx) {
+  const r = appState.favorites[idx];
+  if (r) addIngredientsToList(missingIngredients(r));
+};
+
+// Suosikki päälle/pois. Tallentuu Firebaseen, joten näkyy koko perheelle.
+window.toggleFavoriteRecipe = function(source, idx) {
+  const r = getRecipe(source, idx);
+  if (!r) return;
+  const at = appState.favorites.findIndex(f => sameRecipe(f, r));
+  if (at >= 0) {
+    appState.favorites.splice(at, 1);
+    showToast("Poistettu suosikeista", "info");
+  } else {
+    appState.favorites.unshift({ ...r, saved_at: new Date().toISOString() });
+    showToast("⭐ Tallennettu suosikkeihin", "success");
+  }
+  pushToCloud();
+  render();
+};
+
+// Liittää reseptin viikon ruokalistan päivälle (korvaa päivän aiemman reseptin).
+window.assignRecipeToDay = function(source, idx, day) {
+  const r = getRecipe(source, idx);
+  if (!r || !WEEK_DAYS.includes(day)) return;
+  appState.weekPlan[day] = { ...r };
+  foodPlan.weekAdded = false;
+  pushToCloud();
+  render();
+  showToast(`📅 ${r.recipe_title} → ${WEEK_DAY_NAMES[day]}`, "success");
+};
+
+window.clearWeekDay = function(day) {
+  if (!appState.weekPlan[day]) return;
+  appState.weekPlan[day] = null;
+  foodPlan.weekAdded = false;
+  pushToCloud();
+  render();
+};
+
+// Yhdistää koko viikon puuttuvat ainekset: sama aines eri päiviltä = yksi rivi, määrät yhdessä.
+function combinedWeekIngredients() {
+  const byName = new Map();
+  WEEK_DAYS.forEach(d => {
+    missingIngredients(appState.weekPlan[d]).forEach(ing => {
+      const name = String(ing.name || ing.to_shopping_list).trim();
+      const k = name.toLowerCase();
+      const amount = String(ing.amount_needed || "").trim();
+      if (!byName.has(k)) byName.set(k, { name, cat: ing.cat, amounts: [], line: ing.to_shopping_list });
+      const e = byName.get(k);
+      if (amount) e.amounts.push(amount);
+      e.count = (e.count || 0) + 1;
+    });
+  });
+  return [...byName.values()].map(e => {
+    const total = sumAmounts(e.amounts);
+    return {
+      name: e.name,
+      cat: e.cat,
+      in_fridge: false,
+      amount_needed: total,
+      to_shopping_list: e.count === 1 && e.line ? e.line : (total ? `${e.name} (${total})` : e.name)
+    };
+  });
+}
+
+// Laskee saman yksikön määrät yhteen: ["1 dl", "2 dl", "1 kpl"] -> "3 dl + 1 kpl". Muut jätetään sellaisenaan.
+function sumAmounts(amounts) {
+  const sums = new Map();
+  const other = [];
+  amounts.forEach(a => {
+    const m = String(a).trim().match(/^(\d+(?:[.,]\d+)?)\s*([a-zA-ZäöåÄÖÅ]*)$/);
+    if (!m) { other.push(a); return; }
+    const unit = m[2].toLowerCase();
+    sums.set(unit, (sums.get(unit) || 0) + parseFloat(m[1].replace(",", ".")));
+  });
+  const parts = [...sums.entries()].map(([u, n]) => `${String(Math.round(n * 10) / 10).replace(".", ",")}${u ? " " + u : ""}`);
+  return [...parts, ...other].join(" + ");
+}
+window.combinedWeekIngredients = combinedWeekIngredients;
+
+window.addWeekToShoppingList = async function() {
+  const ings = combinedWeekIngredients();
+  if (ings.length === 0) {
+    showToast("Viikolla ei ole ostettavia aineksia", "info");
+    return;
+  }
+  const count = await addIngredientsToList(ings);
+  if (count > 0) {
+    foodPlan.weekAdded = true;
+    render();
+  }
+};
+
+// Jakaa reseptin ja puuttuvat ainekset WhatsAppiin (mobiilissa ensin järjestelmän jakovalikko).
+window.shareRecipe = async function(source, idx) {
+  const r = getRecipe(source, idx);
+  if (!r) return;
+  const missing = missingIngredients(r);
+  const lines = [
+    `🍳 ${r.recipe_title}${r.target_servings ? ` (${r.target_servings} annosta)` : ""}`,
+    r.instructions_brief ? `\n${r.instructions_brief}` : "",
+    missing.length ? `\n🛒 Ostettavaa:\n${missing.map(i => `• ${i.to_shopping_list || i.name}`).join("\n")}` : "\n✓ Kaikki ainekset löytyvät kotoa",
+    r.source_url ? `\n🔗 ${r.source_url}` : "",
+    "\n– Corsia"
+  ].filter(Boolean);
+  shareText(r.recipe_title, lines.join("\n"));
+};
+
+// Yhteinen lisäys kauppalapulle. Palauttaa lisättyjen rivien määrän.
+async function addIngredientsToList(missing) {
+  if (missing.length === 0) {
+    showToast("✓ Kaikki ainekset löytyvät jo jääkaapista!", "success");
+    return 0;
   }
 
   const added = [];
   missing.forEach(ing => {
-    const name = String(ing.name).trim();
-    const amount = String(ing.amount || "").trim();
-    const cat = normalizeCategory(ing.cat) || categorizeProductName(name);
-    const existing = findProduct(name);
+    const name = String(ing.name || "").trim();
+    const line = String(ing.to_shopping_list || "").trim() || name;
+    const cat = normalizeCategory(ing.cat) || categorizeProductName(name || line);
+    // Katalogissa oleva tuote aktivoidaan (säilyttää kaupan järjestyksen), muuten lisätään uusi rivi.
+    const existing = name ? findProduct(name) : -1;
     if (existing >= 0) {
       const it = appState.items[existing];
       it.active = true;
       it.done = false;
       added.push(it.name);
     } else {
-      const base = name.charAt(0).toUpperCase() + name.slice(1);
-      const label = amount ? `${base} (${amount})` : base;
-      appState.items.push({ name: label, cat, active: true, done: false, qty: null });
+      const label = line.charAt(0).toUpperCase() + line.slice(1);
+      const dup = appState.items.find(i => i.name.toLowerCase() === label.toLowerCase());
+      if (dup) { dup.active = true; dup.done = false; }
+      else appState.items.push({ name: label, cat, active: true, done: false, qty: null });
       added.push(label);
     }
   });
 
-  foodPlan.addedRecipes[idx] = true;
-  pushToCloud();
   render();
-  showUndoBar(`🛒 Lisätty ${added.length} ainesta kauppalapulle`);
-};
+  try {
+    await pushToCloud();
+    showToast(`🛒 Lisätty ${added.length} ainesta kauppalapulle`, "success");
+  } catch (e) {
+    console.warn("Tallennus epäonnistui:", e);
+    showToast("⚠️ Lisätty listalle, mutta pilvitallennus epäonnistui", "error");
+  }
+  return added.length;
+}
 
 // ---------- Asetukset ----------
 window.saveApiKeyFromModal = function() {
@@ -1206,7 +1372,7 @@ window.openDiagnostics = function() {
   const onlineStr = navigator.onLine ? "🟢 Yhdistetty verkkoon" : "🔴 Ei verkkoyhteyttä";
   const cloudStr = cloudSynced ? "🟢 Firebase Firestore aktiivinen" : "🟡 Yhdistetään pilveen...";
   const speechStr = (window.SpeechRecognition || window.webkitSpeechRecognition) ? "🟢 Tuettu (Web Speech API)" : "🔴 Ei selain-tukea";
-  const keyStatusStr = currentKey ? `🟢 Tallennettu (${esc(currentKey.substring(0, 5))}...)` : "🔴 Ei avainta (Syötä alle)";
+  const keyStatusStr = currentKey ? `🟢 Tallennettu (${esc(currentKey.substring(0, 5))}...)` : "⚪ Ei tallennettu";
 
   content.innerHTML = `
     <div style="display:flex; flex-direction:column; gap:6px;">
@@ -1214,17 +1380,284 @@ window.openDiagnostics = function() {
       <div><strong>Pilvitietokanta:</strong> ${cloudStr}</div>
       <div><strong>Puhesanelu:</strong> ${speechStr}</div>
       <div><strong>Viimeisin tekoälyvirhe:</strong> <span style="word-break:break-word;">${esc(localStorage.getItem("corsia_last_ai_error") || "ei virheitä")}</span></div>
-      <div><strong>Tekoälymalli:</strong> ${esc(localStorage.getItem("corsia_gemini_model") || "valitaan automaattisesti")}</div>
-      <div><strong>API-avain:</strong> ${keyStatusStr}</div>
+      <div><strong>Palvelimen avain (GEMINI_API_KEY):</strong> <span id="diag-server-key">⏳ tarkistetaan...</span></div>
+      <div><strong>Selaimen vara-avain:</strong> ${keyStatusStr}</div>
     </div>
   `;
   if (keyInp) keyInp.value = currentKey;
   modal.style.display = "flex";
+
+  fetch("/api/status").then(r => r.json()).then(d => {
+    const el = document.getElementById("diag-server-key");
+    if (el) el.textContent = d.serverKey ? "🟢 Asetettu" : (currentKey ? "🟡 Ei asetettu – käytetään selaimen vara-avainta" : "🔴 Ei asetettu");
+  }).catch(() => {
+    const el = document.getElementById("diag-server-key");
+    if (el) el.textContent = "🔴 Palvelinta ei tavoitettu";
+  });
 };
 
 window.closeDiagModal = function() {
   document.getElementById("diag-modal").style.display = "none";
 };
+
+// ---------- Kokkaustila (tarkka ohje + näyttö päällä) ----------
+// Oma Wake Lock (cookWakeLock), jotta kauppareitin wakeLock ja kokkaustila eivät sotke toisiaan.
+// Näkymä piirretään #cooking-overlay-elementtiin, jota render() ei koskaan tyhjennä.
+let cooking = null;           // { recipe, data, loading, error, timers, wakeActive, wakeSupported }
+let cookWakeLock = null;
+let cookTickHandle = null;
+let cookAudioCtx = null;
+const cookingDetailCache = {}; // "otsikko|annokset" -> ohje (ei haeta uudelleen samalle reseptille)
+
+function renderCooking() {
+  let el = document.getElementById("cooking-overlay");
+  if (!cooking) { if (el) el.remove(); return; }
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "cooking-overlay";
+    el.className = "cook-overlay";
+    el.setAttribute("role", "dialog");
+    el.setAttribute("aria-modal", "true");
+    el.setAttribute("aria-label", "Kokkaustila");
+    document.body.appendChild(el);
+  }
+  const prevScroll = el.querySelector(".cook-scroll")?.scrollTop || 0;
+  el.innerHTML = renderCookingMode(cooking);
+  const sc = el.querySelector(".cook-scroll");
+  if (sc && prevScroll) sc.scrollTop = prevScroll;
+}
+
+function updateCookWakeBadge() {
+  const el = document.getElementById("cook-wake-badge");
+  if (el && cooking) el.outerHTML = renderCookWakeBadge(cooking);
+}
+
+async function acquireCookWakeLock() {
+  const c = cooking;
+  if (!c) return;
+  if (!("wakeLock" in navigator)) { c.wakeActive = false; updateCookWakeBadge(); return; }
+  try {
+    const lock = await navigator.wakeLock.request("screen");
+    if (cooking !== c) { lock.release().catch(() => {}); return; } // ehdittiin sulkea odottaessa
+    cookWakeLock = lock;
+    c.wakeActive = true;
+    lock.addEventListener("release", () => {
+      if (cookWakeLock === lock) cookWakeLock = null;
+      if (cooking) { cooking.wakeActive = false; updateCookWakeBadge(); }
+    });
+  } catch (e) {
+    console.warn("Näytön päälläpito estetty:", e);
+    c.wakeActive = false;
+  }
+  updateCookWakeBadge();
+}
+
+function releaseCookWakeLock() {
+  const lock = cookWakeLock;
+  cookWakeLock = null;
+  if (lock) lock.release().catch(() => {});
+}
+
+// Selain vapauttaa lukon, kun välilehti piilotetaan -> haetaan uudelleen paluussa.
+document.addEventListener("visibilitychange", () => {
+  if (cooking && document.visibilityState === "visible") {
+    if (!cookWakeLock) acquireCookWakeLock();
+    tickCookTimers();
+  }
+});
+
+window.openCookingMode = function(source, idx) {
+  const r = getRecipe(source, idx);
+  if (!r) return;
+  if (cooking) closeCookingMode();
+  cooking = { recipe: r, data: null, loading: true, error: null, timers: {}, done: {}, speakingStep: null, speech: null, wakeActive: false, wakeSupported: "wakeLock" in navigator };
+  document.body.classList.add("cook-open");
+  renderCooking();
+  acquireCookWakeLock();   // heti, ennen verkkokutsua (käyttäjän napautuksen aikana)
+  cookTickHandle = setInterval(tickCookTimers, 500);
+  loadCookingDetail();
+};
+
+window.closeCookingMode = function() {
+  stopCookSpeech();
+  releaseCookWakeLock();
+  clearInterval(cookTickHandle);
+  cookTickHandle = null;
+  cooking = null;
+  document.body.classList.remove("cook-open");
+  renderCooking();
+};
+
+window.retryCookingDetail = function() { loadCookingDetail(); };
+
+async function loadCookingDetail() {
+  const c = cooking;
+  if (!c) return;
+  const r = c.recipe;
+  const servings = r.target_servings || foodPlan.diners;
+  const cacheKey = `${String(r.recipe_title).toLowerCase()}|${servings}`;
+  if (cookingDetailCache[cacheKey]) {
+    c.data = cookingDetailCache[cacheKey]; c.loading = false; c.error = null;
+    renderCooking();
+    return;
+  }
+  c.loading = true; c.error = null;
+  renderCooking();
+  try {
+    const data = await postApi(RECIPE_API_URL, {
+      step: "detail",
+      recipe_title: r.recipe_title,
+      target_servings: servings,
+      ingredients: (Array.isArray(r.ingredients) ? r.ingredients : [])
+        .filter(i => i && i.name)
+        .map(i => (i.amount_needed || i.amount) ? `${i.name} (${i.amount_needed || i.amount})` : i.name)
+    });
+    if (cooking !== c) return;
+    cookingDetailCache[cacheKey] = data;
+    c.data = data;
+  } catch (e) {
+    if (cooking !== c) return;
+    c.error = e?.message || "Tarkan ohjeen haku epäonnistui";
+  }
+  c.loading = false;
+  renderCooking();
+}
+
+// ----- Vaiheiden kuittaus (✓ Tehty) -----
+function updateCookProgress() {
+  const el = document.getElementById("cook-progress");
+  if (el && cooking) el.outerHTML = renderCookProgress(cooking);
+}
+
+window.toggleCookStepDone = function(n) {
+  const c = cooking;
+  if (!c || !cookStep(n)) return;
+  if (c.done[n]) delete c.done[n]; else c.done[n] = true;
+  const done = !!c.done[n];
+  const card = document.getElementById(`cook-step-${n}`);
+  const btn = document.getElementById(`cook-check-${n}`);
+  if (card) {
+    card.classList.toggle("cook-step-checked", done);
+    const num = card.querySelector(".cook-step-num");
+    if (num) num.textContent = done ? "✓" : String(n);
+  }
+  if (btn) {
+    btn.textContent = cookDoneLabel(done);
+    btn.classList.toggle("cook-act-done", done);
+    btn.setAttribute("aria-pressed", String(done));
+  }
+  updateCookProgress();
+};
+
+// ----- Ääneen luku (Web Speech API, fi-FI) -----
+function updateCookSpeakButton(n) {
+  const btn = document.getElementById(`cook-speak-${n}`);
+  if (btn && cooking) btn.textContent = cookSpeakLabel(cooking.speakingStep === n);
+}
+
+// Pysäyttää puheen. Tila nollataan ENSIN, jotta vanhan puheen onend/onerror-kuuntelijat eivät sotke uutta.
+function stopCookSpeech() {
+  const c = cooking;
+  const prev = c ? c.speakingStep : null;
+  if (c) { c.speech = null; c.speakingStep = null; }
+  if (cookSpeechSupported()) { try { window.speechSynthesis.cancel(); } catch (e) {} }
+  if (prev !== null) updateCookSpeakButton(prev);
+}
+
+function pickFinnishVoice() {
+  try {
+    const voices = window.speechSynthesis.getVoices() || [];
+    return { voices, voice: voices.find(v => /^fi([-_]|$)/i.test(v.lang)) || null };
+  } catch (e) { return { voices: [], voice: null }; }
+}
+
+window.speakCookStep = function(n) {
+  const c = cooking, st = cookStep(n);
+  if (!c || !st) return;
+  if (!cookSpeechSupported()) { showToast("⚠️ Selain ei tue ääneen lukua", "error"); return; }
+  if (c.speakingStep === n) { stopCookSpeech(); return; } // toinen napautus pysäyttää
+
+  stopCookSpeech();
+  const u = new SpeechSynthesisUtterance(`Vaihe ${n}. ${st.instruction}`);
+  u.lang = "fi-FI";
+  u.rate = 0.95;
+  const { voices, voice } = pickFinnishVoice();
+  if (voice) u.voice = voice;
+  else if (voices.length > 0 && !c.voiceWarned) {
+    c.voiceWarned = true;
+    showToast("ℹ️ Suomenkielistä ääntä ei löytynyt – käytetään laitteen oletusääntä", "info");
+  }
+  const finish = () => {
+    if (cooking && cooking.speech === u) { cooking.speech = null; cooking.speakingStep = null; updateCookSpeakButton(n); }
+  };
+  u.onend = finish;
+  u.onerror = finish;
+  c.speech = u;
+  c.speakingStep = n;
+  updateCookSpeakButton(n);
+  try { window.speechSynthesis.speak(u); } catch (e) { finish(); }
+};
+
+// ----- Ajastimet: loppuaika (endAt) talletetaan, joten taustalla hidastettu ajastin ei laahaa -----
+function cookStep(n) { return cooking?.data?.steps?.find(s => s.step_number === n); }
+
+function updateCookTimerButton(n) {
+  const st = cookStep(n), btn = document.getElementById(`cook-timer-${n}`);
+  if (!st || !btn || !cooking) return;
+  const ts = cookTimerState(cooking, n, st.timer_seconds);
+  btn.className = `cook-timer-btn ${ts.cls}`;
+  btn.textContent = ts.label;
+}
+
+window.toggleCookTimer = function(n) {
+  const st = cookStep(n);
+  if (!st || !cooking) return;
+  unlockCookAudio();
+  const t = cooking.timers[n];
+  if (t) delete cooking.timers[n]; // käynnissä tai valmis -> nollaa
+  else cooking.timers[n] = { endAt: Date.now() + st.timer_seconds * 1000, done: false };
+  updateCookTimerButton(n);
+};
+
+function tickCookTimers() {
+  if (!cooking) return;
+  Object.keys(cooking.timers).forEach(k => {
+    const n = Number(k), t = cooking.timers[k];
+    if (t.done) return;
+    if (Date.now() >= t.endAt) {
+      t.done = true;
+      cookTimerAlarm(n);
+    }
+    updateCookTimerButton(n);
+  });
+}
+
+function unlockCookAudio() {
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    if (!cookAudioCtx) cookAudioCtx = new AC();
+    if (cookAudioCtx.state === "suspended") cookAudioCtx.resume();
+  } catch (e) {}
+}
+
+function cookTimerAlarm(n) {
+  const st = cookStep(n);
+  showToast(`⏰ Ajastin valmis: ${st ? st.title : "vaihe " + n}`, "success");
+  try { if (navigator.vibrate) navigator.vibrate([400, 200, 400, 200, 400]); } catch (e) {}
+  try {
+    if (!cookAudioCtx) return;
+    [0, 0.45, 0.9].forEach(offset => {
+      const osc = cookAudioCtx.createOscillator(), gain = cookAudioCtx.createGain();
+      osc.type = "sine"; osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.0001, cookAudioCtx.currentTime + offset);
+      gain.gain.exponentialRampToValueAtTime(0.35, cookAudioCtx.currentTime + offset + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.0001, cookAudioCtx.currentTime + offset + 0.3);
+      osc.connect(gain); gain.connect(cookAudioCtx.destination);
+      osc.start(cookAudioCtx.currentTime + offset); osc.stop(cookAudioCtx.currentTime + offset + 0.32);
+    });
+  } catch (e) {}
+}
 
 // ---------- Käynnistys ----------
 window.initApp = function() {

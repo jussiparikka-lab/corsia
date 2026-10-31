@@ -27,7 +27,7 @@
     })();
   </script>
 
-  <link rel="stylesheet" href="style.css?v=6">
+  <link rel="stylesheet" href="style.css?v=11">
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
@@ -95,7 +95,7 @@
           <input type="password" id="diag-api-key-input" placeholder="Liitä avain tähän..." style="flex:1; padding:7px 9px; font-size:0.8rem; border:1px solid #cbd5e1; border-radius:8px; outline:none; background:#ffffff;">
           <button onclick="saveApiKeyFromModal()" style="background:#16a34a; color:#ffffff; border:none; padding:7px 12px; border-radius:8px; font-weight:800; font-size:0.78rem; cursor:pointer;">Tallenna</button>
         </div>
-        <div style="font-size:0.68rem; color:#64748b; margin-top:4px;">Avain tallentuu vain selaimeesi tälle laitteelle. Toimii myös AQ.-avaimilla.</div>
+        <div style="font-size:0.68rem; color:#64748b; margin-top:4px;">Vara-avain: käytetään vain, jos palvelimelle ei ole asetettu GEMINI_API_KEY-muuttujaa. Tallentuu vain tälle laitteelle.</div>
       </div>
 
       <button onclick="closeDiagModal()" style="width: 100%; padding: 9px; border-radius: 9px; background: #0284c7; color: white; border: none; font-weight: 800; font-size: 0.84rem; cursor: pointer;">Sulje</button>
@@ -121,6 +121,9 @@
   <!-- Ruokasuunnittelun kuvan valinta (Hidden) -->
   <input type="file" id="foodplan-file-input" accept="image/*" capture="environment" style="display: none;" onchange="handleFoodPlanImage(this)">
 
+  <!-- Ilmoitukset (virheet / onnistumiset) -->
+  <div id="app-toast" class="app-toast" role="status" aria-live="polite" style="display: none;"></div>
+
   <!-- Undo Bar -->
   <div class="undo-bar-wrap" id="undo-bar" style="display: none;">
     <div id="undo-label-text" style="font-size: 0.82rem; font-weight: 600; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">Tuote kerätty</div>
@@ -128,8 +131,8 @@
   </div>
 
   <!-- Skriptit: järjestys on tärkeä (katalogi ensin) -->
-  <script src="catalog.js?v=6"></script>
-  <script src="app.js?v=6"></script>
-  <script src="views.js?v=6"></script>
+  <script src="catalog.js?v=11"></script>
+  <script src="app.js?v=11"></script>
+  <script src="views.js?v=11"></script>
 </body>
 </html>

@@ -379,6 +379,261 @@ function renderDeals() {
   `;
 }
 
+// Välilehdet: Reseptihaku | Viikko | Suosikit
+function renderFoodPlanTabs() {
+  const plannedDays = WEEK_DAYS.filter(d => appState.weekPlan[d]).length;
+  const tabs = [
+    ["search", "🔍 Haku", ""],
+    ["week", "📅 Viikko", plannedDays ? ` (${plannedDays})` : ""],
+    ["favorites", "⭐ Suosikit", appState.favorites.length ? ` (${appState.favorites.length})` : ""]
+  ];
+  return `<div class="fp-tabs" role="tablist">${tabs.map(([k, label, n]) =>
+    `<button id="fp-tab-${k}" role="tab" aria-selected="${foodPlan.tab === k}" class="fp-tab ${foodPlan.tab === k ? "fp-tab-on" : ""}" onclick="setFoodPlanTab('${k}')">${label}${n}</button>`
+  ).join("")}</div>`;
+}
+
+// Yksi reseptikortti. source: "result" (hakutulos) tai "fav" (suosikki).
+function renderRecipeCard(r, idx, source, effective) {
+  const ings = Array.isArray(r.ingredients) ? r.ingredients.filter(i => i && i.name) : [];
+  const missing = ings.filter(i => !i.in_fridge);
+  const added = source === "result" && !!foodPlan.addedRecipes[idx];
+  const fav = isFavoriteRecipe(r);
+  const addFn = source === "fav" ? `addFavoriteToShoppingList(${idx})` : `addRecipeToShoppingList(${idx})`;
+  const ingRows = ings.map(i => {
+    const inFridge = !!i.in_fridge;
+    const deal = inFridge ? null : dealForIngredient(i.name);
+    return `
+      <div style="padding: 5px 8px; border-radius: 8px; background: ${inFridge ? "#f0fdf4" : "#fff7ed"}; border: 1px solid ${inFridge ? "#bbf7d0" : "#fed7aa"}; margin-bottom: 4px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+          <span style="font-size: 0.8rem; font-weight: 700; color: #1e293b;">${inFridge ? "✓" : "🛒"} ${esc(i.name)}</span>
+          <span style="font-size: 0.74rem; font-weight: 700; color: ${inFridge ? "#15803d" : "#c2410c"}; white-space: nowrap;">${esc(i.amount_needed || i.amount || "")}${inFridge ? " · kotona" : ""}</span>
+        </div>
+        ${deal ? `<div class="fp-deal-badge">🔥 Tarjous: ${esc(deal.name)} – ${esc(deal.price)}${deal.store ? ` · ${esc(deal.store)}` : ""}</div>` : ""}
+      </div>
+    `;
+  }).join("");
+  const servingsHtml = source === "fav" ? `
+      <div class="fp-servings" id="fav-servings-${idx}">
+        <span style="font-size: 0.76rem; font-weight: 800; color: #1e293b;">🍽️ Annoksia</span>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <button class="fp-icon-btn" aria-label="Vähennä annoksia" onclick="setFavoriteServings(${idx}, -1)">−</button>
+          <span id="fav-servings-value-${idx}" style="font-weight: 800; min-width: 22px; text-align: center; color: #0f172a;">${esc(String(r.target_servings || ""))}</span>
+          <button class="fp-icon-btn" aria-label="Lisää annoksia" onclick="setFavoriteServings(${idx}, 1)">+</button>
+        </div>
+      </div>` : "";
+  const dayChips = WEEK_DAYS.map(d => {
+    const on = sameRecipe(appState.weekPlan[d], r);
+    return `<button class="fp-day ${on ? "fp-day-on" : ""}" title="${WEEK_DAY_NAMES[d]}" onclick="assignRecipeToDay('${source}', ${idx}, '${d}')">${d}</button>`;
+  }).join("");
+  return `
+    <div class="recipe-card" id="recipe-${source}-${idx}">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
+        <div style="font-size: 0.95rem; font-weight: 800; color: #0f172a;">${esc(r.recipe_title)}</div>
+        <div style="display: flex; gap: 6px; flex-shrink: 0;">
+          <button class="fp-icon-btn" aria-label="Jaa resepti" onclick="shareRecipe('${source}', ${idx})">📤</button>
+          <button class="fp-icon-btn ${fav ? "fp-icon-on" : ""}" aria-label="${fav ? "Poista suosikeista" : "Tallenna suosikiksi"}" onclick="toggleFavoriteRecipe('${source}', ${idx})">${fav ? "⭐" : "☆"}</button>
+        </div>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 5px; align-items: center;">
+        <span style="background: #ffedd5; color: #9a3412; font-size: 0.68rem; font-weight: 800; padding: 2px 8px; border-radius: 999px;">${esc(r.cuisine || "Resepti")}</span>
+        <span style="font-size: 0.7rem; color: #64748b; font-weight: 700;">🍽️ ${esc(String(r.target_servings || effective))} annosta${r.original_servings ? ` (alkup. ${esc(String(r.original_servings))})` : ""}</span>
+        ${r.source_url ? `<a href="${esc(r.source_url)}" target="_blank" rel="noopener" style="font-size: 0.7rem; color: #0284c7; font-weight: 700;">🔗 Reseptin lähde</a>` : ""}
+      </div>
+      ${r.instructions_brief ? `<div style="font-size: 0.76rem; color: #475569; margin: 8px 0 2px; line-height: 1.45;">${esc(r.instructions_brief)}</div>` : ""}
+      ${servingsHtml}
+      <div style="margin-top: 8px;">${ingRows}</div>
+      <div style="margin-top: 8px; font-size: 0.7rem; font-weight: 800; color: #64748b;">📅 LISÄÄ VIIKOLLE</div>
+      <div class="fp-days">${dayChips}</div>
+      <button onclick="${addFn}" ${added || missing.length === 0 ? "disabled" : ""} style="width: 100%; margin-top: 10px; padding: 10px; border-radius: 10px; border: none; font-weight: 800; font-size: 0.84rem; cursor: ${added || missing.length === 0 ? "default" : "pointer"}; background: ${added ? "#bbf7d0" : missing.length === 0 ? "#e2e8f0" : "#16a34a"}; color: ${added || missing.length === 0 ? "#166534" : "#ffffff"};">
+        ${added ? "✓ Lisätty kauppalapulle" : missing.length === 0 ? "✓ Kaikki ainekset jo kotona" : `🛒 Lisää puuttuvat aineet kauppalapulle (${missing.length} kpl)`}
+      </button>
+      <button class="fp-cook-btn" onclick="openCookingMode('${source}', ${idx})">📖 Katso tarkka ohje</button>
+    </div>
+  `;
+}
+
+// ---------- Kokkaustila (koko ruudun näkymä) ----------
+function formatCookDuration(sec) {
+  const s = Math.max(0, Math.round(sec));
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60;
+  const pad = n => String(n).padStart(2, "0");
+  return h > 0 ? `${h}:${pad(m)}:${pad(r)}` : `${m}:${pad(r)}`;
+}
+
+// "4 min", "1 min 30 s", "45 s", "1 h 10 min"
+function formatCookDurationWords(sec) {
+  const s = Math.round(sec);
+  if (s < 60) return `${s} s`;
+  if (s < 3600) return s % 60 === 0 ? `${s / 60} min` : `${Math.floor(s / 60)} min ${s % 60} s`;
+  const h = Math.floor(s / 3600), m = Math.round((s % 3600) / 60);
+  return m ? `${h} h ${m} min` : `${h} h`;
+}
+
+// Ajastinpainikkeen teksti ja luokka tilan mukaan (päivitetään tikissä ilman koko näkymän piirtoa).
+function cookTimerState(c, stepNo, seconds) {
+  const t = c.timers[stepNo];
+  if (!t) return { cls: "", label: `⏱️ Käynnistä ajastin ${formatCookDurationWords(seconds)}` };
+  if (t.done) return { cls: "cook-timer-done", label: "✅ Aika täynnä! (Nollaa)" };
+  const left = Math.ceil((t.endAt - Date.now()) / 1000);
+  return { cls: "cook-timer-run", label: `⏳ ${formatCookDuration(left)} · Pysäytä` };
+}
+
+function cookSpeechSupported() {
+  return typeof window !== "undefined" && "speechSynthesis" in window && typeof SpeechSynthesisUtterance !== "undefined";
+}
+const cookDoneLabel = done => done ? "✅ Tehty" : "☐ Tehty";
+const cookSpeakLabel = speaking => speaking ? "⏹️ Pysäytä" : "🔊 Lue ääneen";
+
+// Edistymispalkki: id on aina mukana, jotta app.js voi päivittää sen kesken kokkaamisen.
+function renderCookProgress(c) {
+  const steps = c.data?.steps || [];
+  if (steps.length === 0) return `<div id="cook-progress"></div>`;
+  const n = steps.filter(st => c.done[st.step_number]).length;
+  const all = n === steps.length;
+  return `<div id="cook-progress" class="cook-progress ${all ? "cook-progress-all" : ""}">
+    <div class="cook-progress-text">${all ? "🎉 Kaikki vaiheet tehty!" : `${n} / ${steps.length} vaihetta tehty`}</div>
+    <div class="cook-progress-bar"><div class="cook-progress-fill" style="width:${Math.round(n / steps.length * 100)}%"></div></div>
+  </div>`;
+}
+
+function renderCookWakeBadge(c) {
+  if (c.wakeActive) return `<span id="cook-wake-badge" class="cook-badge cook-badge-on">💡 Näyttö pidetään päällä</span>`;
+  const msg = c.wakeSupported ? "⚠️ Näyttöä ei voitu pitää päällä" : "⚠️ Selain ei tue näytön pitämistä päällä";
+  return `<span id="cook-wake-badge" class="cook-badge cook-badge-off">${msg}</span>`;
+}
+
+function renderCookingMode(c) {
+  const r = c.recipe, d = c.data;
+  const ings = (Array.isArray(r.ingredients) ? r.ingredients : []).filter(i => i && i.name);
+  let body = "";
+
+  if (c.loading) {
+    body = `<div class="cook-state"><div class="fp-spinner" style="width:26px;height:26px;border-width:3px;"></div>
+      <div style="font-weight:800; margin-top:12px;">👨‍🍳 Kirjoitetaan tarkkaa ohjetta...</div>
+      <div style="font-size:0.78rem; color:#64748b; margin-top:4px;">Näyttö pysyy päällä.</div></div>`;
+  } else if (c.error) {
+    body = `<div class="cook-state"><div style="font-weight:800; color:#b91c1c; margin-bottom:10px;">⚠️ ${esc(c.error)}</div>
+      <button class="cook-retry-btn" onclick="retryCookingDetail()">↻ Yritä uudelleen</button></div>`;
+  } else if (d) {
+    const meta = [
+      d.prep_time ? `<span class="cook-chip">🔪 Valmistus ${esc(d.prep_time)}</span>` : "",
+      d.cook_time ? `<span class="cook-chip">🔥 Kypsennys ${esc(d.cook_time)}</span>` : ""
+    ].join("");
+    const equip = (d.equipment_needed || []).map(e => `<span class="cook-chip cook-chip-equip">🍳 ${esc(e)}</span>`).join("");
+    const ingRows = ings.map(i => `<div class="cook-ing-row"><span>${esc(i.name)}</span><span>${esc(i.amount_needed || i.amount || "")}</span></div>`).join("");
+    const steps = (d.steps || []).map(st => {
+      const timer = st.timer_seconds ? (() => {
+        const ts = cookTimerState(c, st.step_number, st.timer_seconds);
+        return `<button class="cook-timer-btn ${ts.cls}" id="cook-timer-${st.step_number}" onclick="event.stopPropagation(); toggleCookTimer(${st.step_number})">${ts.label}</button>`;
+      })() : "";
+      const done = !!c.done[st.step_number];
+      const speakBtn = cookSpeechSupported() ? `<button class="cook-act-btn" id="cook-speak-${st.step_number}" onclick="speakCookStep(${st.step_number})">${cookSpeakLabel(c.speakingStep === st.step_number)}</button>` : "";
+      return `
+        <div class="cook-step ${done ? "cook-step-checked" : ""}" id="cook-step-${st.step_number}">
+          <div class="cook-step-head"><div class="cook-step-num">${done ? "✓" : st.step_number}</div><div class="cook-step-title">${esc(st.title)}</div></div>
+          <div class="cook-step-text">${esc(st.instruction)}</div>
+          ${timer}
+          <div class="cook-actions">
+            <button class="cook-act-btn ${done ? "cook-act-done" : ""}" id="cook-check-${st.step_number}" aria-pressed="${done}" onclick="toggleCookStepDone(${st.step_number})">${cookDoneLabel(done)}</button>
+            ${speakBtn}
+          </div>
+        </div>`;
+    }).join("");
+    body = `
+      <div class="cook-meta">${meta}</div>
+      ${equip ? `<div class="cook-section-label">VÄLINEET</div><div class="cook-meta">${equip}</div>` : ""}
+      ${ingRows ? `<details class="cook-ings"><summary>🧺 Ainekset (${ings.length} kpl)</summary>${ingRows}</details>` : ""}
+      <div class="cook-section-label">VAIHEET</div>
+      ${steps}
+      ${d.pro_tips ? `<div class="cook-tip"><div style="font-weight:800; margin-bottom:3px;">💡 Vinkki</div>${esc(d.pro_tips)}</div>` : ""}`;
+  }
+
+  return `
+    <div class="cook-top">
+      ${renderCookWakeBadge(c)}
+      <div class="cook-title">${esc(r.recipe_title)}</div>
+      <div class="cook-sub">🍽️ ${esc(String(r.target_servings || ""))} annosta</div>
+      ${renderCookProgress(c)}
+    </div>
+    <div class="cook-scroll">${body}</div>
+    <div class="cook-footer"><button class="cook-done-btn" onclick="closeCookingMode()">✓ Sulje / Valmis</button></div>
+  `;
+}
+
+// Viikon ruokalista: päivät, poisto ja koko viikon yhdistetty ostoslista.
+function renderWeekPlan() {
+  const combined = combinedWeekIngredients();
+  const rows = WEEK_DAYS.map(d => {
+    const r = appState.weekPlan[d];
+    return `
+      <div class="fp-week-row" id="week-day-${d}">
+        <div class="fp-week-day">${d}</div>
+        <div style="flex: 1; min-width: 0;">
+          ${r ? `<div style="font-size: 0.86rem; font-weight: 800; color: #0f172a;">${esc(r.recipe_title)}</div>
+                 <div style="font-size: 0.7rem; color: #64748b; font-weight: 700;">${esc(r.cuisine || "")} · ${missingIngredients(r).length} ostettavaa</div>`
+              : `<div style="font-size: 0.8rem; color: #94a3b8; font-weight: 700;">Ei suunniteltu</div>`}
+        </div>
+        ${r ? `<button class="fp-icon-btn" aria-label="Poista ${WEEK_DAY_NAMES[d]}" onclick="clearWeekDay('${d}')">✕</button>` : ""}
+      </div>`;
+  }).join("");
+  const anyPlanned = WEEK_DAYS.some(d => appState.weekPlan[d]);
+  const emptyDays = WEEK_DAYS.filter(d => !appState.weekPlan[d]).length;
+  const weekLoading = foodPlan.loading && foodPlan.loadingKind === "week";
+  const stageKeys = Object.keys(WEEK_STAGES).filter(k => k === "week" || foodPlan.image);
+  const curStage = stageKeys.indexOf(foodPlan.stage);
+  const loadingHtml = weekLoading ? `
+    <div class="recipe-card" id="week-loading" style="padding: 14px;">
+      <div style="font-weight: 800; color: #1e293b; font-size: 0.9rem; margin-bottom: 8px;">✨ Tekoäly suunnittelee ${emptyDays} päivää (${foodPlan.diners * (foodPlan.cookTwice ? 2 : 1)} annosta)</div>
+      ${stageKeys.map((k, i) => {
+        const st = i < curStage ? "done" : i === curStage ? "active" : "todo";
+        const icon = st === "done" ? "✓" : st === "active" ? `<span class="fp-spinner"></span>` : `${i + 1}`;
+        return `<div class="fp-step fp-step-${st}" id="week-step-${k}"><span class="fp-step-icon">${icon}</span><span>${WEEK_STAGES[k]}</span></div>`;
+      }).join("")}
+    </div>` : "";
+  const settingsLine = `${foodPlan.diners} ruokailijaa${foodPlan.cookTwice ? " × 2" : ""} · ${foodPlan.cuisines.length ? esc(foodPlan.cuisines.join(", ")) : "kaikki tyylit"}${foodPlan.image ? " · jääkaappikuva mukana" : ""}`;
+  return `
+    <div class="recipe-card" style="background: #fffbeb; border-color: #fde68a;">
+      <div style="font-size: 0.9rem; font-weight: 800; color: #0f172a;">✨ Viikon automaattiehdotus</div>
+      <div style="font-size: 0.74rem; color: #78350f; margin: 4px 0 8px;">${settingsLine}. Muuta asetuksia Haku-välilehdellä. Täyttää vain tyhjät päivät.</div>
+      ${foodPlan.weekError && !weekLoading ? `<div id="week-error" style="font-size: 0.76rem; color: #991b1b; font-weight: 700; margin-bottom: 8px;">⚠️ ${esc(foodPlan.weekError)}</div>` : ""}
+      <button id="btn-autofill-week" onclick="autoFillWeek()" ${weekLoading || emptyDays === 0 ? "disabled" : ""} style="width: 100%; padding: 11px; border-radius: 10px; border: none; background: ${emptyDays === 0 ? "#e2e8f0" : "#ea580c"}; color: ${emptyDays === 0 ? "#64748b" : "#ffffff"}; font-weight: 800; font-size: 0.86rem; cursor: ${weekLoading || emptyDays === 0 ? "default" : "pointer"};">
+        ${weekLoading ? `⏳ ${WEEK_STAGES[foodPlan.stage] || "Suunnitellaan..."}` : emptyDays === 0 ? "✓ Viikko on täynnä" : `✨ Täytä ${emptyDays} tyhjää päivää tekoälyllä`}
+      </button>
+    </div>
+    ${loadingHtml}
+    <div class="recipe-card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <div style="font-size: 0.95rem; font-weight: 800; color: #0f172a;">📅 Viikon ruokalista</div>
+        ${anyPlanned ? `<button id="btn-share-week" class="fp-share-btn" onclick="shareWeekPlan()">📤 Jaa viikko</button>` : ""}
+      </div>
+      ${rows}
+      ${!anyPlanned ? `<div style="font-size: 0.76rem; color: #64748b; margin-top: 8px;">Valitse reseptikortista päivä (Ma–Su) tai anna tekoälyn täyttää viikko.</div>` : ""}
+    </div>
+    ${combined.length > 0 ? `
+      <div class="recipe-card">
+        <div style="font-size: 0.9rem; font-weight: 800; color: #0f172a; margin-bottom: 6px;">🛒 Koko viikon ostettavat (${combined.length} kpl)</div>
+        ${combined.map(i => {
+          const deal = dealForIngredient(i.name);
+          return `<div style="font-size: 0.8rem; color: #334155; font-weight: 700; padding: 3px 0;">• ${esc(i.to_shopping_list)}${deal ? ` <span class="fp-deal-inline">🔥 ${esc(deal.price)} ${esc(deal.store)}</span>` : ""}</div>`;
+        }).join("")}
+        <button id="btn-add-week" onclick="addWeekToShoppingList()" ${foodPlan.weekAdded ? "disabled" : ""} style="width: 100%; margin-top: 10px; padding: 10px; border-radius: 10px; border: none; font-weight: 800; font-size: 0.84rem; cursor: ${foodPlan.weekAdded ? "default" : "pointer"}; background: ${foodPlan.weekAdded ? "#bbf7d0" : "#16a34a"}; color: ${foodPlan.weekAdded ? "#166534" : "#ffffff"};">
+          ${foodPlan.weekAdded ? "✓ Viikon ainekset lisätty kauppalapulle" : "🛒 Lisää koko viikon ainekset kauppalapulle"}
+        </button>
+      </div>` : ""}
+  `;
+}
+
+function renderFavorites() {
+  if (appState.favorites.length === 0) {
+    return `<div class="recipe-card" style="text-align: center; padding: 26px 12px;">
+      <div style="font-size: 1.8rem;">☆</div>
+      <div style="font-weight: 800; color: #1e293b; font-size: 0.9rem; margin-top: 6px;">Ei vielä suosikkeja</div>
+      <div style="font-size: 0.76rem; color: #64748b; margin-top: 4px;">Napauta reseptikortin tähteä, niin resepti tallentuu koko perheelle.</div>
+    </div>`;
+  }
+  return appState.favorites.map((r, idx) => renderRecipeCard(r, idx, "fav", r.target_servings)).join("");
+}
+
 function renderFoodPlan() {
   const fp = foodPlan;
   const effective = fp.diners * (fp.cookTwice ? 2 : 1);
@@ -390,48 +645,39 @@ function renderFoodPlan() {
   }).join("");
 
   let recipesHtml = "";
-  if (fp.loading) {
+  if (fp.loading && fp.loadingKind === "search") {
+    const order = Object.keys(FOODPLAN_STAGES);
+    const cur = order.indexOf(fp.stage);
+    const stepsHtml = order.map((k, i) => {
+      const state = i < cur ? "done" : i === cur ? "active" : "todo";
+      const icon = state === "done" ? "✓" : state === "active" ? `<span class="fp-spinner"></span>` : `${i + 1}`;
+      return `<div class="fp-step fp-step-${state}" id="fp-step-${k}"><span class="fp-step-icon">${icon}</span><span>${FOODPLAN_STAGES[k]}</span></div>`;
+    }).join("");
     recipesHtml = `
-      <div style="text-align: center; padding: 34px 10px; color: #64748b;">
-        <div style="font-size: 2.2rem; margin-bottom: 8px;">👨‍🍳</div>
-        <div style="font-weight: 800; color: #1e293b; font-size: 0.92rem;">Tekoäly suunnittelee reseptejä...</div>
-        <div style="font-size: 0.76rem; margin-top: 4px;">Tunnistetaan raaka-aineita ja skaalataan määriä ${effective} hengelle</div>
+      <div class="recipe-card" id="foodplan-loading" style="padding: 16px;">
+        <div style="font-weight: 800; color: #1e293b; font-size: 0.92rem; margin-bottom: 10px;">👨‍🍳 Tekoäly suunnittelee reseptejä ${effective} hengelle</div>
+        ${stepsHtml}
+        ${fp.detected.length > 0 ? `<div style="font-size: 0.74rem; color: #475569; margin-top: 10px;"><strong>Tunnistettu:</strong> ${esc(fp.detected.join(", "))}</div>` : ""}
+      </div>
+    `;
+  } else if (fp.error) {
+    recipesHtml = `
+      <div class="recipe-card" id="foodplan-error" style="border-color: #fecaca; background: #fef2f2;">
+        <div style="font-weight: 800; color: #991b1b; font-size: 0.88rem;">⚠️ Reseptien haku epäonnistui</div>
+        <div style="font-size: 0.78rem; color: #7f1d1d; margin: 4px 0 10px;">${esc(fp.error)}</div>
+        <button onclick="searchFoodPlanRecipes()" style="width: 100%; padding: 9px; border-radius: 9px; border: none; background: #dc2626; color: #ffffff; font-weight: 800; font-size: 0.82rem; cursor: pointer;">↻ Yritä uudelleen</button>
       </div>
     `;
   } else if (fp.recipes.length > 0) {
-    recipesHtml = fp.recipes.map((r, idx) => {
-      const ings = Array.isArray(r.ingredients) ? r.ingredients.filter(i => i && i.name) : [];
-      const missing = ings.filter(i => !i.in_fridge);
-      const added = !!fp.addedRecipes[idx];
-      const ingRows = ings.map(i => {
-        const inFridge = !!i.in_fridge;
-        return `
-          <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 8px; background: ${inFridge ? "#f0fdf4" : "#fff7ed"}; border: 1px solid ${inFridge ? "#bbf7d0" : "#fed7aa"}; margin-bottom: 4px;">
-            <span style="font-size: 0.8rem; font-weight: 700; color: #1e293b;">${inFridge ? "✓" : "🛒"} ${esc(i.name)}</span>
-            <span style="font-size: 0.74rem; font-weight: 700; color: ${inFridge ? "#15803d" : "#c2410c"}; white-space: nowrap;">${esc(i.amount || "")}${inFridge ? " · jääkaapissa" : ""}</span>
-          </div>
-        `;
-      }).join("");
-      return `
-        <div class="recipe-card">
-          <div style="font-size: 0.95rem; font-weight: 800; color: #0f172a;">${esc(r.recipe_title)}</div>
-          <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 5px; align-items: center;">
-            <span style="background: #ffedd5; color: #9a3412; font-size: 0.68rem; font-weight: 800; padding: 2px 8px; border-radius: 999px;">${esc(r.cuisine || "Resepti")}</span>
-            <span style="font-size: 0.7rem; color: #64748b; font-weight: 700;">🍽️ ${esc(String(r.target_servings || effective))} annosta</span>
-            ${r.source_url ? `<a href="${esc(r.source_url)}" target="_blank" rel="noopener" style="font-size: 0.7rem; color: #0284c7; font-weight: 700;">🔗 Reseptin lähde</a>` : ""}
-          </div>
-          ${r.instructions_brief ? `<div style="font-size: 0.76rem; color: #475569; margin: 8px 0 2px; line-height: 1.45;">${esc(r.instructions_brief)}</div>` : ""}
-          <div style="margin-top: 8px;">${ingRows}</div>
-          <button onclick="addRecipeToShoppingList(${idx})" ${added || missing.length === 0 ? "disabled" : ""} style="width: 100%; margin-top: 10px; padding: 10px; border-radius: 10px; border: none; font-weight: 800; font-size: 0.84rem; cursor: ${added || missing.length === 0 ? "default" : "pointer"}; background: ${added ? "#bbf7d0" : missing.length === 0 ? "#e2e8f0" : "#16a34a"}; color: ${added || missing.length === 0 ? "#166534" : "#ffffff"};">
-            ${added ? "✓ Lisätty kauppalapulle" : missing.length === 0 ? "✓ Kaikki ainekset jo jääkaapissa" : `🛒 Lisää puuttuvat aineet kauppalapulle (${missing.length} kpl)`}
-          </button>
-        </div>
-      `;
-    }).join("");
+    recipesHtml = fp.recipes.map((r, idx) => renderRecipeCard(r, idx, "result", effective)).join("");
   }
+
+  if (fp.tab === "week") return `<div class="main-content" style="padding-top: 14px;">${renderFoodPlanTabs()}${renderWeekPlan()}</div>`;
+  if (fp.tab === "favorites") return `<div class="main-content" style="padding-top: 14px;">${renderFoodPlanTabs()}${renderFavorites()}</div>`;
 
   return `
     <div class="main-content" style="padding-top: 14px;">
+      ${renderFoodPlanTabs()}
       <div class="add-widget-card">
         <div class="add-widget-header">
           <span class="add-widget-title">Mitä jääkaapista löytyy?</span>
@@ -463,7 +709,7 @@ function renderFoodPlan() {
         <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px;">${chipsHtml}</div>
 
         <button id="btn-find-recipes" onclick="searchFoodPlanRecipes()" ${fp.loading ? "disabled" : ""} style="width: 100%; margin-top: 14px; padding: 12px; border-radius: 10px; border: none; background: #ea580c; color: #ffffff; font-weight: 800; font-size: 0.9rem; cursor: pointer;">
-          ${fp.loading ? "⏳ Haetaan reseptejä..." : "🔍 Etsi reseptejä"}
+          ${fp.loading ? `⏳ ${FOODPLAN_STAGES[fp.stage] || "Haetaan reseptejä..."}` : "🔍 Etsi reseptejä"}
         </button>
       </div>
 
