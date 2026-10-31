@@ -9,23 +9,10 @@
   <meta name="theme-color" content="#16a34a">
   <title>Corsia</title>
 
-  <script>
-    (function() {
-      const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180"><defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#4ade80" /><stop offset="100%" stop-color="#16a34a" /></linearGradient></defs><rect width="180" height="180" rx="36" fill="url(#g)"/><circle cx="90" cy="90" r="54" fill="#ffffff"/><path d="M 108 65 C 80 65 70 82 70 90 C 70 98 80 115 108 115" fill="none" stroke="#16a34a" stroke-width="12" stroke-linecap="round"/><circle cx="106" cy="65" r="7" fill="#16a34a"/></svg>';
-      const encoded = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
-
-      const favLink = document.createElement("link");
-      favLink.rel = "icon";
-      favLink.type = "image/svg+xml";
-      favLink.href = encoded;
-      document.head.appendChild(favLink);
-
-      const appleLink = document.createElement("link");
-      appleLink.rel = "apple-touch-icon";
-      appleLink.href = encoded;
-      document.head.appendChild(appleLink);
-    })();
-  </script>
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="manifest" href="manifest.webmanifest">
 
   <link rel="stylesheet" href="style.css?v=11">
 
