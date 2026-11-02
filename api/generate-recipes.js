@@ -1,13 +1,37 @@
 // Corsia – reseptigeneraattori (POST /api/generate-recipes).
 // Kaksi vaihetta (body.step):
-//   "identify" -> { image: { base64, mimeType } }                          => { ingredients: [...] }
+//   "identify" -> { image: { base64, mimeType } } TAI { text: "puhuttu lista" } => { ingredients: [...] }
 //   "recipes"  -> { ingredients, diners, cook_twice, cuisines, categories } => { effective_diners, recipes: [...] }
 //   "week"     -> { ..., days: ["Ma", ...] }                                 => { effective_diners, days, recipes }
 //   "detail"   -> { recipe_title, ingredients: ["Aines (määrä)", ...], target_servings }
 //                                                                            => { prep_time, cook_time, equipment_needed, steps, pro_tips }
 const { ApiError, callGemini, callWithSearchFallback, extractText, parseJson, validateImage, strList, createHandler } = require("./_lib/gemini");
 
+// Puhuttu tai kirjoitettu raaka-ainelista -> siisti lista perusmuodossa (ei kuvaa).
+async function parseSpokenIngredients(key, text) {
+  const prompt = `Olet tarkka suomalainen keittiöapuri. Alla on PUHUTTU RAAKA-AINELISTA (puheentunnistuksen tulos, voi sisältää virheitä ja taivutettuja muotoja).
+Poimi kaikki mainitut ruoka-aineet ja raaka-aineet. Älä keksi aineksia, joita ei mainita. Korjaa ilmeiset kuulovirheet vain, jos tarkoitus on selvä.
+Palauta PELKKÄ JSON-objekti: {"ingredients": ["Kananmunat", "Maito", "Paprika", ...]}
+Nimet suomeksi, ilman määriä, samaan tapaan kuin esimerkeissä. Jos mitään ei löydy, palauta {"ingredients": []}.
+
+TEKSTI: "${text.replace(/"/g, "'")}"`;
+  const { data } = await callGemini(key, {
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    generationConfig: { temperature: 0.1, responseMimeType: "application/json" }
+  });
+  const parsed = parseJson(extractText(data), "{", "}");
+  const list = Array.isArray(parsed) ? parsed : parsed?.ingredients;
+  return {
+    ingredients: (Array.isArray(list) ? list : [])
+      .map(x => String(typeof x === "string" ? x : x?.name || "").trim())
+      .filter(Boolean)
+      .slice(0, 60)
+  };
+}
+
 async function identifyIngredients(key, body) {
+  const spoken = String(body.text || "").trim().slice(0, 1500);
+  if (!body.image && spoken) return parseSpokenIngredients(key, spoken);
   const image = validateImage(body.image);
   const prompt = `Olet tarkka suomalainen keittiöapuri. Kuvassa on jääkaapin, pakastimen tai ruokakaapin sisältöä.
 Tunnista KAIKKI selvästi näkyvät ruoka-aineet ja raaka-aineet. Älä keksi asioita, joita ei näy.
@@ -107,7 +131,12 @@ async function generateRecipes(key, body, mode) {
   const recipes = await callWithSearchFallback(
     key,
     [{ role: "user", parts: [{ text: prompt }] }],
-    data => normalizeRecipes(parseJson(extractText(data), "[", "]"), effective, count)
+    data => {
+      const list = normalizeRecipes(parseJson(extractText(data), "[", "]"), effective, count);
+      // Ilman verkkohakua tehdyt reseptit: linkit voisivat olla keksittyjä, joten ne poistetaan
+      if (data?._ungrounded) list.forEach(r => { r.source_url = null; });
+      return list;
+    }
   );
   if (recipes.length === 0) throw new ApiError(502, "Reseptejä ei saatu – yritä uudelleen");
   return mode === "week"
