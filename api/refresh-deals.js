@@ -38,7 +38,7 @@ Anna 2-3 KOVINTA tarjousta PER KAUPPA (yhteensä 8-12 tarjousta). Painota erityi
 Vastaa PELKÄLLÄ JSON-taulukolla, ei muuta tekstiä eikä lähdeviitteitä. Jokaisella alkiolla kentät:
 "cat" (lyhyt otsikko emojilla, esim. "🐟 Kala"), "name" (tuote), "price" (esim. "12,90 €/kg"), "store" (kaupan nimi), "mainCat" (yksi näistä: ${cats}).`;
 
-  const deals = await callWithSearchFallback(key, [{ role: "user", parts: [{ text: prompt }] }], parseDeals, 0.3);
-  if (deals.length === 0) throw new ApiError(502, "Tarjouksia ei löytynyt – yritä myöhemmin uudelleen");
+  const deals = await callWithSearchFallback(key, [{ role: "user", parts: [{ text: prompt }] }], parseDeals, 0.3, true); // true = vaatii verkkohaun (ei keksittyjä hintoja)
+  if (deals.length === 0) throw new ApiError(502, "Tarjouksia ei löytynyt – haku vaatii Geminin verkkohaun, yritä myöhemmin uudelleen");
   return { deals };
 });
