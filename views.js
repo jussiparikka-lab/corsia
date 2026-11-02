@@ -491,7 +491,10 @@ function renderCookProgress(c) {
   const n = steps.filter(st => c.done[st.step_number]).length;
   const all = n === steps.length;
   return `<div id="cook-progress" class="cook-progress ${all ? "cook-progress-all" : ""}">
-    <div class="cook-progress-text">${all ? "🎉 Kaikki vaiheet tehty!" : `${n} / ${steps.length} vaihetta tehty`}</div>
+    <div class="cook-progress-row">
+      <div class="cook-progress-text">${all ? "🎉 Kaikki vaiheet tehty!" : `${n} / ${steps.length} vaihetta tehty`}</div>
+      ${n > 0 ? `<button class="cook-reset-btn" onclick="resetCookProgress()">↺ Nollaa</button>` : ""}
+    </div>
     <div class="cook-progress-bar"><div class="cook-progress-fill" style="width:${Math.round(n / steps.length * 100)}%"></div></div>
   </div>`;
 }
@@ -561,6 +564,15 @@ function renderCookingMode(c) {
 }
 
 // Viikon ruokalista: päivät, poisto ja koko viikon yhdistetty ostoslista.
+// Viikkolistan rivin merkintä: ✓ Tehty tai "n/m vaihetta" (tieto tulee tämän laitteen tallennuksesta)
+function weekCookBadge(r) {
+  const p = typeof cookProgressFor === "function" ? cookProgressFor(r) : null;
+  if (!p) return "";
+  return p.n === p.total
+    ? ` · <span class="fp-cook-done">✓ Tehty</span>`
+    : ` · <span class="fp-cook-prog">🍳 ${p.n}/${p.total} vaihetta</span>`;
+}
+
 function renderWeekPlan() {
   const combined = combinedWeekIngredients();
   const rows = WEEK_DAYS.map(d => {
@@ -570,10 +582,11 @@ function renderWeekPlan() {
         <div class="fp-week-day">${d}</div>
         <div style="flex: 1; min-width: 0;">
           ${r ? `<div style="font-size: 0.86rem; font-weight: 800; color: #0f172a;">${esc(r.recipe_title)}</div>
-                 <div style="font-size: 0.7rem; color: #64748b; font-weight: 700;">${esc(r.cuisine || "")} · ${missingIngredients(r).length} ostettavaa</div>`
+                 <div style="font-size: 0.7rem; color: #64748b; font-weight: 700;">${esc(r.cuisine || "")} · ${missingIngredients(r).length} ostettavaa${weekCookBadge(r)}</div>`
               : `<div style="font-size: 0.8rem; color: #94a3b8; font-weight: 700;">Ei suunniteltu</div>`}
         </div>
-        ${r ? `<button class="fp-icon-btn" aria-label="Poista ${WEEK_DAY_NAMES[d]}" onclick="clearWeekDay('${d}')">✕</button>` : ""}
+        ${r ? `<button class="fp-icon-btn" aria-label="Kokkaustila ${WEEK_DAY_NAMES[d]}" onclick="openCookingMode('week', '${d}')">📖</button>
+               <button class="fp-icon-btn" aria-label="Poista ${WEEK_DAY_NAMES[d]}" onclick="clearWeekDay('${d}')">✕</button>` : ""}
       </div>`;
   }).join("");
   const anyPlanned = WEEK_DAYS.some(d => appState.weekPlan[d]);
@@ -637,16 +650,33 @@ function renderFavorites() {
 function renderFoodPlan() {
   const fp = foodPlan;
   const effective = fp.diners * (fp.cookTwice ? 2 : 1);
-  const cuisineOptions = ["Aasialainen", "Pasta", "Wok", "Nopea", "Klassikko"];
+  const styleOptions = ["Aasialainen", "Pasta", "Wok", "Nopea", "Klassikko"];
+  const worldOptions = ["Italialainen", "Kreikkalainen", "Thai", "Intialainen", "Singaporelainen", "Amerikkalainen",
+    "Meksikolainen", "Japanilainen", "Kiinalainen", "Korealainen", "Ranskalainen", "Espanjalainen", "Lähi-itä", "Suomalainen"];
 
-  const chipsHtml = cuisineOptions.map(c => {
+  const chip = c => {
     const on = fp.cuisines.includes(c);
     return `<button onclick="toggleFoodPlanCuisine('${c}')" style="padding: 7px 12px; border-radius: 999px; border: 1.5px solid ${on ? "#16a34a" : "#cbd5e1"}; background: ${on ? "#f0fdf4" : "#ffffff"}; color: ${on ? "#15803d" : "#475569"}; font-weight: 700; font-size: 0.78rem; cursor: pointer;">${on ? "✓ " : ""}${c}</button>`;
-  }).join("");
+  };
+  const chipsHtml = styleOptions.map(chip).join("");
+  const worldChipsHtml = worldOptions.map(chip).join("");
+
+  // Puhutut raaka-aineet (poistettavissa yksitellen)
+  const spokenHtml = (fp.spoken.length > 0 || fp.voiceLoading) ? `
+    <div id="fp-spoken" style="margin-top: 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 9px 10px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+        <span style="font-size: 0.72rem; font-weight: 800; color: #64748b;">🎙️ KERROTUT RAAKA-AINEET</span>
+        ${fp.spoken.length > 0 ? `<button onclick="clearSpokenIngredients()" style="border: none; background: transparent; color: #64748b; font-weight: 800; font-size: 0.74rem; cursor: pointer;">Tyhjennä</button>` : ""}
+      </div>
+      <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+        ${fp.spoken.map((x, i) => `<button onclick="removeSpokenIngredient(${i})" aria-label="Poista ${esc(x)}" style="padding: 5px 10px; border-radius: 999px; border: 1px solid #bbf7d0; background: #f0fdf4; color: #166534; font-weight: 700; font-size: 0.78rem; cursor: pointer;">${esc(x)} ✕</button>`).join("")}
+        ${fp.voiceLoading ? `<span style="font-size: 0.78rem; font-weight: 700; color: #64748b;"><span class="fp-spinner"></span> Tunnistetaan puhetta...</span>` : ""}
+      </div>
+    </div>` : "";
 
   let recipesHtml = "";
   if (fp.loading && fp.loadingKind === "search") {
-    const order = Object.keys(FOODPLAN_STAGES);
+    const order = Object.keys(FOODPLAN_STAGES).filter(k => k === "recipes" || fp.image); // ilman kuvaa vain reseptihaku
     const cur = order.indexOf(fp.stage);
     const stepsHtml = order.map((k, i) => {
       const state = i < cur ? "done" : i === cur ? "active" : "todo";
@@ -657,7 +687,7 @@ function renderFoodPlan() {
       <div class="recipe-card" id="foodplan-loading" style="padding: 16px;">
         <div style="font-weight: 800; color: #1e293b; font-size: 0.92rem; margin-bottom: 10px;">👨‍🍳 Tekoäly suunnittelee reseptejä ${effective} hengelle</div>
         ${stepsHtml}
-        ${fp.detected.length > 0 ? `<div style="font-size: 0.74rem; color: #475569; margin-top: 10px;"><strong>Tunnistettu:</strong> ${esc(fp.detected.join(", "))}</div>` : ""}
+        ${(fp.detected.length > 0 || fp.spoken.length > 0) ? `<div style="font-size: 0.74rem; color: #475569; margin-top: 10px;"><strong>Raaka-aineet:</strong> ${esc(allIngredients().join(", "))}</div>` : ""}
       </div>
     `;
   } else if (fp.error) {
@@ -684,9 +714,16 @@ function renderFoodPlan() {
           <span class="badge-quickadd">Tekoäly</span>
         </div>
         ${fp.image ? `<div style="margin-bottom: 10px;"><img src="${fp.image.previewUrl}" alt="Raaka-aineet" style="width: 100%; max-height: 180px; object-fit: cover; border-radius: 10px; border: 1px solid #e2e8f0;"></div>` : ""}
-        <button onclick="triggerFoodPlanCamera()" style="width: 100%; padding: 12px; border-radius: 10px; border: 1.5px dashed #94a3b8; background: #f8fafc; font-weight: 800; font-size: 0.86rem; color: #1e293b; cursor: pointer;">
-          📷 ${fp.image ? "Ota uusi kuva" : "Ota kuva raaka-aineista"}
-        </button>
+        <div style="display: flex; gap: 8px;">
+          <button onclick="triggerFoodPlanCamera()" style="flex: 1; padding: 12px 6px; border-radius: 10px; border: 1.5px dashed #94a3b8; background: #f8fafc; font-weight: 800; font-size: 0.86rem; color: #1e293b; cursor: pointer;">
+            📷 ${fp.image ? "Uusi kuva" : "Ota kuva"}
+          </button>
+          <button id="btn-voice-ingredients" onclick="startVoiceRecognition('ingredients')" ${fp.voiceLoading ? "disabled" : ""} style="flex: 1; padding: 12px 6px; border-radius: 10px; border: 1.5px dashed #94a3b8; background: #f8fafc; font-weight: 800; font-size: 0.86rem; color: #1e293b; cursor: pointer;">
+            🎙️ Kerro puheella
+          </button>
+        </div>
+        <div style="font-size: 0.72rem; color: #64748b; margin-top: 6px;">Käytä kuvaa, puhetta tai molempia – raaka-aineet yhdistetään.</div>
+        ${spokenHtml}
 
         <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 14px;">
           <span style="font-size: 0.82rem; font-weight: 800; color: #1e293b;">Ruokailijoiden määrä</span>
@@ -707,6 +744,8 @@ function renderFoodPlan() {
 
         <div style="margin-top: 14px; font-size: 0.76rem; font-weight: 800; color: #64748b; text-transform: uppercase;">Makumaailma (valinnainen)</div>
         <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px;">${chipsHtml}</div>
+        <div style="margin-top: 10px; font-size: 0.72rem; font-weight: 800; color: #94a3b8; text-transform: uppercase;">Keittiöt maailmalta</div>
+        <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px;">${worldChipsHtml}</div>
 
         <button id="btn-find-recipes" onclick="searchFoodPlanRecipes()" ${fp.loading ? "disabled" : ""} style="width: 100%; margin-top: 14px; padding: 12px; border-radius: 10px; border: none; background: #ea580c; color: #ffffff; font-weight: 800; font-size: 0.9rem; cursor: pointer;">
           ${fp.loading ? `⏳ ${FOODPLAN_STAGES[fp.stage] || "Haetaan reseptejä..."}` : "🔍 Etsi reseptejä"}

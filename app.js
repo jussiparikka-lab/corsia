@@ -116,6 +116,12 @@ async function postApi(path, body) {
   const headers = { "Content-Type": "application/json" };
   const legacyKey = getEffectiveGeminiKey();
   if (legacyKey) headers["x-gemini-key"] = legacyKey;
+  const groqKey = (localStorage.getItem("corsia_groq_api_key") || "").trim();
+  const openrouterKey = (localStorage.getItem("corsia_openrouter_api_key") || "").trim();
+  const provider = localStorage.getItem("corsia_ai_provider");
+  if (groqKey) headers["x-groq-key"] = groqKey;
+  if (openrouterKey) headers["x-openrouter-key"] = openrouterKey;
+  if (provider && provider !== "auto") headers["x-ai-provider"] = provider;
 
   let res;
   try {
@@ -126,7 +132,7 @@ async function postApi(path, body) {
   const data = await res.json().catch(() => null);
   if (!res.ok) {
     const msg = data?.error || (res.status === 413 ? "Kuva on liian suuri" : `Palvelinvirhe ${res.status}`);
-    try { localStorage.setItem("corsia_last_ai_error", `${new Date().toLocaleString("fi-FI")} – ${res.status}: ${msg}`.substring(0, 400)); } catch (e) {}
+    try { localStorage.setItem("corsia_last_ai_error", `${new Date().toLocaleString("fi-FI")} – ${res.status}: ${msg}${data?.detail ? ` (${data.detail})` : ""}`.substring(0, 400)); } catch (e) {}
     throw new Error(msg);
   }
   if (!data) throw new Error("Palvelimen vastaus oli virheellinen");
@@ -587,6 +593,17 @@ let voiceSessionId = 0;
 let voiceText = "";
 let voiceSilenceTimer = null;
 let voiceStarting = false;
+let voiceMode = "shopping"; // "shopping" = kauppalista, "ingredients" = ruokasuunnittelun raaka-aineet
+const VOICE_TEXTS = {
+  shopping: { hint: 'Luettele tuotteita rauhassa (esim. "kaksi maitoa, lohi ja kurkku")', finish: "✓ Valmis (Tuo listalle)" },
+  ingredients: { hint: 'Kerro mitä kaapista löytyy (esim. "kananmunia, riisiä ja paprikaa")', finish: "✓ Valmis (Lisää raaka-aineiksi)" }
+};
+function applyVoiceModeTexts() {
+  const t = VOICE_TEXTS[voiceMode];
+  const hint = document.getElementById("voice-hint"), btn = document.getElementById("voice-finish-btn");
+  if (hint) hint.textContent = t.hint;
+  if (btn) btn.textContent = t.finish;
+}
 let voicePrevEnded = Promise.resolve();
 
 function stopVoiceEngine() {
@@ -611,7 +628,7 @@ function hideVoiceModal() {
   if (modal) modal.style.display = "none";
 }
 
-window.startVoiceRecognition = async function() {
+window.startVoiceRecognition = async function(mode) {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) {
     showUndoBar("⚠️ Selaimesi ei tue puhesanelua");
@@ -623,6 +640,8 @@ window.startVoiceRecognition = async function() {
   const mySession = ++voiceSessionId;
   stopVoiceEngine(); // varmistetaan ettei vanha tunnistin ole enää päällä
   voiceText = "";
+  voiceMode = mode === "ingredients" ? "ingredients" : "shopping";
+  applyVoiceModeTexts();
 
   const modal = document.getElementById("voice-modal");
   const transcriptBox = document.getElementById("voice-transcript-text");
@@ -715,11 +734,14 @@ window.cancelVoiceRecognition = function() {
 
 window.finishVoiceRecognition = function() {
   const text = voiceText.trim();
+  const mode = voiceMode;
   voiceSessionId++;
   stopVoiceEngine();
   voiceText = "";
   hideVoiceModal();
-  if (text) processShoppingText(text, "🎙️");
+  if (!text) return;
+  if (mode === "ingredients") processSpokenIngredients(text);
+  else processShoppingText(text, "🎙️");
 };
 
 // Käsittelee puhutun tai liitetyn tekstin: tekoäly ensin (oikeat kategoriat), muuten paikallinen jäsennys.
@@ -892,7 +914,9 @@ let foodPlan = {
   cookTwice: false,
   cuisines: ["Aasialainen"],
   recipes: [],
-  detected: [],         // tunnistetut raaka-aineet
+  detected: [],         // kuvasta tunnistetut raaka-aineet
+  spoken: [],           // puheella kerrotut raaka-aineet
+  voiceLoading: false,  // puhe käsitellään tekoälyllä
   loading: false,
   stage: null,          // "compress" | "identify" | "recipes"
   error: null,
@@ -950,6 +974,66 @@ window.toggleCookTwice = function() {
   render();
 };
 
+// Kuvasta tunnistetut + puhutut raaka-aineet yhdessä (ilman kaksoiskappaleita)
+function allIngredients() {
+  const seen = new Set(), out = [];
+  [...foodPlan.detected, ...foodPlan.spoken].forEach(x => {
+    const k = String(x).trim().toLowerCase();
+    if (k && !seen.has(k)) { seen.add(k); out.push(String(x).trim()); }
+  });
+  return out;
+}
+
+function addSpokenIngredients(list) {
+  const have = new Set(foodPlan.spoken.map(x => x.toLowerCase()));
+  let added = 0;
+  list.forEach(x => {
+    const name = String(x).trim();
+    if (name && !have.has(name.toLowerCase())) { have.add(name.toLowerCase()); foodPlan.spoken.push(name); added++; }
+  });
+  return added;
+}
+
+// Varakeino, jos tekoäly ei vastaa: pilkotaan puhe pilkuista ja "ja"-sanoista
+function splitSpokenLocal(text) {
+  return text.split(/\s*(?:,|\n|\s+ja\s+|\s+sekä\s+)\s*/i)
+    .map(x => x.trim()).filter(Boolean)
+    .map(x => x.charAt(0).toUpperCase() + x.slice(1));
+}
+
+async function processSpokenIngredients(text) {
+  if (foodPlan.voiceLoading) return;
+  foodPlan.voiceLoading = true;
+  foodPlan.error = null;
+  render();
+  let added = 0;
+  try {
+    const res = await postApi(RECIPE_API_URL, { step: "identify", text });
+    const list = Array.isArray(res.ingredients) ? res.ingredients : [];
+    added = addSpokenIngredients(list);
+    if (list.length === 0) showToast("🎙️ Raaka-aineita ei tunnistettu – yritä uudelleen", "info");
+    else showToast(`🎙️ Lisätty ${added} raaka-ainetta`, "success");
+  } catch (e) {
+    console.warn("Puheen jäsennys epäonnistui, käytetään paikallista:", e);
+    added = addSpokenIngredients(splitSpokenLocal(text));
+    showToast(`⚠️ ${e?.message || "Tekoäly ei vastannut"} – lisättiin puhe sellaisenaan (${added} kpl)`, "error");
+  } finally {
+    foodPlan.voiceLoading = false;
+    if (added > 0) { foodPlan.recipes = []; foodPlan.addedRecipes = {}; }
+    render();
+  }
+}
+
+window.removeSpokenIngredient = function(i) {
+  foodPlan.spoken.splice(i, 1);
+  render();
+};
+
+window.clearSpokenIngredients = function() {
+  foodPlan.spoken = [];
+  render();
+};
+
 window.toggleFoodPlanCuisine = function(c) {
   const i = foodPlan.cuisines.indexOf(c);
   if (i >= 0) foodPlan.cuisines.splice(i, 1);
@@ -964,8 +1048,8 @@ function setFoodPlanStage(stage) {
 
 window.searchFoodPlanRecipes = async function() {
   if (foodPlan.loading) return;
-  if (!foodPlan.image) {
-    showToast("📷 Ota ensin kuva raaka-aineista", "info");
+  if (!foodPlan.image && foodPlan.spoken.length === 0) {
+    showToast("📷 Ota kuva tai 🎙️ kerro raaka-aineet puheella", "info");
     return;
   }
 
@@ -977,21 +1061,23 @@ window.searchFoodPlanRecipes = async function() {
   foodPlan.addedRecipes = {};
 
   try {
-    // 1) Pakkaus selaimessa: max 1024 px, JPEG 0,7
-    setFoodPlanStage("compress");
-    const compressed = await compressImageForVision(foodPlan.image.file, 1024, 0.7)
-      .catch(() => { throw new Error("Kuvan tiivistäminen epäonnistui – kokeile toista kuvaa"); });
+    if (foodPlan.image) {
+      // 1) Pakkaus selaimessa: max 1024 px, JPEG 0,7
+      setFoodPlanStage("compress");
+      const compressed = await compressImageForVision(foodPlan.image.file, 1024, 0.7)
+        .catch(() => { throw new Error("Kuvan tiivistäminen epäonnistui – kokeile toista kuvaa"); });
 
-    // 2) Raaka-aineiden tunnistus (palvelin)
-    setFoodPlanStage("identify");
-    const idRes = await postApi(RECIPE_API_URL, { step: "identify", image: compressed });
-    foodPlan.detected = Array.isArray(idRes.ingredients) ? idRes.ingredients : [];
+      // 2) Raaka-aineiden tunnistus (palvelin)
+      setFoodPlanStage("identify");
+      const idRes = await postApi(RECIPE_API_URL, { step: "identify", image: compressed });
+      foodPlan.detected = Array.isArray(idRes.ingredients) ? idRes.ingredients : [];
+    }
 
-    // 3) Reseptien haku ja skaalaus (palvelin, ei kuvaa -> pieni pyyntö)
+    // 3) Reseptien haku ja skaalaus (palvelin, ei kuvaa -> pieni pyyntö). Mukana myös puhutut raaka-aineet.
     setFoodPlanStage("recipes");
     const recRes = await postApi(RECIPE_API_URL, {
       step: "recipes",
-      ingredients: foodPlan.detected,
+      ingredients: allIngredients(),
       diners: foodPlan.diners,
       cook_twice: foodPlan.cookTwice,
       cuisines: foodPlan.cuisines,
@@ -999,7 +1085,7 @@ window.searchFoodPlanRecipes = async function() {
       deals: dealNamesForPrompt()
     });
     const recipes = (Array.isArray(recRes.recipes) ? recRes.recipes : []).filter(r => r && r.recipe_title);
-    if (recipes.length === 0) throw new Error("Reseptejä ei saatu – kokeile toista kuvaa");
+    if (recipes.length === 0) throw new Error("Reseptejä ei saatu – kokeile uudelleen tai kerro raaka-aineet toisin");
 
     foodPlan.recipes = recipes;
     showToast(`🍳 Löytyi ${recipes.length} reseptiä!`, "success");
@@ -1042,7 +1128,7 @@ window.autoFillWeek = async function() {
     const res = await postApi(RECIPE_API_URL, {
       step: "week",
       days,
-      ingredients: foodPlan.detected,
+      ingredients: allIngredients(),
       diners: foodPlan.diners,
       cook_twice: foodPlan.cookTwice,
       cuisines: foodPlan.cuisines,
@@ -1167,6 +1253,7 @@ window.shareWeekPlan = function() {
 // ---------- Reseptien apufunktiot (haku, suosikit, viikko) ----------
 // source: "result" = hakutulos, "fav" = suosikki
 function getRecipe(source, idx) {
+  if (source === "week") return appState.weekPlan[idx];   // idx = päivä ("Ma", "Ti", ...)
   return source === "fav" ? appState.favorites[idx] : foodPlan.recipes[idx];
 }
 
@@ -1362,6 +1449,17 @@ window.saveApiKeyFromModal = function() {
   openDiagnostics();
 };
 
+window.saveAiSettingsFromModal = function() {
+  const prov = document.getElementById("diag-ai-provider")?.value || "auto";
+  const groq = (document.getElementById("diag-groq-key")?.value || "").trim();
+  const openrouter = (document.getElementById("diag-openrouter-key")?.value || "").trim();
+  if (prov === "auto") localStorage.removeItem("corsia_ai_provider"); else localStorage.setItem("corsia_ai_provider", prov);
+  if (groq) localStorage.setItem("corsia_groq_api_key", groq); else localStorage.removeItem("corsia_groq_api_key");
+  if (openrouter) localStorage.setItem("corsia_openrouter_api_key", openrouter); else localStorage.removeItem("corsia_openrouter_api_key");
+  showUndoBar("✓ Tekoälyasetukset tallennettu tälle laitteelle");
+  openDiagnostics();
+};
+
 window.openDiagnostics = function() {
   const modal = document.getElementById("diag-modal");
   const content = document.getElementById("diag-content-box");
@@ -1380,16 +1478,24 @@ window.openDiagnostics = function() {
       <div><strong>Pilvitietokanta:</strong> ${cloudStr}</div>
       <div><strong>Puhesanelu:</strong> ${speechStr}</div>
       <div><strong>Viimeisin tekoälyvirhe:</strong> <span style="word-break:break-word;">${esc(localStorage.getItem("corsia_last_ai_error") || "ei virheitä")}</span></div>
-      <div><strong>Palvelimen avain (GEMINI_API_KEY):</strong> <span id="diag-server-key">⏳ tarkistetaan...</span></div>
+      <div><strong>Tekoälyavaimet:</strong> <span id="diag-server-key">⏳ tarkistetaan...</span></div>
       <div><strong>Selaimen vara-avain:</strong> ${keyStatusStr}</div>
     </div>
   `;
   if (keyInp) keyInp.value = currentKey;
+  const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+  setVal("diag-ai-provider", localStorage.getItem("corsia_ai_provider") || "auto");
+  setVal("diag-groq-key", localStorage.getItem("corsia_groq_api_key") || "");
+  setVal("diag-openrouter-key", localStorage.getItem("corsia_openrouter_api_key") || "");
   modal.style.display = "flex";
 
   fetch("/api/status").then(r => r.json()).then(d => {
     const el = document.getElementById("diag-server-key");
-    if (el) el.textContent = d.serverKey ? "🟢 Asetettu" : (currentKey ? "🟡 Ei asetettu – käytetään selaimen vara-avainta" : "🔴 Ei asetettu");
+    if (!el) return;
+    const srv = d.providers || { gemini: !!d.serverKey };
+    const dev = { gemini: !!currentKey, groq: !!localStorage.getItem("corsia_groq_api_key"), openrouter: !!localStorage.getItem("corsia_openrouter_api_key") };
+    const fmt = (name, k) => `${name} ${srv[k] ? "🟢 palvelin" : dev[k] ? "🟡 tämä laite" : "⚪ ei avainta"}`;
+    el.textContent = [fmt("Gemini", "gemini"), fmt("Groq", "groq"), fmt("OpenRouter", "openrouter")].join(" · ");
   }).catch(() => {
     const el = document.getElementById("diag-server-key");
     if (el) el.textContent = "🔴 Palvelinta ei tavoitettu";
@@ -1407,7 +1513,52 @@ let cooking = null;           // { recipe, data, loading, error, timers, wakeAct
 let cookWakeLock = null;
 let cookTickHandle = null;
 let cookAudioCtx = null;
-const cookingDetailCache = {}; // "otsikko|annokset" -> ohje (ei haeta uudelleen samalle reseptille)
+const cookingDetailCache = {}; // "otsikko|annokset" -> ohje (muistivara, jos localStorage ei toimi)
+
+// Ohje ja rastit tallennetaan tähän laitteeseen 24 h:ksi: vahingossa suljettu tai ladattu näkymä jatkuu siitä mihin jäi,
+// eikä sama ohje haeta uudelleen Geminiltä (säästää kiintiötä). Viikkolista näyttää edistymisen tämän perusteella.
+const COOK_STORE_KEY = "corsia_cook_sessions";
+const COOK_TTL_MS = 24 * 60 * 60 * 1000;
+const COOK_MAX_ENTRIES = 15;
+
+const cookServings = r => r.target_servings || foodPlan.diners;
+const cookKeyFor = r => `${String(r.recipe_title || "").trim().toLowerCase()}|${cookServings(r)}`;
+
+function loadCookStore() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(COOK_STORE_KEY) || "{}");
+    const now = Date.now(), out = {};
+    Object.keys(raw || {}).forEach(k => { if (raw[k] && now - (raw[k].ts || 0) < COOK_TTL_MS) out[k] = raw[k]; });
+    return out;
+  } catch (e) { return {}; }
+}
+
+function saveCookStore(store) {
+  try {
+    const keys = Object.keys(store).sort((a, b) => (store[b].ts || 0) - (store[a].ts || 0)).slice(0, COOK_MAX_ENTRIES);
+    const out = {};
+    keys.forEach(k => { out[k] = store[k]; });
+    localStorage.setItem(COOK_STORE_KEY, JSON.stringify(out));
+  } catch (e) {}
+}
+
+function persistCook() {
+  const c = cooking;
+  if (!c || !c.key || !c.data) return;
+  cookingDetailCache[c.key] = c.data;
+  const store = loadCookStore();
+  store[c.key] = { data: c.data, done: c.done, ts: Date.now() };
+  saveCookStore(store);
+}
+
+// { n, total } jos reseptistä on tehty vähintään yksi vaihe (viikkolistan merkintää varten), muuten null.
+function cookProgressFor(r) {
+  const e = loadCookStore()[cookKeyFor(r)];
+  const steps = e?.data?.steps;
+  if (!Array.isArray(steps) || steps.length === 0) return null;
+  const n = steps.filter(st => e.done && e.done[st.step_number]).length;
+  return n > 0 ? { n, total: steps.length } : null;
+}
 
 function renderCooking() {
   let el = document.getElementById("cooking-overlay");
@@ -1470,12 +1621,22 @@ window.openCookingMode = function(source, idx) {
   const r = getRecipe(source, idx);
   if (!r) return;
   if (cooking) closeCookingMode();
-  cooking = { recipe: r, data: null, loading: true, error: null, timers: {}, done: {}, speakingStep: null, speech: null, wakeActive: false, wakeSupported: "wakeLock" in navigator };
+  const key = cookKeyFor(r);
+  cooking = { recipe: r, key, data: null, loading: true, error: null, timers: {}, done: {}, speakingStep: null, speech: null, wakeActive: false, wakeSupported: "wakeLock" in navigator };
+  // Palautetaan aiemmin haettu ohje ja rastit, jos niitä on
+  const saved = loadCookStore()[key];
+  const savedData = saved?.data || cookingDetailCache[key];
+  if (savedData?.steps?.length) {
+    cooking.data = savedData;
+    cooking.loading = false;
+    const valid = new Set(savedData.steps.map(st => st.step_number));
+    Object.keys(saved?.done || {}).forEach(k => { if (saved.done[k] && valid.has(Number(k))) cooking.done[k] = true; });
+  }
   document.body.classList.add("cook-open");
   renderCooking();
   acquireCookWakeLock();   // heti, ennen verkkokutsua (käyttäjän napautuksen aikana)
   cookTickHandle = setInterval(tickCookTimers, 500);
-  loadCookingDetail();
+  if (!cooking.data) loadCookingDetail();
 };
 
 window.closeCookingMode = function() {
@@ -1486,6 +1647,7 @@ window.closeCookingMode = function() {
   cooking = null;
   document.body.classList.remove("cook-open");
   renderCooking();
+  if (typeof currentView !== "undefined" && currentView === "foodplan") render(); // päivittää viikkolistan ✓-merkit
 };
 
 window.retryCookingDetail = function() { loadCookingDetail(); };
@@ -1494,27 +1656,20 @@ async function loadCookingDetail() {
   const c = cooking;
   if (!c) return;
   const r = c.recipe;
-  const servings = r.target_servings || foodPlan.diners;
-  const cacheKey = `${String(r.recipe_title).toLowerCase()}|${servings}`;
-  if (cookingDetailCache[cacheKey]) {
-    c.data = cookingDetailCache[cacheKey]; c.loading = false; c.error = null;
-    renderCooking();
-    return;
-  }
   c.loading = true; c.error = null;
   renderCooking();
   try {
     const data = await postApi(RECIPE_API_URL, {
       step: "detail",
       recipe_title: r.recipe_title,
-      target_servings: servings,
+      target_servings: cookServings(r),
       ingredients: (Array.isArray(r.ingredients) ? r.ingredients : [])
         .filter(i => i && i.name)
         .map(i => (i.amount_needed || i.amount) ? `${i.name} (${i.amount_needed || i.amount})` : i.name)
     });
     if (cooking !== c) return;
-    cookingDetailCache[cacheKey] = data;
     c.data = data;
+    persistCook();
   } catch (e) {
     if (cooking !== c) return;
     c.error = e?.message || "Tarkan ohjeen haku epäonnistui";
@@ -1547,6 +1702,14 @@ window.toggleCookStepDone = function(n) {
     btn.setAttribute("aria-pressed", String(done));
   }
   updateCookProgress();
+  persistCook();
+};
+
+window.resetCookProgress = function() {
+  if (!cooking) return;
+  cooking.done = {};
+  persistCook();
+  renderCooking();
 };
 
 // ----- Ääneen luku (Web Speech API, fi-FI) -----

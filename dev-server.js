@@ -43,6 +43,8 @@ if (process.env.MOCK_GEMINI === "1") {
         ],
         instructions_brief: "Testi " + i
       })));
+    } else if (raw.includes("PUHUTTU RAAKA-AINELISTA")) {
+      text = JSON.stringify({ ingredients: ["Kananmunat", "Riisi", "Paprika"] });
     } else if (raw.includes("TARKKA KOKKAUSOHJE")) {
       text = JSON.stringify({
         prep_time: "10 min", cook_time: "20 min", equipment_needed: ["Wokkipannu", "Kattila", "Leikkuulauta"],
