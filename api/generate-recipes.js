@@ -136,7 +136,10 @@ async function generateRecipes(key, body, mode) {
       // Ilman verkkohakua tehdyt reseptit: linkit voisivat olla keksittyjä, joten ne poistetaan
       if (data?._ungrounded) list.forEach(r => { r.source_url = null; });
       return list;
-    }
+    },
+    0.4,
+    false,
+    mode !== "week"   // viikkolista ilman verkkohakua: säästää haun pientä kiintiötä, eikä linkkejä tarvita
   );
   if (recipes.length === 0) throw new ApiError(502, "Reseptejä ei saatu – yritä uudelleen");
   return mode === "week"
