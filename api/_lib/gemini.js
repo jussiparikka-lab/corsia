@@ -80,12 +80,13 @@ function providerOrder(creds) {
 // Lukee 429-vastauksesta, onko täynnä minuutti-, päivä- vai laskutusraja.
 function classifyQuota(err, msg, headers) {
   const details = Array.isArray(err?.error?.details) ? err.error.details : [];
-  let kind = null, retry = null;
+  let kind = null, retry = null, metric = null;
   for (const d of details) {
     const type = String(d?.["@type"] || "");
     if (/QuotaFailure/i.test(type)) {
       for (const v of (Array.isArray(d.violations) ? d.violations : [])) {
         const id = `${v?.quotaId || ""} ${v?.quotaMetric || ""}`;
+        if (!metric && v?.quotaId) metric = String(v.quotaId).slice(0, 80);
         if (/PerDay/i.test(id)) kind = "day";
         else if (/PerMinute/i.test(id) && kind !== "day") kind = "minute";
       }
@@ -103,18 +104,19 @@ function classifyQuota(err, msg, headers) {
     if (m) retry = Math.ceil(parseFloat(m[1]));
   }
   if (kind === null && retry !== null) kind = "minute"; // Groq/OpenRouter: retry-after = hetkellinen rajoitus
-  return { kind, retry };
+  return { kind, retry, metric };
 }
 
 // Yhdistää usean mallin 429-luokitukset: jos jokin malli vapautuu pian, se ratkaisee.
 function summarizeQuotas(quotas) {
+  const metric = (quotas.find(q => q.metric) || {}).metric || null;
   const minute = quotas.filter(q => q.kind === "minute");
   if (minute.length > 0) {
     const waits = minute.map(q => q.retry).filter(Number.isFinite);
-    return { kind: "minute", retry: waits.length ? Math.min(...waits) : null };
+    return { kind: "minute", retry: waits.length ? Math.min(...waits) : null, metric };
   }
-  if (quotas.some(q => q.kind === "day")) return { kind: "day", retry: null };
-  return { kind: null, retry: null };
+  if (quotas.some(q => q.kind === "day")) return { kind: "day", retry: null, metric };
+  return { kind: null, retry: null, metric };
 }
 
 const formatWait = s => (s <= 90 ? `${s} s` : `${Math.ceil(s / 60)} min`);
@@ -330,24 +332,36 @@ async function callGemini(creds, payload) {
   error.quota = primary.quota;
   error.skippedForSearch = skippedForSearch;
   error.attempts = failures.map(f => failures.length > 1 ? `${LABELS[f.provider]}: ${f.error.attempts || f.error.status}` : f.error.attempts).join("; ").slice(0, 300);
+  const metric = failures.map(f => f.error.quota?.metric).find(Boolean);
+  if (metric) error.attempts += ` | kiintiö: ${metric}`;
   error.friendly = failures.length === 1
     ? describeError(primary.status, primary.message, primary.quota, failures[0].provider)
     : failures.map(f => `${LABELS[f.provider]}: ${describeError(f.error.status, f.error.message, f.error.quota, f.provider)}`).join(" · ");
+  // Vain yksi tekoäly käytössä ja sen kiintiö täynnä -> neuvo lisäämään ilmainen varavaihtoehto
+  if (failures.length === 1 && primary.status === 429 && !creds.groq && !creds.openrouter) {
+    error.friendly += ". Lisää ilmainen Groq-avain varavaihtoehdoksi (⚙️-ikkuna)";
+  }
   throw error;
 }
 
+// Virheet, joiden jälkeen verkkohakua käyttämätön varakutsu kannattaa yrittää (kiintiö, ruuhka, ei hakutukea).
+// Verkkohaulla (grounding) on oma, pienempi kiintiönsä, joten sen täyttyminen ei estä tavallista kutsua.
+const SEARCH_SOFT_FAIL = [400, 404, 413, 429, 500, 502, 503, 529];
+
 // Ensin verkkohaulla maadoitettu kutsu, sitten puhdas JSON-tila. parse(data) palauttaa listan.
 // requireSearch = true (esim. tarjoukset): ilman verkkohakua ei tehdä varakutsua, koska hinnat olisivat keksittyjä.
-async function callWithSearchFallback(key, contents, parse, temperature = 0.4, requireSearch = false) {
+// useSearch = false: ohitetaan verkkohaku kokonaan (säästää haun kiintiötä; vastaus ei ole maadoitettu).
+async function callWithSearchFallback(key, contents, parse, temperature = 0.4, requireSearch = false, useSearch = true) {
   let result = [];
-  try {
-    const { data } = await callGemini(key, { contents, tools: [{ google_search: {} }], generationConfig: { temperature } });
-    try { result = parse(data); } catch (e) { result = []; }
-  } catch (e) {
-    // 400 = hakutyökalu ei käytössä tälle mallille/avaimelle, tai haun osaava tekoäly ei ollut käytettävissä
-    // -> kokeillaan ilman hakua. Väärä avain heitetään eteenpäin.
-    const searchIssue = e instanceof ApiError && (e.status === 400 || e.skippedForSearch);
-    if (!searchIssue || requireSearch || /api key|API_KEY/i.test(e.message)) throw e;
+  if (useSearch || requireSearch) {
+    try {
+      const { data } = await callGemini(key, { contents, tools: [{ google_search: {} }], generationConfig: { temperature } });
+      try { result = parse(data); } catch (e) { result = []; }
+    } catch (e) {
+      const keyProblem = /api key|API_KEY/i.test(e?.message || "") || e?.status === 401 || e?.status === 403;
+      const soft = e instanceof ApiError && !keyProblem && (SEARCH_SOFT_FAIL.includes(e.status) || e.skippedForSearch);
+      if (!soft || requireSearch) throw e;
+    }
   }
   if (result.length > 0 || requireSearch) return result;
   const { data } = await callGemini(key, { contents, generationConfig: { temperature, responseMimeType: "application/json" } });
