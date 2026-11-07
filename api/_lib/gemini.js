@@ -519,7 +519,7 @@ function createHandler(work) {
       const status = e instanceof ApiError && e.status >= 400 && e.status < 600 ? e.status : 500;
       const message = e?.friendly || (e instanceof ApiError && e.fromGemini ? describeError(status, e.message, e.quota) : (e?.message || "Palvelinvirhe"));
       console.error(req.url, status, e?.message);
-      return res.status(status).json({ error: message, detail: e?.attempts ? `kokeiltu: ${e.attempts}` : undefined });
+      return res.status(status).json({ error: message, detail: e?.detail || (e?.attempts ? `kokeiltu: ${e.attempts}` : undefined) });
     }
   };
   // Vercel: JSON-rungon raja (pakattu kuva on ~0,3 Mt)
