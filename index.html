@@ -14,7 +14,7 @@
   <link rel="apple-touch-icon" sizes="180x180" href="corsia-icon-180.png">
   <link rel="manifest" href="manifest.webmanifest">
 
-  <link rel="stylesheet" href="style.css?v=16">
+  <link rel="stylesheet" href="style.css?v=17">
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
@@ -94,9 +94,10 @@
           <option value="openrouter">Ensisijaisesti OpenRouter</option>
         </select>
         <input type="password" id="diag-groq-key" placeholder="Groq API-avain (ilmainen)..." style="width:100%; padding:7px 9px; font-size:0.8rem; border:1px solid #cbd5e1; border-radius:8px; outline:none; background:#ffffff; margin-bottom:6px; box-sizing:border-box;">
-        <input type="password" id="diag-openrouter-key" placeholder="OpenRouter API-avain (ilmaiset mallit)..." style="width:100%; padding:7px 9px; font-size:0.8rem; border:1px solid #cbd5e1; border-radius:8px; outline:none; background:#ffffff; margin-bottom:8px; box-sizing:border-box;">
+        <input type="password" id="diag-openrouter-key" placeholder="OpenRouter API-avain (ilmaiset mallit)..." style="width:100%; padding:7px 9px; font-size:0.8rem; border:1px solid #cbd5e1; border-radius:8px; outline:none; background:#ffffff; margin-bottom:6px; box-sizing:border-box;">
+        <input type="password" id="diag-tavily-key" placeholder="Tavily API-avain (tarjoushaku, ilmainen)..." style="width:100%; padding:7px 9px; font-size:0.8rem; border:1px solid #cbd5e1; border-radius:8px; outline:none; background:#ffffff; margin-bottom:8px; box-sizing:border-box;">
         <button onclick="saveAiSettingsFromModal()" style="width:100%; background:#16a34a; color:#ffffff; border:none; padding:8px 12px; border-radius:8px; font-weight:800; font-size:0.78rem; cursor:pointer;">Tallenna tekoälyasetukset</button>
-        <div style="font-size:0.68rem; color:#64748b; margin-top:4px;">Ensisijainen tekoäly kokeillaan ensin. Jos sen kiintiö on täynnä, kokeillaan muita, joilla on avain. Kaikki palvelut ovat ilmaisia, eikä luottokorttia tarvita. Avaimet voi asettaa myös palvelimelle (GROQ_API_KEY, OPENROUTER_API_KEY); tässä tallennettu avain säilyy vain tällä laitteella. Verkkohaku (tarjoukset) toimii vain Geminillä.</div>
+        <div style="font-size:0.68rem; color:#64748b; margin-top:4px;">Ensisijainen tekoäly kokeillaan ensin. Jos sen kiintiö on täynnä, kokeillaan muita, joilla on avain. Kaikki palvelut ovat ilmaisia, eikä luottokorttia tarvita. Avaimet voi asettaa myös palvelimelle (GROQ_API_KEY, OPENROUTER_API_KEY); tässä tallennettu avain säilyy vain tällä laitteella. Tarjoushaku tarvitsee ilmaisen Tavily-avaimen (tavily.com, ei korttia) tai Geminin verkkohaun.</div>
       </div>
 
       <button onclick="closeDiagModal()" style="width: 100%; padding: 9px; border-radius: 9px; background: #0284c7; color: white; border: none; font-weight: 800; font-size: 0.84rem; cursor: pointer;">Sulje</button>
@@ -132,8 +133,8 @@
   </div>
 
   <!-- Skriptit: järjestys on tärkeä (katalogi ensin) -->
-  <script src="catalog.js?v=16"></script>
-  <script src="app.js?v=16"></script>
-  <script src="views.js?v=16"></script>
+  <script src="catalog.js?v=17"></script>
+  <script src="app.js?v=17"></script>
+  <script src="views.js?v=17"></script>
 </body>
 </html>

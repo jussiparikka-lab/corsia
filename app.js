@@ -176,6 +176,8 @@ async function postApi(path, body) {
   const provider = localStorage.getItem("corsia_ai_provider");
   if (groqKey) headers["x-groq-key"] = groqKey;
   if (openrouterKey) headers["x-openrouter-key"] = openrouterKey;
+  const tavilyKey = (localStorage.getItem("corsia_tavily_api_key") || "").trim();
+  if (tavilyKey) headers["x-tavily-key"] = tavilyKey;
   if (provider && provider !== "auto") headers["x-ai-provider"] = provider;
 
   let res;
@@ -1631,9 +1633,11 @@ window.saveAiSettingsFromModal = function() {
   const prov = document.getElementById("diag-ai-provider")?.value || "auto";
   const groq = (document.getElementById("diag-groq-key")?.value || "").trim();
   const openrouter = (document.getElementById("diag-openrouter-key")?.value || "").trim();
+  const tavily = (document.getElementById("diag-tavily-key")?.value || "").trim();
   if (prov === "auto") localStorage.removeItem("corsia_ai_provider"); else localStorage.setItem("corsia_ai_provider", prov);
   if (groq) localStorage.setItem("corsia_groq_api_key", groq); else localStorage.removeItem("corsia_groq_api_key");
   if (openrouter) localStorage.setItem("corsia_openrouter_api_key", openrouter); else localStorage.removeItem("corsia_openrouter_api_key");
+  if (tavily) localStorage.setItem("corsia_tavily_api_key", tavily); else localStorage.removeItem("corsia_tavily_api_key");
   showUndoBar("✓ Tekoälyasetukset tallennettu tälle laitteelle");
   openDiagnostics();
 };
@@ -1665,15 +1669,16 @@ window.openDiagnostics = function() {
   setVal("diag-ai-provider", localStorage.getItem("corsia_ai_provider") || "auto");
   setVal("diag-groq-key", localStorage.getItem("corsia_groq_api_key") || "");
   setVal("diag-openrouter-key", localStorage.getItem("corsia_openrouter_api_key") || "");
+  setVal("diag-tavily-key", localStorage.getItem("corsia_tavily_api_key") || "");
   modal.style.display = "flex";
 
   fetch("/api/status").then(r => r.json()).then(d => {
     const el = document.getElementById("diag-server-key");
     if (!el) return;
     const srv = d.providers || { gemini: !!d.serverKey };
-    const dev = { gemini: !!currentKey, groq: !!localStorage.getItem("corsia_groq_api_key"), openrouter: !!localStorage.getItem("corsia_openrouter_api_key") };
+    const dev = { gemini: !!currentKey, groq: !!localStorage.getItem("corsia_groq_api_key"), openrouter: !!localStorage.getItem("corsia_openrouter_api_key"), tavily: !!localStorage.getItem("corsia_tavily_api_key") };
     const fmt = (name, k) => `${name} ${srv[k] ? "🟢 palvelin" : dev[k] ? "🟡 tämä laite" : "⚪ ei avainta"}`;
-    el.textContent = [fmt("Gemini", "gemini"), fmt("Groq", "groq"), fmt("OpenRouter", "openrouter")].join(" · ");
+    el.textContent = [fmt("Gemini", "gemini"), fmt("Groq", "groq"), fmt("OpenRouter", "openrouter"), fmt("Tarjoushaku (Tavily)", "tavily")].join(" · ");
   }).catch(() => {
     const el = document.getElementById("diag-server-key");
     if (el) el.textContent = "🔴 Palvelinta ei tavoitettu";
