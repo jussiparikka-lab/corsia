@@ -42,6 +42,207 @@ const STORE_NAMES = {
   "apteekki": "Apteekki"
 };
 
+// ---------- Kauppakohtainen kävelyreitti (muokattava kategorioiden järjestys) ----------
+// Oletusjärjestys tulee STORE_LAYOUTS-taulukosta. Käyttäjän muokkaama järjestys tallennetaan tähän laitteeseen
+// (localStorage, avain corsia_store_layout_{storeKey}). Muokkaus koskee vain kategorioiden järjestystä:
+// ostoslistan tuotteet (myös ruksatut ja aktiiviset) pysyvät appState.items-taulukossa koskemattomina.
+const STORE_LAYOUT_PREFIX = "corsia_store_layout_";
+
+// Palauttaa kaupan kategoriajärjestyksen: tallennettu (siivottuna) tai oletus.
+function getStoreLayout(storeKey) {
+  const defaults = STORE_LAYOUTS[storeKey] || [];
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORE_LAYOUT_PREFIX + storeKey) || "null");
+    if (Array.isArray(saved)) {
+      const known = [...new Set(saved.filter(c => defaults.includes(c)))]; // vain tunnetut, ei kaksoiskappaleita
+      return [...known, ...defaults.filter(c => !known.includes(c))];      // uudet oletuskategoriat loppuun
+    }
+  } catch (e) {}
+  return [...defaults];
+}
+
+function hasCustomLayout(storeKey) {
+  try { return localStorage.getItem(STORE_LAYOUT_PREFIX + storeKey) !== null; } catch (e) { return false; }
+}
+
+function sameOrder(a, b) { return a.length === b.length && a.every((x, i) => x === b[i]); }
+
+// Tallentaa järjestyksen; jos se on sama kuin oletus, poistetaan tallennus (oletus pysyy ajan tasalla).
+function saveStoreLayout(storeKey, order) {
+  const defaults = STORE_LAYOUTS[storeKey] || [];
+  const known = [...new Set(order.filter(c => defaults.includes(c)))];
+  const full = [...known, ...defaults.filter(c => !known.includes(c))];
+  try {
+    if (sameOrder(full, defaults)) localStorage.removeItem(STORE_LAYOUT_PREFIX + storeKey);
+    else localStorage.setItem(STORE_LAYOUT_PREFIX + storeKey, JSON.stringify(full));
+  } catch (e) { console.warn("Reitin tallennus epäonnistui:", e); }
+}
+
+let routeEdit = null;           // { storeKey, order: [...] } kun reittiä muokataan, muuten null
+let routeDrag = null;           // käynnissä oleva raahaus
+let routeRenderPending = false; // render() lykätään raahauksen ajaksi
+
+const routeList = () => document.getElementById("route-list");
+
+window.startRouteEdit = function(storeKey) {
+  if (!(STORE_LAYOUTS[storeKey] || []).length) return;
+  routeEdit = { storeKey, order: getStoreLayout(storeKey) };
+  window.scrollTo(0, 0);
+  render();
+};
+
+window.cancelRouteEdit = function() {
+  routeEdit = null;
+  render();
+};
+
+window.saveRouteEdit = function() {
+  if (!routeEdit) return;
+  syncRouteOrderFromDom();
+  saveStoreLayout(routeEdit.storeKey, routeEdit.order);
+  routeEdit = null;
+  render(); // kauppanäkymä piirtyy heti uuden järjestyksen mukaan
+  showToast("✓ Reitti tallennettu", "success");
+};
+
+// ↺ Palauttaa kovakoodatun oletusreitin yhdellä klikkauksella
+window.resetStoreRoute = function() {
+  if (!routeEdit) return;
+  const key = routeEdit.storeKey;
+  const wasDefault = !hasCustomLayout(key) && sameOrder(routeEdit.order, STORE_LAYOUTS[key] || []);
+  try { localStorage.removeItem(STORE_LAYOUT_PREFIX + key); } catch (e) {}
+  routeEdit = null;
+  render();
+  showToast(wasDefault ? "Käytössä on jo oletusreitti" : "↺ Oletusreitti palautettu", wasDefault ? "info" : "success");
+};
+
+// Lukee kategorioiden järjestyksen DOM:sta ja päivittää numerot
+function syncRouteOrderFromDom() {
+  const list = routeList();
+  if (!list || !routeEdit) return;
+  const cards = [...list.querySelectorAll(".route-card")];
+  routeEdit.order = cards.map(c => c.dataset.cat);
+  cards.forEach((c, i) => { const n = c.querySelector(".route-num"); if (n) n.textContent = String(i + 1); });
+}
+
+// FLIP-animaatio: muut kortit liukuvat uuteen paikkaansa, kun DOM-järjestys muuttuu
+function routeFlip(elements, mutate) {
+  const before = new Map(elements.map(el => [el, el.getBoundingClientRect().top]));
+  mutate();
+  elements.forEach(el => {
+    const d = before.get(el) - el.getBoundingClientRect().top;
+    if (!d) return;
+    el.style.transition = "none";
+    el.style.transform = `translateY(${d}px)`;
+    void el.offsetHeight;
+    el.style.transition = "transform 0.16s ease";
+    el.style.transform = "";
+  });
+}
+
+// ▲▼-painikkeet ja näppäimistö (Nuoli ylös/alas kahvassa): siirtää korttia yhden askeleen
+window.moveRouteCat = function(el, dir) {
+  const card = el.closest(".route-card"), list = routeList();
+  if (!card || !list) return;
+  const sib = dir < 0 ? card.previousElementSibling : card.nextElementSibling;
+  if (!sib) return;
+  routeFlip([card, sib], () => { if (dir < 0) list.insertBefore(card, sib); else list.insertBefore(sib, card); });
+  syncRouteOrderFromDom();
+  if (card.scrollIntoView) card.scrollIntoView({ block: "nearest", behavior: "smooth" });
+};
+
+window.routeHandleKey = function(e) {
+  if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+  e.preventDefault();
+  moveRouteCat(e.currentTarget, e.key === "ArrowUp" ? -1 : 1);
+};
+
+// ----- Raahaus (Pointer Events: toimii hiirellä ja kosketuksella samalla koodilla) -----
+// Raahattu kortti seuraa sormea (translateY); kun sen keskikohta ylittää naapurin keskikohdan, DOM-järjestys vaihtuu.
+function routeDragTo(clientY) {
+  const d = routeDrag;
+  if (!d) return;
+  const { card, list } = d;
+  let dy = clientY - d.startY;
+  card.style.transform = `translateY(${dy}px)`;
+  const center = card.offsetTop + dy + card.offsetHeight / 2;   // asettelupaikka (ei sisällä animaatioiden transformeja)
+  const others = [...list.querySelectorAll(".route-card")].filter(c => c !== card);
+  let target = null;
+  for (const o of others) {
+    if (center < o.offsetTop + o.offsetHeight / 2) { target = o; break; }
+  }
+  if (target === card.nextElementSibling) return;               // paikka ei vaihtunut
+  const logicalTop = card.offsetTop + dy;
+  routeFlip(others, () => {
+    list.insertBefore(card, target);                            // target = null -> viimeiseksi
+    dy = logicalTop - card.offsetTop;                           // kortti pysyy sormen alla uudessa paikassa
+    d.startY = clientY - dy;
+    card.style.transform = `translateY(${dy}px)`;
+  });
+  syncRouteOrderFromDom();
+}
+
+function routeAutoScroll() {
+  const d = routeDrag;
+  if (!d) return;
+  if (d.scrollSpeed) {
+    const before = window.scrollY;
+    window.scrollBy(0, d.scrollSpeed);
+    const moved = window.scrollY - before;
+    if (moved) { d.startY -= moved; routeDragTo(d.lastY); }     // sivu liikkui, kortti seuraa sormea
+  }
+  d.raf = requestAnimationFrame(routeAutoScroll);
+}
+
+function routePointerDown(e) {
+  if (!routeEdit || routeDrag) return;
+  if (e.pointerType === "mouse" && e.button !== 0) return;
+  const handle = e.target.closest && e.target.closest(".route-handle");
+  const list = routeList();
+  const card = handle && handle.closest(".route-card");
+  if (!card || !list) return;
+  e.preventDefault();
+  try { handle.setPointerCapture(e.pointerId); } catch (err) {}
+  routeDrag = { card, handle, list, id: e.pointerId, startY: e.clientY, lastY: e.clientY, scrollSpeed: 0, raf: 0 };
+  card.classList.add("route-dragging");
+  document.body.classList.add("route-drag-active");
+  routeDrag.raf = requestAnimationFrame(routeAutoScroll);
+}
+
+function routePointerMove(e) {
+  const d = routeDrag;
+  if (!d || e.pointerId !== d.id) return;
+  e.preventDefault();
+  d.lastY = e.clientY;
+  const edge = 80, vh = window.innerHeight;                     // reunan lähellä sivu vierii automaattisesti
+  d.scrollSpeed = e.clientY < edge ? -Math.ceil((edge - e.clientY) / 6)
+    : e.clientY > vh - edge ? Math.ceil((e.clientY - (vh - edge)) / 6) : 0;
+  routeDragTo(e.clientY);
+}
+
+function routePointerEnd(e) {
+  const d = routeDrag;
+  if (!d || e.pointerId !== d.id) return;
+  cancelAnimationFrame(d.raf);
+  try { d.handle.releasePointerCapture(e.pointerId); } catch (err) {}
+  d.card.style.transition = "transform 0.15s ease, box-shadow 0.15s ease";
+  d.card.style.transform = "";
+  d.card.classList.remove("route-dragging");
+  document.body.classList.remove("route-drag-active");
+  setTimeout(() => { d.card.style.transition = ""; }, 200);
+  routeDrag = null;
+  syncRouteOrderFromDom();
+  if (routeRenderPending) { routeRenderPending = false; render(); } // kesken jäänyt päivitys (esim. pilvesta) tehdään nyt
+}
+
+document.addEventListener("pointerdown", routePointerDown);
+document.addEventListener("pointermove", routePointerMove, { passive: false });
+document.addEventListener("pointerup", routePointerEnd);
+document.addEventListener("pointercancel", routePointerEnd);
+document.addEventListener("contextmenu", e => {                 // estää pitkän painalluksen valikon kahvassa
+  if (routeEdit && e.target.closest && e.target.closest(".route-handle")) e.preventDefault();
+});
+
 const DAILY_DEALS = [
   { id: "d1", cat: "🎉 Avajaistarjoukset (Vantaa)", name: "Uusi Pesula: Harjaton Tehopesu + Vaha", price: "14,90 € (-50%)", store: "Neste K Tammisto", mainCat: "Muut" },
   { id: "d2", cat: "🎉 Avajaistarjoukset (Vantaa)", name: "Naudan ulkofileepala", price: "9,90 €/kg", store: "K-Citymarket Tammisto", mainCat: "Liha" },
@@ -453,6 +654,7 @@ window.initFirebase = function() {
 window.navigate = async function(view, storeKey = "") {
   currentView = view;
   activeStoreKey = storeKey;
+  routeEdit = null;   // reitin muokkaus päättyy aina näkymää vaihdettaessa
 
   if (view === "home" || view === "soffa") {
     let needsSave = false;

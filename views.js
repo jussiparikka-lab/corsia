@@ -233,9 +233,49 @@ function renderSoffa() {
   return html;
 }
 
+// Reitin muokkaustila: kategoriakortit raahattavina (kahva ≡) tai ▲▼-painikkeilla. Tuotteisiin ei kosketa.
+function renderRouteEditor(storeKey, storeName) {
+  const order = routeEdit.order;
+  const cards = order.map((dept, i) => {
+    const theme = CATEGORY_THEMES[dept] || { bg: "#f8fafc", border: "#cbd5e1", text: "#334155", icon: "📦" };
+    const active = appState.items.filter(it => it.active && !it.done && it.cat === dept).length;
+    const done = appState.items.filter(it => it.active && it.done && it.cat === dept).length;
+    const info = active || done ? `${active} kerättävää${done ? ` · ${done} kerätty` : ""}` : "ei tuotteita listalla";
+    return `
+      <div class="route-card" data-cat="${esc(dept)}" style="background: ${theme.bg || "#ffffff"}; border-color: ${theme.border || "#cbd5e1"};">
+        <button class="route-handle" aria-label="Siirrä kategoria ${esc(dept)} (nuoli ylös tai alas)" title="Raahaa tai käytä nuolinäppäimiä" onkeydown="routeHandleKey(event)">≡</button>
+        <span class="route-num">${i + 1}</span>
+        <span class="route-icon">${theme.icon || "📦"}</span>
+        <div class="route-info">
+          <div class="route-name" style="color: ${theme.text || "#166534"};">${esc(dept)}</div>
+          <div class="route-count ${active ? "route-count-on" : ""}">${info}</div>
+        </div>
+        <div class="route-arrows">
+          <button aria-label="Ylös" onclick="moveRouteCat(this, -1)">▲</button>
+          <button aria-label="Alas" onclick="moveRouteCat(this, 1)">▼</button>
+        </div>
+      </div>`;
+  }).join("");
+
+  return `
+    <div class="main-content" style="padding-top: 0;">
+      <div class="route-edit-bar">
+        <div class="route-edit-title">⚙️ Muokkaa reittiä · ${esc(storeName)}</div>
+        <div class="route-edit-hint">Vedä kategoriaa kahvasta ≡ uuteen kohtaan tai käytä ▲▼. Ylin kategoria käydään ensin.</div>
+        <div class="route-edit-actions">
+          <button class="route-btn route-btn-cancel" onclick="cancelRouteEdit()">Peruuta</button>
+          <button class="route-btn route-btn-save" onclick="saveRouteEdit()">✓ Valmis</button>
+        </div>
+      </div>
+      <div id="route-list" class="route-list">${cards}</div>
+      <button class="route-reset-btn" onclick="resetStoreRoute()">↺ Palauta oletusreitti</button>
+    </div>`;
+}
+
 function renderStore(storeKey) {
   const storeName = STORE_NAMES[storeKey] || "Kauppareitti";
-  const layout = STORE_LAYOUTS[storeKey] || [];
+  if (routeEdit && routeEdit.storeKey === storeKey) return renderRouteEditor(storeKey, storeName);
+  const layout = getStoreLayout(storeKey);   // tallennettu oma reitti tai STORE_LAYOUTS-oletus
 
   const activeInStore = appState.items.filter(i => i.active && !i.done && layout.includes(i.cat));
   const doneInStore = appState.items.filter(i => i.active && i.done && layout.includes(i.cat));
@@ -326,6 +366,7 @@ function renderStore(storeKey) {
         <div>
           <div style="font-size: 0.96rem; font-weight: 800; color: #166534;">${esc(storeName)}</div>
           <div style="font-size: 0.72rem; color: #15803d;">Kerättävää jäljellä: <strong>${activeInStore.length + activeOutStore.length} tuotetta</strong></div>
+          ${layout.length > 1 ? `<button class="route-edit-btn" onclick="startRouteEdit('${storeKey}')">⚙️ Muokkaa reittiä${hasCustomLayout(storeKey) ? " · oma" : ""}</button>` : ""}
         </div>
         <div style="width: 70px; height: 28px;">${renderStoreLogo(storeKey)}</div>
       </div>
@@ -817,6 +858,7 @@ function render() {
   const navHeader = document.getElementById("subpage-nav-header");
   const titleSlot = document.getElementById("subpage-title-slot");
   if (!root) return;
+  if (routeDrag) { routeRenderPending = true; return; }   // ei piirretä uudelleen kesken raahauksen
 
   if (currentView === "home") {
     if (navHeader) navHeader.style.display = "none";
