@@ -9,18 +9,20 @@
 // Verkkohaku (tarjoukset, reseptilinkit) toimii vain Geminillä.
 
 const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
-// Ilmaisen tason rajat ovat mallikohtaisia, joten useamman mallin kokeilu kasvattaa käytettävää kiintiötä.
+// Ilmaisen tason rajat ovat mallikohtaisia. Lähteiden mukaan Flash-Lite-malleilla päiväraja on moninkertainen
+// tavallisiin Flash-malleihin verrattuna (n. 500 vs. n. 20 pyyntöä/pv), joten kevyet mallit kokeillaan ensin.
+// Tarkat rajat: aistudio.google.com/rate-limit.
 const GEMINI_MODEL_CANDIDATES = [
   process.env.GEMINI_MODEL,
+  "gemini-3.1-flash-lite",
+  "gemini-3.5-flash-lite",
   "gemini-3.8-flash",
   "gemini-3.7-flash",
   "gemini-3.6-flash",
   "gemini-3.5-flash",
-  "gemini-3.5-flash-lite",
-  "gemini-3.1-flash-lite",
   "gemini-flash-latest",
-  "gemini-2.5-flash",
-  "gemini-2.5-flash-lite"
+  "gemini-2.5-flash-lite",
+  "gemini-2.5-flash"
 ].filter(Boolean);
 
 // Groq: ilmainen, ei luottokorttia. Llama 4 -mallit ymmärtävät myös kuvia.
@@ -64,6 +66,7 @@ function resolveKeys(req) {
     groq: pick("GROQ_API_KEY", "x-groq-key"),
     openrouter: pick("OPENROUTER_API_KEY", "x-openrouter-key")
   };
+  keys.tavily = pick("TAVILY_API_KEY", "x-tavily-key"); // verkkohaku tarjouksille (ei tekoäly, joten ei providerOrderissa)
   const pref = String(h["x-ai-provider"] || process.env.AI_PROVIDER || "auto").toLowerCase();
   keys.preferred = PROVIDER_IDS.includes(pref) ? pref : "auto";
   return keys;
@@ -496,7 +499,7 @@ function createHandler(work) {
   const handler = async function(req, res) {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, x-gemini-key, x-groq-key, x-openrouter-key, x-ai-provider");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, x-gemini-key, x-groq-key, x-openrouter-key, x-tavily-key, x-ai-provider");
     if (req.method === "OPTIONS") return res.status(204).end();
     if (req.method !== "POST") return res.status(405).json({ error: "Vain POST sallittu" });
 
