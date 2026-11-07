@@ -52,11 +52,12 @@ Nimet suomeksi perusmuodossa, ilman määriä. Jos mitään ei tunnisteta, palau
   };
 }
 
-function buildRecipePrompt({ ingredients, diners, cookTwice, effective, cuisines, categories, count = 3, days = [], avoid = [], deals = [] }) {
-  const cuisineStr = cuisines.length > 0 ? cuisines.join(", ") : "vapaavalintainen";
+function buildRecipePrompt({ ingredients, diners, cookTwice, effective, cuisines, categories, count = 3, days = [], avoid = [], deals = [], dayCuisines = {} }) {
+  const dcEntries = days.filter(d => dayCuisines[d]).map(d => `${d} = ${dayCuisines[d]}`);
+  const cuisineStr = dcEntries.length > 0 ? "vaihtelee päivittäin (katso KEITTIÖ PÄIVITTÄIN)" : (cuisines.length > 0 ? cuisines.join(", ") : "vapaavalintainen");
   const catLine = categories.length > 0 ? `TÄSMÄLLEEN yksi näistä: ${categories.join(", ")}` : "kaupan osasto suomeksi";
   const weekTask = days.length > 0
-    ? `1. Laadi viikon ruokalista: ${count} ERI reseptiä, yksi kullekin päivälle tässä järjestyksessä: ${days.join(", ")}. Vaihtele pääraaka-ainetta (kana, kala, liha, kasvis) ja keittiötyyliä; arkipäiville nopeampia (alle 40 min), viikonlopulle saa olla työläämpi. Käytä jääkaapin ainekset ensimmäisinä päivinä.`
+    ? `1. Laadi viikon ruokalista: ${count} ERI reseptiä, yksi kullekin päivälle tässä järjestyksessä: ${days.join(", ")}. Vaihtele pääraaka-ainetta (kana, kala, liha, kasvis) ja keittiötyyliä; arkipäiville nopeampia (alle 40 min), viikonlopulle saa olla työläämpi. Käytä jääkaapin ainekset ensimmäisinä päivinä.${dcEntries.length > 0 ? `\n   KEITTIÖ PÄIVITTÄIN (noudata tarkasti, jokaisen päivän resepti on aidosti kyseisen keittiön ruokaa ja "cuisine"-kenttään kyseisen keittiön nimi): ${dcEntries.join("; ")}.` : ""}`
     : `1. Hae/valitse ${count} aitoa, laadukasta reseptiä, jotka vastaavat toivottuja keittiötyylejä ja hyödyntävät käyttäjän aineksia mahdollisimman paljon.`;
   return `Olet suomalainen keittiöapuri ja reseptiasiantuntija.
 
@@ -120,8 +121,13 @@ async function generateRecipes(key, body, mode) {
   const days = mode === "week" ? strList(body.days, 7).filter(d => VALID_DAYS.includes(d)) : [];
   if (mode === "week" && days.length === 0) throw new ApiError(400, "Viikolla ei ole tyhjiä päiviä");
   const count = mode === "week" ? days.length : 3;
+  const dayCuisines = {};
+  if (mode === "week" && body.day_cuisines && typeof body.day_cuisines === "object") {
+    days.forEach(d => { const c = String(body.day_cuisines[d] || "").trim().slice(0, 40); if (c) dayCuisines[d] = c; });
+  }
   const prompt = buildRecipePrompt({
     ingredients: strList(body.ingredients, 60),
+    dayCuisines,
     diners, cookTwice, effective, count, days,
     cuisines: strList(body.cuisines, 10),
     categories: strList(body.categories, 40),
