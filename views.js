@@ -436,10 +436,12 @@ function renderRecipeCard(r, idx, source, effective) {
       </div>
       <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 5px; align-items: center;">
         <span style="background: #ffedd5; color: #9a3412; font-size: 0.68rem; font-weight: 800; padding: 2px 8px; border-radius: 999px;">${esc(r.cuisine || "Resepti")}</span>
+        ${r.is_vegetarian ? `<span class="fp-vege-badge">🥦 Kasvis</span>` : ""}
         <span style="font-size: 0.7rem; color: #64748b; font-weight: 700;">🍽️ ${esc(String(r.target_servings || effective))} annosta${r.original_servings ? ` (alkup. ${esc(String(r.original_servings))})` : ""}</span>
         ${r.source_url ? `<a href="${esc(r.source_url)}" target="_blank" rel="noopener" style="font-size: 0.7rem; color: #0284c7; font-weight: 700;">🔗 Reseptin lähde</a>` : ""}
       </div>
       ${r.instructions_brief ? `<div style="font-size: 0.76rem; color: #475569; margin: 8px 0 2px; line-height: 1.45;">${esc(r.instructions_brief)}</div>` : ""}
+      ${r.vege_note ? `<div class="fp-vege-note">🥦 <strong>Kasvissyöjälle:</strong> ${esc(r.vege_note)}</div>` : ""}
       ${servingsHtml}
       <div style="margin-top: 8px;">${ingRows}</div>
       <div style="margin-top: 8px; font-size: 0.7rem; font-weight: 800; color: #64748b;">📅 LISÄÄ VIIKOLLE ${weekNumberOf(activeWeekKey())} (${formatWeekRange(activeWeekKey())})</div>
@@ -544,6 +546,7 @@ function renderCookingMode(c) {
     }).join("");
     body = `
       <div class="cook-meta">${meta}</div>
+      ${r.vege_note ? `<div class="fp-vege-note" style="margin: 0 0 10px;">🥦 <strong>Kasvissyöjälle:</strong> ${esc(r.vege_note)}</div>` : ""}
       ${equip ? `<div class="cook-section-label">VÄLINEET</div><div class="cook-meta">${equip}</div>` : ""}
       ${ingRows ? `<details class="cook-ings"><summary>🧺 Ainekset (${ings.length} kpl)</summary>${ingRows}</details>` : ""}
       <div class="cook-section-label">VAIHEET</div>
@@ -574,6 +577,22 @@ function weekCookBadge(r) {
 }
 
 // Viikkovalitsin: nuolet, viikkonumero + päivämäärät ja pikavalinta kuluvalle + 5 seuraavalle viikolle
+// Ruokavalinta (sama hakunäkymässä ja viikkonäkymässä): kaikki / vain kasvis / yksi kasvissyöjä
+function renderDietSelector() {
+  const opts = [["all", "🍖 Kaikki ruoat"], ["vege", "🥦 Vain kasvisruokaa"], ["mixed", "👥 Yksi kasvissyöjä"]];
+  const hint = {
+    all: "Tavalliset reseptit.",
+    vege: "Kaikki reseptit ovat kasvisruokaa (ei lihaa eikä kalaa; kananmuna ja maitotuotteet sallittu), myös valituista keittiöistä.",
+    mixed: "Reseptit voivat olla tavallisia, ja jokaisessa on vinkki kasvissyöjän annoksen tekoon. Osa ruoista on sellaisenaan kasvisruokaa."
+  }[foodPlan.diet] || "";
+  return `
+    <div class="fp-diet" id="fp-diet-${foodPlan.tab}">
+      <div class="fp-diet-label">RUOKAVALIO</div>
+      <div class="fp-diet-chips">${opts.map(([v, l]) => `<button class="fp-diet-chip ${foodPlan.diet === v ? "fp-diet-on" : ""}" onclick="setFoodPlanDiet('${v}')">${l}</button>`).join("")}</div>
+      <div class="fp-diet-hint">${hint}</div>
+    </div>`;
+}
+
 function renderWeekNav() {
   const key = activeWeekKey(), cur = currentWeekKey();
   const keys = [...new Set([...Array.from({ length: 6 }, (_, i) => shiftWeekKey(cur, i)), key])].sort();
@@ -608,7 +627,8 @@ function renderWeekPlan() {
         <div class="fp-week-day">${d}<small>${dt.getUTCDate()}.${dt.getUTCMonth() + 1}.</small></div>
         <div style="flex: 1; min-width: 0;">
           ${r ? `<div style="font-size: 0.86rem; font-weight: 800; color: #0f172a;">${esc(r.recipe_title)}</div>
-                 <div style="font-size: 0.7rem; color: #64748b; font-weight: 700;">${esc(r.cuisine || "")} · ${missingIngredients(r).length} ostettavaa${weekCookBadge(r)}</div>`
+                 <div style="font-size: 0.7rem; color: #64748b; font-weight: 700;">${esc(r.cuisine || "")} · ${missingIngredients(r).length} ostettavaa${r.is_vegetarian ? " · 🥦 Kasvis" : ""}${weekCookBadge(r)}</div>
+                 ${r.vege_note && !r.is_vegetarian ? `<div class="fp-vege-note fp-vege-note-sm">🥦 ${esc(r.vege_note)}</div>` : ""}`
               : `<div style="font-size: 0.8rem; color: #94a3b8; font-weight: 700;">Ei suunniteltu</div>`}
         </div>
         ${r ? `<button class="fp-icon-btn" aria-label="Kokkaustila ${WEEK_DAY_NAMES[d]}" onclick="openCookingMode('week', '${d}')">📖</button>
@@ -629,12 +649,13 @@ function renderWeekPlan() {
         return `<div class="fp-step fp-step-${st}" id="week-step-${k}"><span class="fp-step-icon">${icon}</span><span>${WEEK_STAGES[k]}</span></div>`;
       }).join("")}
     </div>` : "";
-  const settingsLine = `${foodPlan.diners} ruokailijaa${foodPlan.cookTwice ? " × 2" : ""} · ${foodPlan.cuisines.length ? esc(foodPlan.cuisines.join(", ")) : "kaikki tyylit"}${foodPlan.image ? " · jääkaappikuva mukana" : ""}`;
+  const settingsLine = `${foodPlan.diners} ruokailijaa${foodPlan.cookTwice ? " × 2" : ""} · ${foodPlan.cuisines.length ? esc(foodPlan.cuisines.join(", ")) : "kaikki tyylit"}${foodPlan.image ? " · jääkaappikuva mukana" : ""}${foodPlan.diet === "vege" ? " · 🥦 kasvisruoka" : foodPlan.diet === "mixed" ? " · 👥 vege-vinkit" : ""}`;
   return `
     ${renderWeekNav()}
     <div class="recipe-card" style="background: #fffbeb; border-color: #fde68a;">
       <div style="font-size: 0.9rem; font-weight: 800; color: #0f172a;">✨ Viikon ${weekNumberOf(wkKey)} automaattiehdotus</div>
-      <div style="font-size: 0.74rem; color: #78350f; margin: 4px 0 8px;">${settingsLine}. Muuta asetuksia Haku-välilehdellä. Täyttää vain tyhjät päivät.</div>
+      <div style="font-size: 0.74rem; color: #78350f; margin: 4px 0 8px;">${settingsLine}. Muuta muita asetuksia Haku-välilehdellä. Täyttää vain tyhjät päivät.</div>
+      ${renderDietSelector()}
       ${foodPlan.weekError && !weekLoading ? `<div id="week-error" style="font-size: 0.76rem; color: #991b1b; font-weight: 700; margin-bottom: 8px;">⚠️ ${esc(foodPlan.weekError)}</div>` : ""}
       <button id="btn-autofill-week" onclick="autoFillWeek()" ${weekLoading || emptyDays === 0 ? "disabled" : ""} style="width: 100%; padding: 11px; border-radius: 10px; border: none; background: ${emptyDays === 0 ? "#e2e8f0" : "#ea580c"}; color: ${emptyDays === 0 ? "#64748b" : "#ffffff"}; font-weight: 800; font-size: 0.86rem; cursor: ${weekLoading || emptyDays === 0 ? "default" : "pointer"};">
         ${weekLoading ? `⏳ ${WEEK_STAGES[foodPlan.stage] || "Suunnitellaan..."}` : emptyDays === 0 ? "✓ Viikko on täynnä" : `✨ Täytä ${emptyDays} tyhjää päivää tekoälyllä`}
@@ -774,6 +795,7 @@ function renderFoodPlan() {
         </div>
         ${fp.cookTwice ? `<div style="margin-top: 8px; background: #fff7ed; border: 1px solid #fed7aa; border-radius: 9px; padding: 7px 10px; font-size: 0.76rem; font-weight: 800; color: #c2410c;">🍽️ Skaalataan ${effective} hengelle</div>` : ""}
 
+        ${renderDietSelector()}
         <div style="margin-top: 14px; font-size: 0.76rem; font-weight: 800; color: #64748b; text-transform: uppercase;">Makumaailma (valinnainen)</div>
         <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px;">${chipsHtml}</div>
         <div style="margin-top: 10px; font-size: 0.72rem; font-weight: 800; color: #94a3b8; text-transform: uppercase;">Keittiöt maailmalta</div>

@@ -979,6 +979,7 @@ let foodPlan = {
   diners: 4,
   cookTwice: false,
   cuisines: ["Aasialainen"],
+  diet: "all",          // ruokavalio: "all" | "vege" (kaikki kasvisruokaa) | "mixed" (yksi kasvissyöjä, vege-vinkit)
   recipes: [],
   detected: [],         // kuvasta tunnistetut raaka-aineet
   spoken: [],           // puheella kerrotut raaka-aineet
@@ -1100,6 +1101,19 @@ window.clearSpokenIngredients = function() {
   render();
 };
 
+// Ruokavalio on pysyvä asetus (perheen kasvissyöjä): muistetaan tällä laitteella
+try {
+  const savedDiet = localStorage.getItem("corsia_diet");
+  if (["all", "vege", "mixed"].includes(savedDiet)) foodPlan.diet = savedDiet;
+} catch (e) {}
+
+window.setFoodPlanDiet = function(diet) {
+  if (!["all", "vege", "mixed"].includes(diet)) return;
+  foodPlan.diet = diet;
+  try { localStorage.setItem("corsia_diet", diet); } catch (e) {}
+  render();
+};
+
 window.toggleFoodPlanCuisine = function(c) {
   const i = foodPlan.cuisines.indexOf(c);
   if (i >= 0) foodPlan.cuisines.splice(i, 1);
@@ -1143,6 +1157,7 @@ window.searchFoodPlanRecipes = async function() {
     setFoodPlanStage("recipes");
     const recRes = await postApi(RECIPE_API_URL, {
       step: "recipes",
+      diet: foodPlan.diet,
       ingredients: allIngredients(),
       diners: foodPlan.diners,
       cook_twice: foodPlan.cookTwice,
@@ -1227,6 +1242,7 @@ window.autoFillWeek = async function(opts) {
     }).filter(Boolean);
     const res = await postApi(RECIPE_API_URL, {
       step: "week",
+      diet: foodPlan.diet,
       days,
       ingredients: allIngredients(),
       diners: foodPlan.diners,
@@ -1400,7 +1416,7 @@ window.shareWeekPlan = function() {
   }
   const menu = planned.map(d => {
     const r = appState.weekPlan[d];
-    return `${WEEK_DAY_NAMES[d]}: ${r.recipe_title}${r.source_url ? `\n   🔗 ${r.source_url}` : ""}`;
+    return `${WEEK_DAY_NAMES[d]}: ${r.recipe_title}${r.is_vegetarian ? " 🥦" : ""}${r.vege_note && !r.is_vegetarian ? `\n   🥦 ${r.vege_note}` : ""}${r.source_url ? `\n   🔗 ${r.source_url}` : ""}`;
   }).join("\n");
   const shopping = combinedWeekIngredients().map(i => {
     const deal = dealForIngredient(i.name);
@@ -1547,6 +1563,7 @@ window.shareRecipe = async function(source, idx) {
   const lines = [
     `🍳 ${r.recipe_title}${r.target_servings ? ` (${r.target_servings} annosta)` : ""}`,
     r.instructions_brief ? `\n${r.instructions_brief}` : "",
+    r.vege_note ? `\n🥦 Kasvissyöjälle: ${r.vege_note}` : "",
     missing.length ? `\n🛒 Ostettavaa:\n${missing.map(i => `• ${i.to_shopping_list || i.name}`).join("\n")}` : "\n✓ Kaikki ainekset löytyvät kotoa",
     r.source_url ? `\n🔗 ${r.source_url}` : "",
     "\n– Corsia"
