@@ -33,6 +33,8 @@ const GROQ_MODELS = [
   { id: "openai/gpt-oss-120b", vision: false }
 ].filter(Boolean);
 
+const GROQ_MODELS_URL = "https://api.groq.com/openai/v1/models";
+
 // OpenRouter: haetaan ilmaiset (:free) mallit ajon aikana, koska ne vaihtuvat usein.
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models";
@@ -174,6 +176,19 @@ async function discoverGeminiModels(key) {
   }
 }
 
+// Gemini 3 -mallit "ajattelevat" oletuksena pitkään (keskitaso), mikä hidastaa reseptien tuottoa moninkertaisesti.
+// Tehtävämme (jäsennys, reseptit) eivät tarvitse syvää päättelyä, joten ajattelu minimoidaan.
+// Gemini 3: thinkingLevel, Gemini 2.5: thinkingBudget (eri parametrit; väärä aiheuttaa 400 -> yritetään ilman).
+function geminiThinkingConfig(model) {
+  if (/^gemini-3/.test(model)) return { thinkingLevel: "low" };
+  if (/^gemini-2\.5-flash/.test(model)) return { thinkingBudget: 0 };
+  return null;
+}
+function geminiPayloadFor(payload, model, useThinking) {
+  const tc = useThinking && !payload.generationConfig?.thinkingConfig ? geminiThinkingConfig(model) : null;
+  return tc ? { ...payload, generationConfig: { ...(payload.generationConfig || {}), thinkingConfig: tc } } : payload;
+}
+
 // Kokeilee malleja järjestyksessä; 404/429/5xx -> seuraava malli.
 async function callGeminiProvider(key, payload, ctx = {}) {
   const wantGround = Array.isArray(payload.tools) && payload.tools.some(t => t && t.google_search);
@@ -201,13 +216,19 @@ async function callGeminiProvider(key, payload, ctx = {}) {
     tried.add(model);
     attemptCount++;
 
-    let res;
+    let res, preErr = null;
     try {
-      res = await timedFetch(`${GEMINI_BASE_URL}/models/${model}:generateContent`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-        body: JSON.stringify(payload)
-      }, ctx, wantGround ? 20000 : 35000);
+      for (const useThinking of [true, false]) {
+        res = await timedFetch(`${GEMINI_BASE_URL}/models/${model}:generateContent`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+          body: JSON.stringify(geminiPayloadFor(payload, model, useThinking))
+        }, ctx, wantGround ? 20000 : 35000);
+        if (!(useThinking && res.status === 400 && geminiThinkingConfig(model))) break;
+        preErr = await res.json().catch(() => ({}));
+        if (!/think/i.test(String(preErr?.error?.message || ""))) break; // muu 400-virhe: ei yritetä uudelleen
+        preErr = null;                                                   // ajatteluparametri hylättiin -> uusi yritys ilman
+      }
     } catch (e) {
       // aikakatkaisu tai yhteysvirhe: kirjataan. Aikakatkaisun jälkeen ei kokeilla muita malleja (ne jumittaisivat
       // samoin ja kuluttaisivat koko aikabudjetin), vaan siirrytään seuraavaan tekoälyyn / varakutsuun.
@@ -221,7 +242,7 @@ async function callGeminiProvider(key, payload, ctx = {}) {
       workingModel.gemini = model;
       return { data: await res.json(), model };
     }
-    const err = await res.json().catch(() => ({}));
+    const err = preErr || await res.json().catch(() => ({}));
     last = { status: res.status, msg: String(err?.error?.message || res.statusText || "") };
     attempts.push(`${model} ${res.status}`);
     if (res.status === 429) quotas.push(classifyQuota(err, last.msg, res.headers));
@@ -268,7 +289,33 @@ async function discoverOpenRouterFree(key, needVision) {
   }
 }
 
-// cfg: { name, url, staticModels, discover?, extraHeaders? }
+// Groq: haetaan voimassa olevat mallit (nimet vaihtuvat ja vanhoja poistetaan), järjestetään nopeisiin yleismalleihin päin.
+let groqModelCache = { at: 0, list: [] };
+async function discoverGroqModels(key, needVision) {
+  if (groqModelCache.list.length === 0 || Date.now() - groqModelCache.at > 10 * 60 * 1000) {
+    try {
+      const r = await fetch(GROQ_MODELS_URL, { headers: { Authorization: `Bearer ${key}` } });
+      if (r.ok) {
+        const d = await r.json();
+        groqModelCache = {
+          at: Date.now(),
+          list: (Array.isArray(d.data) ? d.data : [])
+            .filter(m => m && m.id && m.active !== false && !/(whisper|tts|playai|guard|orpheus|compound|embed|safeguard|distil)/i.test(m.id))
+            .map(m => ({ id: m.id, vision: /(llama-4|vision|scout|maverick|-vl)/i.test(m.id), ctx: Number(m.context_window || 0) }))
+        };
+      }
+    } catch (e) { /* käytetään vanhaa välimuistia tai kiinteää listaa */ }
+  }
+  const prefs = [/llama-4-scout/i, /llama-4-maverick/i, /llama-3\.3-70b/i, /gpt-oss-120b/i, /qwen/i, /llama-3\.1/i];
+  const rank = id => { const i = prefs.findIndex(re => re.test(id)); return i < 0 ? 99 : i; };
+  return groqModelCache.list
+    .filter(m => !needVision || m.vision)
+    .sort((a, b) => rank(a.id) - rank(b.id) || b.ctx - a.ctx)
+    .slice(0, 4)
+    .map(m => ({ id: m.id, vision: m.vision }));
+}
+
+// cfg: { name, url, staticModels, discover?, discoverReplaces?, extraHeaders? }
 async function callChatProvider(cfg, key, payload, ctx = {}) {
   const parts = payload.contents?.[0]?.parts || [];
   const hasImage = parts.some(p => p.inlineData);
@@ -278,7 +325,11 @@ async function callChatProvider(cfg, key, payload, ctx = {}) {
   messages.push({ role: "user", content: partsToChat(parts) });
 
   let models = cfg.staticModels.filter(m => !hasImage || m.vision);
-  if (cfg.discover) models = [...models, ...(await cfg.discover(key, hasImage))];
+  if (cfg.discover) {
+    const found = await cfg.discover(key, hasImage);
+    // discoverReplaces: haettu lista on totuus (kiinteät nimet voivat olla poistuneita); tyhjä haku -> kiinteä lista
+    models = cfg.discoverReplaces && found.length > 0 ? found : [...models, ...found];
+  }
   const ids = [...new Set([workingModel[cfg.name], ...models.map(m => m.id)].filter(Boolean))]
     .filter(id => models.some(m => m.id === id));
 
@@ -326,7 +377,9 @@ async function callChatProvider(cfg, key, payload, ctx = {}) {
   throw error;
 }
 
-const callGroqProvider = (key, payload, ctx) => callChatProvider({ name: "groq", url: GROQ_URL, staticModels: GROQ_MODELS }, key, payload, ctx);
+const callGroqProvider = (key, payload, ctx) => callChatProvider({
+  name: "groq", url: GROQ_URL, staticModels: GROQ_MODELS, discover: discoverGroqModels, discoverReplaces: !process.env.GROQ_MODEL
+}, key, payload, ctx);
 const callOpenRouterProvider = (key, payload, ctx) => callChatProvider({
   name: "openrouter", url: OPENROUTER_URL,
   staticModels: process.env.OPENROUTER_MODEL ? [{ id: process.env.OPENROUTER_MODEL, vision: true }] : [],
