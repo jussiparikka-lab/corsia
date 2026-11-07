@@ -139,7 +139,7 @@ async function generateRecipes(key, body, mode) {
     },
     0.4,
     false,
-    mode !== "week"   // viikkolista ilman verkkohakua: säästää haun pientä kiintiötä, eikä linkkejä tarvita
+    mode !== "week" && process.env.RECIPE_SEARCH !== "off"   // viikkolista ilman hakua; RECIPE_SEARCH=off poistaa haun reseptihausta
   );
   if (recipes.length === 0) throw new ApiError(502, "Reseptejä ei saatu – yritä uudelleen");
   return mode === "week"
