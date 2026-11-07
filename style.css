@@ -307,7 +307,10 @@ body {
 .fp-day-on { border-color: #0284c7; background: #e0f2fe; color: #075985; }
 .fp-week-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid #f1f5f9; }
 .fp-week-row:first-of-type { border-top: none; }
-.fp-week-day { width: 34px; height: 34px; border-radius: 10px; background: #fff7ed; color: #c2410c; font-weight: 800; font-size: 0.8rem; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.fp-week-day { width: 42px; height: 42px; border-radius: 10px; background: #fff7ed; color: #c2410c; font-weight: 800; font-size: 0.8rem; display: flex; flex-direction: column; align-items: center; justify-content: center; flex-shrink: 0; line-height: 1.1; }
+.fp-week-day small { font-size: 0.58rem; font-weight: 700; color: #9a3412; opacity: 0.85; }
+.fp-week-today-row .fp-week-day { background: #ea580c; color: #ffffff; }
+.fp-week-today-row .fp-week-day small { color: #ffffff; }
 .fp-deal-badge { margin-top: 4px; font-size: 0.7rem; font-weight: 800; color: #b91c1c; background: #fee2e2; border-radius: 6px; padding: 2px 6px; display: inline-block; }
 .fp-deal-inline { font-size: 0.7rem; font-weight: 800; color: #b91c1c; background: #fee2e2; border-radius: 6px; padding: 1px 5px; white-space: nowrap; }
 .fp-servings { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; padding: 6px 8px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; }
@@ -357,3 +360,19 @@ body.cook-open { overflow: hidden; }
 .cook-progress-bar { height: 8px; border-radius: 999px; background: #e2e8f0; overflow: hidden; }
 .cook-progress-fill { height: 100%; background: #16a34a; border-radius: 999px; transition: width 0.25s ease; }
 .cook-progress-all .cook-progress-text { color: #15803d; }
+.cook-progress-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 4px; }
+.cook-progress-row .cook-progress-text { margin-bottom: 0; }
+.cook-reset-btn { border: none; background: transparent; color: #64748b; font-weight: 800; font-size: 0.74rem; cursor: pointer; padding: 4px 6px; font-family: inherit; }
+.fp-cook-done { color: #15803d; font-weight: 800; }
+.fp-cook-prog { color: #c2410c; font-weight: 800; }
+.fp-weeknav-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.fp-weeknav-title { font-size: 1.05rem; font-weight: 800; color: #0f172a; }
+.fp-weeknav-range { font-size: 0.74rem; font-weight: 700; color: #64748b; }
+.fp-wk-chips { display: flex; gap: 6px; overflow-x: auto; padding: 8px 0 2px; -webkit-overflow-scrolling: touch; }
+.fp-wk { flex-shrink: 0; min-height: 38px; padding: 4px 12px; border-radius: 10px; border: 1.5px solid #cbd5e1; background: #ffffff; color: #475569; font-weight: 800; font-size: 0.78rem; cursor: pointer; font-family: inherit; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.15; }
+.fp-wk small { font-size: 0.58rem; font-weight: 700; color: #16a34a; }
+.fp-wk-on { border-color: #ea580c; background: #fff7ed; color: #c2410c; }
+.fp-wk-today { width: 100%; margin-top: 8px; padding: 8px; border-radius: 8px; border: none; background: #f1f5f9; color: #334155; font-weight: 800; font-size: 0.78rem; cursor: pointer; font-family: inherit; }
+.fp-week-actions { display: flex; gap: 6px; margin-top: 8px; }
+.fp-week-actions button { flex: 1; min-height: 42px; padding: 6px 4px; border-radius: 10px; border: 1.5px solid #fdba74; background: #ffffff; color: #c2410c; font-weight: 800; font-size: 0.76rem; cursor: pointer; font-family: inherit; }
+.fp-week-actions button:disabled { opacity: 0.5; cursor: default; }

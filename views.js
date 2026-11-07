@@ -442,7 +442,7 @@ function renderRecipeCard(r, idx, source, effective) {
       ${r.instructions_brief ? `<div style="font-size: 0.76rem; color: #475569; margin: 8px 0 2px; line-height: 1.45;">${esc(r.instructions_brief)}</div>` : ""}
       ${servingsHtml}
       <div style="margin-top: 8px;">${ingRows}</div>
-      <div style="margin-top: 8px; font-size: 0.7rem; font-weight: 800; color: #64748b;">📅 LISÄÄ VIIKOLLE</div>
+      <div style="margin-top: 8px; font-size: 0.7rem; font-weight: 800; color: #64748b;">📅 LISÄÄ VIIKOLLE ${weekNumberOf(activeWeekKey())} (${formatWeekRange(activeWeekKey())})</div>
       <div class="fp-days">${dayChips}</div>
       <button onclick="${addFn}" ${added || missing.length === 0 ? "disabled" : ""} style="width: 100%; margin-top: 10px; padding: 10px; border-radius: 10px; border: none; font-weight: 800; font-size: 0.84rem; cursor: ${added || missing.length === 0 ? "default" : "pointer"}; background: ${added ? "#bbf7d0" : missing.length === 0 ? "#e2e8f0" : "#16a34a"}; color: ${added || missing.length === 0 ? "#166534" : "#ffffff"};">
         ${added ? "✓ Lisätty kauppalapulle" : missing.length === 0 ? "✓ Kaikki ainekset jo kotona" : `🛒 Lisää puuttuvat aineet kauppalapulle (${missing.length} kpl)`}
@@ -573,13 +573,39 @@ function weekCookBadge(r) {
     : ` · <span class="fp-cook-prog">🍳 ${p.n}/${p.total} vaihetta</span>`;
 }
 
+// Viikkovalitsin: nuolet, viikkonumero + päivämäärät ja pikavalinta kuluvalle + 5 seuraavalle viikolle
+function renderWeekNav() {
+  const key = activeWeekKey(), cur = currentWeekKey();
+  const keys = [...new Set([...Array.from({ length: 6 }, (_, i) => shiftWeekKey(cur, i)), key])].sort();
+  const planned = k => { const p = appState.weekPlans[k]; return !!p && WEEK_DAYS.some(d => p[d]); };
+  const chips = keys.map(k => `<button class="fp-wk ${k === key ? "fp-wk-on" : ""}" onclick="selectWeek('${k}')">Vko ${weekNumberOf(k)}${planned(k) ? " ●" : ""}${k === cur ? "<small>nyt</small>" : ""}</button>`).join("");
+  return `
+    <div class="recipe-card fp-weeknav" id="week-nav">
+      <div class="fp-weeknav-head">
+        <button class="fp-icon-btn" aria-label="Edellinen viikko" onclick="shiftWeek(-1)">‹</button>
+        <div style="text-align: center;">
+          <div class="fp-weeknav-title">Viikko ${weekNumberOf(key)}</div>
+          <div class="fp-weeknav-range">${esc(formatWeekRange(key))}${key === cur ? " · tämä viikko" : ""}</div>
+        </div>
+        <button class="fp-icon-btn" aria-label="Seuraava viikko" onclick="shiftWeek(1)">›</button>
+      </div>
+      <div class="fp-wk-chips">${chips}</div>
+      ${key !== cur ? `<button class="fp-wk-today" onclick="goToCurrentWeek()">↩ Takaisin tähän viikkoon</button>` : ""}
+    </div>`;
+}
+
 function renderWeekPlan() {
   const combined = combinedWeekIngredients();
-  const rows = WEEK_DAYS.map(d => {
+  const wkKey = activeWeekKey();
+  const dates = weekDates(wkKey);
+  const now = new Date();
+  const isToday = dt => dt.getUTCFullYear() === now.getFullYear() && dt.getUTCMonth() === now.getMonth() && dt.getUTCDate() === now.getDate();
+  const rows = WEEK_DAYS.map((d, di) => {
     const r = appState.weekPlan[d];
+    const dt = dates[di];
     return `
-      <div class="fp-week-row" id="week-day-${d}">
-        <div class="fp-week-day">${d}</div>
+      <div class="fp-week-row ${isToday(dt) ? "fp-week-today-row" : ""}" id="week-day-${d}">
+        <div class="fp-week-day">${d}<small>${dt.getUTCDate()}.${dt.getUTCMonth() + 1}.</small></div>
         <div style="flex: 1; min-width: 0;">
           ${r ? `<div style="font-size: 0.86rem; font-weight: 800; color: #0f172a;">${esc(r.recipe_title)}</div>
                  <div style="font-size: 0.7rem; color: #64748b; font-weight: 700;">${esc(r.cuisine || "")} · ${missingIngredients(r).length} ostettavaa${weekCookBadge(r)}</div>`
@@ -605,18 +631,25 @@ function renderWeekPlan() {
     </div>` : "";
   const settingsLine = `${foodPlan.diners} ruokailijaa${foodPlan.cookTwice ? " × 2" : ""} · ${foodPlan.cuisines.length ? esc(foodPlan.cuisines.join(", ")) : "kaikki tyylit"}${foodPlan.image ? " · jääkaappikuva mukana" : ""}`;
   return `
+    ${renderWeekNav()}
     <div class="recipe-card" style="background: #fffbeb; border-color: #fde68a;">
-      <div style="font-size: 0.9rem; font-weight: 800; color: #0f172a;">✨ Viikon automaattiehdotus</div>
+      <div style="font-size: 0.9rem; font-weight: 800; color: #0f172a;">✨ Viikon ${weekNumberOf(wkKey)} automaattiehdotus</div>
       <div style="font-size: 0.74rem; color: #78350f; margin: 4px 0 8px;">${settingsLine}. Muuta asetuksia Haku-välilehdellä. Täyttää vain tyhjät päivät.</div>
       ${foodPlan.weekError && !weekLoading ? `<div id="week-error" style="font-size: 0.76rem; color: #991b1b; font-weight: 700; margin-bottom: 8px;">⚠️ ${esc(foodPlan.weekError)}</div>` : ""}
       <button id="btn-autofill-week" onclick="autoFillWeek()" ${weekLoading || emptyDays === 0 ? "disabled" : ""} style="width: 100%; padding: 11px; border-radius: 10px; border: none; background: ${emptyDays === 0 ? "#e2e8f0" : "#ea580c"}; color: ${emptyDays === 0 ? "#64748b" : "#ffffff"}; font-weight: 800; font-size: 0.86rem; cursor: ${weekLoading || emptyDays === 0 ? "default" : "pointer"};">
         ${weekLoading ? `⏳ ${WEEK_STAGES[foodPlan.stage] || "Suunnitellaan..."}` : emptyDays === 0 ? "✓ Viikko on täynnä" : `✨ Täytä ${emptyDays} tyhjää päivää tekoälyllä`}
       </button>
+      <div class="fp-week-actions">
+        <button id="btn-mix-week" onclick="mixWeekCuisines()" ${weekLoading ? "disabled" : ""}>🌍 Sekoita keittiöt</button>
+        <button id="btn-regen-week" onclick="regenerateWeek()" ${weekLoading ? "disabled" : ""}>🔄 Uusi ehdotus</button>
+        <button id="btn-clear-week" onclick="clearWeekAndFields()" ${weekLoading ? "disabled" : ""}>🧹 Tyhjennä</button>
+      </div>
+      <div style="font-size: 0.7rem; color: #78350f; margin-top: 6px;">🌍 antaa jokaiselle päivälle eri keittiön (Haku-välilehdellä valitut keittiöt, tai maailman keittiöt, jos valittuna alle kaksi). 🔄 korvaa viikon uusilla ehdotuksilla. 🧹 tyhjentää viikon sekä kuvan, puhutut raaka-aineet ja makumaailmat.</div>
     </div>
     ${loadingHtml}
     <div class="recipe-card">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-        <div style="font-size: 0.95rem; font-weight: 800; color: #0f172a;">📅 Viikon ruokalista</div>
+        <div style="font-size: 0.95rem; font-weight: 800; color: #0f172a;">📅 Viikon ${weekNumberOf(wkKey)} ruokalista</div>
         ${anyPlanned ? `<button id="btn-share-week" class="fp-share-btn" onclick="shareWeekPlan()">📤 Jaa viikko</button>` : ""}
       </div>
       ${rows}
@@ -650,9 +683,8 @@ function renderFavorites() {
 function renderFoodPlan() {
   const fp = foodPlan;
   const effective = fp.diners * (fp.cookTwice ? 2 : 1);
-  const styleOptions = ["Aasialainen", "Pasta", "Wok", "Nopea", "Klassikko"];
-  const worldOptions = ["Italialainen", "Kreikkalainen", "Thai", "Intialainen", "Singaporelainen", "Amerikkalainen",
-    "Meksikolainen", "Japanilainen", "Kiinalainen", "Korealainen", "Ranskalainen", "Espanjalainen", "Lähi-itä", "Suomalainen"];
+  const styleOptions = STYLE_CUISINES;
+  const worldOptions = WORLD_CUISINES;
 
   const chip = c => {
     const on = fp.cuisines.includes(c);

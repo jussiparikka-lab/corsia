@@ -90,8 +90,63 @@ let appState = {
   deals: [...DAILY_DEALS],
   dealsUpdatedAt: "Oletustärpit",
   favorites: [],              // tallennetut suosikkireseptit (synkronoidaan Firebaseen)
-  weekPlan: emptyWeekPlan()   // viikon ruokalista: päivä -> resepti tai null
+  weekPlan: emptyWeekPlan(),  // VALITUN viikon ruokalista: päivä -> resepti tai null (osoitin weekPlans-kokoelmaan)
+  weekPlans: {}               // kaikki viikot: "2026-W45" -> { Ma: resepti|null, ... }
 };
+
+// ---------- Kalenteriviikot (ISO 8601: viikko alkaa maanantaina) ----------
+let selectedWeekKey = null; // null = kuluva viikko
+
+function isoWeekKey(date) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);                       // viikon torstai määrää viikon vuoden
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const week = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+  return `${d.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
+}
+function currentWeekKey() { return isoWeekKey(new Date()); }
+function weekNumberOf(key) { return parseInt(String(key).split("-W")[1], 10); }
+function mondayOfWeekKey(key) {                                      // UTC-keskiyö
+  const [y, w] = String(key).split("-W").map(Number);
+  const jan4 = new Date(Date.UTC(y, 0, 4));
+  const mon = new Date(jan4);
+  mon.setUTCDate(jan4.getUTCDate() - ((jan4.getUTCDay() || 7) - 1) + (w - 1) * 7);
+  return mon;
+}
+function shiftWeekKey(key, delta) {
+  const mon = mondayOfWeekKey(key);
+  mon.setUTCDate(mon.getUTCDate() + 7 * delta);
+  return isoWeekKey(new Date(mon.getUTCFullYear(), mon.getUTCMonth(), mon.getUTCDate()));
+}
+function weekDates(key) {                                            // 7 päivämäärää (UTC), Ma..Su
+  const mon = mondayOfWeekKey(key);
+  return WEEK_DAYS.map((_, i) => { const d = new Date(mon); d.setUTCDate(mon.getUTCDate() + i); return d; });
+}
+function formatWeekRange(key) {
+  const [a, b] = [weekDates(key)[0], weekDates(key)[6]];
+  const dm = d => `${d.getUTCDate()}.${d.getUTCMonth() + 1}.`;
+  if (a.getUTCFullYear() !== b.getUTCFullYear()) return `${dm(a)}${a.getUTCFullYear()}–${dm(b)}${b.getUTCFullYear()}`;
+  if (a.getUTCMonth() === b.getUTCMonth()) return `${a.getUTCDate()}.–${dm(b)}${b.getUTCFullYear()}`;
+  return `${dm(a)}–${dm(b)}${b.getUTCFullYear()}`;
+}
+function getWeekPlan(key) {
+  if (!appState.weekPlans[key]) appState.weekPlans[key] = emptyWeekPlan();
+  return appState.weekPlans[key];
+}
+function activeWeekKey() { return selectedWeekKey || currentWeekKey(); }
+function syncWeekPointer() { appState.weekPlan = getWeekPlan(activeWeekKey()); }
+syncWeekPointer();
+
+// Tallennukseen vain viikot, joissa on reseptejä, ja enintään 5 viikkoa taaksepäin
+function weekPlansForSave() {
+  const minKey = shiftWeekKey(currentWeekKey(), -5), out = {};
+  Object.keys(appState.weekPlans).forEach(k => {
+    const plan = appState.weekPlans[k];
+    if (k >= minKey && plan && WEEK_DAYS.some(d => plan[d])) out[k] = plan;
+  });
+  return out;
+}
 
 let currentView = "home";
 let activeStoreKey = "";
@@ -297,7 +352,8 @@ function serializeState() {
     deals: appState.deals,
     dealsUpdatedAt: appState.dealsUpdatedAt,
     favorites: appState.favorites,
-    weekPlan: appState.weekPlan
+    weekPlans: weekPlansForSave(),
+    weekPlan: getWeekPlan(currentWeekKey())   // vanha kenttä: vanhemmat laitteet näkevät kuluvan viikon
   };
 }
 
@@ -334,7 +390,17 @@ function hydrateState(data) {
   if (data.deals) appState.deals = data.deals;
   if (data.dealsUpdatedAt) appState.dealsUpdatedAt = data.dealsUpdatedAt;
   if (Array.isArray(data.favorites)) appState.favorites = data.favorites;
-  if (data.weekPlan && typeof data.weekPlan === "object") appState.weekPlan = { ...emptyWeekPlan(), ...data.weekPlan };
+  if (data.weekPlans && typeof data.weekPlans === "object") {
+    const wp = {};
+    Object.keys(data.weekPlans).forEach(k => {
+      if (/^\d{4}-W\d{2}$/.test(k) && data.weekPlans[k]) wp[k] = { ...emptyWeekPlan(), ...data.weekPlans[k] };
+    });
+    appState.weekPlans = wp;
+  } else if (data.weekPlan && typeof data.weekPlan === "object") {
+    // Vanha tallennusmuoto (yksi viikko) -> siirretään kuluvalle viikolle
+    appState.weekPlans = { [currentWeekKey()]: { ...emptyWeekPlan(), ...data.weekPlan } };
+  }
+  syncWeekPointer();
 }
 
 window.loadLocalState = function() {
@@ -1101,10 +1167,39 @@ window.searchFoodPlanRecipes = async function() {
 };
 
 // ---------- Viikon automaattiehdotus ----------
-// Täyttää viikon TYHJÄT päivät tekoälyllä: jääkaappikuva (jos otettu), makumaailma, ruokailijat ja tarjoukset.
-window.autoFillWeek = async function() {
+// Täyttää valitun viikon TYHJÄT päivät tekoälyllä: jääkaappikuva/puhe (jos annettu), makumaailma, ruokailijat ja tarjoukset.
+// opts.mix = true: jokaiselle päivälle eri keittiö (valituista keittiöistä, tai maailman keittiöistä jos valittu alle 2).
+const STYLE_CUISINES = ["Aasialainen", "Pasta", "Wok", "Nopea", "Klassikko"];
+const WORLD_CUISINES = ["Italialainen", "Kreikkalainen", "Thai", "Intialainen", "Singaporelainen", "Amerikkalainen",
+  "Meksikolainen", "Japanilainen", "Kiinalainen", "Korealainen", "Ranskalainen", "Espanjalainen", "Lähi-itä", "Suomalainen"];
+
+function shuffled(arr) {
+  const b = [...arr];
+  for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; }
+  return b;
+}
+
+// Jakaa päiville eri keittiöt: pussillinen sekoitettuja keittiöitä, peräkkäisille päiville ei samaa.
+function pickDayCuisines(days) {
+  const base = foodPlan.cuisines.length >= 2 ? foodPlan.cuisines : WORLD_CUISINES;
+  const out = {};
+  let bag = [], prev = null;
+  days.forEach(d => {
+    if (bag.length === 0) bag = shuffled(base);
+    let i = bag.findIndex(c => c !== prev);
+    if (i < 0) i = 0;
+    out[d] = bag.splice(i, 1)[0];
+    prev = out[d];
+  });
+  return out;
+}
+
+window.autoFillWeek = async function(opts) {
   if (foodPlan.loading) return;
-  const days = WEEK_DAYS.filter(d => !appState.weekPlan[d]);
+  const mix = !!(opts && opts.mix === true);
+  const key = activeWeekKey();                 // viikko lukitaan heti: käyttäjä voi selata viikkoja odottaessa
+  const plan = getWeekPlan(key);
+  const days = WEEK_DAYS.filter(d => !plan[d]);
   if (days.length === 0) {
     showToast("Viikko on jo täynnä – poista päivä, jonka haluat ehdottaa uudelleen", "info");
     return;
@@ -1125,6 +1220,11 @@ window.autoFillWeek = async function() {
     }
 
     setFoodPlanStage("week");
+    // Vältetään samoja reseptejä tällä, edellisellä ja seuraavalla viikolla
+    const avoid = [0, -1, 1].flatMap(delta => {
+      const p = appState.weekPlans[shiftWeekKey(key, delta)];
+      return p ? WEEK_DAYS.map(d => p[d]?.recipe_title) : [];
+    }).filter(Boolean);
     const res = await postApi(RECIPE_API_URL, {
       step: "week",
       days,
@@ -1132,20 +1232,22 @@ window.autoFillWeek = async function() {
       diners: foodPlan.diners,
       cook_twice: foodPlan.cookTwice,
       cuisines: foodPlan.cuisines,
+      day_cuisines: mix ? pickDayCuisines(days) : undefined,
       categories: Object.keys(CATEGORY_THEMES),
       deals: dealNamesForPrompt(),
-      avoid: WEEK_DAYS.map(d => appState.weekPlan[d]?.recipe_title).filter(Boolean)
+      avoid
     });
     const recipes = (Array.isArray(res.recipes) ? res.recipes : []).filter(r => r && r.recipe_title);
     if (recipes.length === 0) throw new Error("Ruokalistaa ei saatu – yritä uudelleen");
     const resDays = Array.isArray(res.days) ? res.days : days;
+    const target = getWeekPlan(key);
     recipes.forEach((r, i) => {
       const d = resDays[i] || days[i];
-      if (d && !appState.weekPlan[d]) appState.weekPlan[d] = r;
+      if (d && !target[d]) target[d] = r;
     });
     foodPlan.weekAdded = false;
     await pushToCloud();
-    showToast(`✨ Viikolle lisätty ${recipes.length} reseptiä`, "success");
+    showToast(`✨ Viikolle ${weekNumberOf(key)} lisätty ${recipes.length} reseptiä`, "success");
   } catch (e) {
     console.warn("Viikon ehdotus epäonnistui:", e);
     foodPlan.weekError = e?.message || "Viikon ehdotus epäonnistui";
@@ -1156,6 +1258,64 @@ window.autoFillWeek = async function() {
     render();
   }
 };
+
+// 🌍 Jokaiselle tyhjälle päivälle eri keittiö
+window.mixWeekCuisines = function() {
+  if (foodPlan.loading) return;
+  const plan = getWeekPlan(activeWeekKey());
+  if (WEEK_DAYS.every(d => plan[d])) {
+    if (!confirm("Korvataanko viikon kaikki reseptit eri keittiöiden resepteillä?")) return;
+    WEEK_DAYS.forEach(d => { plan[d] = null; });
+    foodPlan.weekAdded = false;
+    pushToCloud();
+  }
+  autoFillWeek({ mix: true });
+};
+
+// 🔄 Tyhjentää viikon reseptit ja tekee uuden ehdotuksen (kentät ja asetukset säilyvät)
+window.regenerateWeek = function() {
+  if (foodPlan.loading) return;
+  const plan = getWeekPlan(activeWeekKey());
+  if (WEEK_DAYS.some(d => plan[d]) && !confirm("Korvataanko viikon reseptit uusilla ehdotuksilla?")) return;
+  WEEK_DAYS.forEach(d => { plan[d] = null; });
+  foodPlan.weekAdded = false;
+  pushToCloud();
+  autoFillWeek();
+};
+
+// 🧹 Tyhjentää viikon ja kentät (kuva, puhutut raaka-aineet, makumaailmat), jotta haun voi aloittaa alusta
+window.clearWeekAndFields = function() {
+  if (foodPlan.loading) return;
+  const key = activeWeekKey();
+  const plan = getWeekPlan(key);
+  if (WEEK_DAYS.some(d => plan[d]) && !confirm(`Tyhjennetäänkö viikon ${weekNumberOf(key)} ruokalista ja kentät?`)) return;
+  WEEK_DAYS.forEach(d => { plan[d] = null; });
+  if (foodPlan.image?.previewUrl) URL.revokeObjectURL(foodPlan.image.previewUrl);
+  foodPlan.image = null;
+  foodPlan.detected = [];
+  foodPlan.spoken = [];
+  foodPlan.recipes = [];
+  foodPlan.addedRecipes = {};
+  foodPlan.cuisines = [];
+  foodPlan.error = null;
+  foodPlan.weekError = null;
+  foodPlan.weekAdded = false;
+  pushToCloud();
+  render();
+  showToast("🧹 Viikko ja kentät tyhjennetty", "success");
+};
+
+// ---------- Viikon valinta ----------
+window.selectWeek = function(key) {
+  if (foodPlan.loading) return;
+  selectedWeekKey = /^\d{4}-W\d{2}$/.test(String(key)) ? key : null;
+  syncWeekPointer();
+  foodPlan.weekError = null;
+  foodPlan.weekAdded = false;
+  render();
+};
+window.shiftWeek = function(delta) { selectWeek(shiftWeekKey(activeWeekKey(), delta)); };
+window.goToCurrentWeek = function() { selectWeek(null); };
 
 // ---------- Tarjoukset resepteihin ----------
 // Tunnistaa, onko aines päivän tärpeissä. Verrataan aineksen merkitseviä sanoja (stemmattuna) tarjouksen nimeen.
@@ -1246,7 +1406,8 @@ window.shareWeekPlan = function() {
     const deal = dealForIngredient(i.name);
     return `• ${i.to_shopping_list}${deal ? ` 🔥 ${deal.price} ${deal.store}` : ""}`;
   }).join("\n");
-  const text = `📅 Viikon ruokalista\n\n${menu}${shopping ? `\n\n🛒 Kauppalappu:\n${shopping}` : ""}\n\n– Corsia`;
+  const wk = activeWeekKey();
+  const text = `📅 Viikon ${weekNumberOf(wk)} ruokalista (${formatWeekRange(wk)})\n\n${menu}${shopping ? `\n\n🛒 Kauppalappu:\n${shopping}` : ""}\n\n– Corsia`;
   shareText("Viikon ruokalista", text);
 };
 
