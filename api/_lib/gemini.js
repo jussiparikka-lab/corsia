@@ -39,7 +39,7 @@ const OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models";
 
 const LABELS = { gemini: "Gemini", groq: "Groq", openrouter: "OpenRouter" };
 const PROVIDER_IDS = ["gemini", "groq", "openrouter"];
-const RETRYABLE = [404, 413, 429, 500, 502, 503, 529];
+const RETRYABLE = [404, 413, 429, 500, 502, 503, 504, 529];
 const MAX_IMAGE_BASE64 = 3 * 1024 * 1024; // ~2,2 Mt kuva; asiakas pakkaa n. 150–300 kt:hen
 const MAX_OUT_TOKENS = 6000;
 
@@ -135,13 +135,26 @@ function describeError(status, msg, quota, provider = "gemini") {
     return "Käyttöraja täynnä – yritä hetken päästä";
   }
   if (status === 413) return "Pyyntö on liian suuri tälle tekoälylle";
+  if (status === 504) return "Tekoäly vastasi liian hitaasti – yritä uudelleen";
   if ([500, 502, 503, 529].includes(status)) return "Palvelu on ruuhkautunut – yritä hetken päästä";
   return `Tekoälyvirhe ${status}: ${m.substring(0, 80)}`;
 }
 
-async function safeFetch(url, opts) {
-  try { return await fetch(url, opts); }
-  catch (e) { throw new ApiError(502, "Tekoälyyn ei saatu yhteyttä", true); }
+// Aikabudjetti: Vercelin funktiolla on enimmäiskesto (vercel.json: 60 s). Jokaiselle kutsulle annetaan oma aikaraja
+// ja koko pyynnölle yhteinen takaraja (ctx.deadline), jotta hidas kutsu ei kaada koko funktiota 504-virheeseen.
+async function timedFetch(url, opts, ctx, capMs) {
+  const left = ctx?.deadline ? ctx.deadline - Date.now() - 1500 : capMs;
+  if (left < 2500) throw new ApiError(504, "Tekoäly vastasi liian hitaasti", true);
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), Math.min(capMs, left));
+  try {
+    return await fetch(url, { ...opts, signal: ac.signal });
+  } catch (e) {
+    if (e?.name === "AbortError") throw new ApiError(504, "Tekoäly vastasi liian hitaasti", true);
+    throw new ApiError(502, "Tekoälyyn ei saatu yhteyttä", true);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // ---------- Gemini ----------
@@ -162,7 +175,10 @@ async function discoverGeminiModels(key) {
 }
 
 // Kokeilee malleja järjestyksessä; 404/429/5xx -> seuraava malli.
-async function callGeminiProvider(key, payload) {
+async function callGeminiProvider(key, payload, ctx = {}) {
+  const wantGround = Array.isArray(payload.tools) && payload.tools.some(t => t && t.google_search);
+  const maxAttempts = wantGround ? 3 : Infinity; // verkkohaun kiintiö on yhteinen: turha kokeilla kaikkia malleja
+  let attemptCount = 0;
   const queue = [...new Set([workingModel.gemini, ...GEMINI_MODEL_CANDIDATES].filter(Boolean))];
   const tried = new Set();
   let discovered = false;
@@ -172,20 +188,35 @@ async function callGeminiProvider(key, payload) {
   const quotas = [];
 
   while (queue.length > 0 || !discovered) {
+    if (ctx.deadline && ctx.deadline - Date.now() < 4000) { last = { status: 504, msg: "Aikabudjetti loppui" }; break; }
+    if (attemptCount >= maxAttempts) break;
     if (queue.length === 0) {
       discovered = true;
+      if (ctx.deadline && ctx.deadline - Date.now() < 15000) break; // ei aikaa mallilistan hakuun
       (await discoverGeminiModels(key)).forEach(m => { if (!tried.has(m)) queue.push(m); });
       if (queue.length === 0) break;
     }
     const model = queue.shift();
     if (tried.has(model)) continue;
     tried.add(model);
+    attemptCount++;
 
-    const res = await safeFetch(`${GEMINI_BASE_URL}/models/${model}:generateContent`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-      body: JSON.stringify(payload)
-    });
+    let res;
+    try {
+      res = await timedFetch(`${GEMINI_BASE_URL}/models/${model}:generateContent`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+        body: JSON.stringify(payload)
+      }, ctx, wantGround ? 20000 : 35000);
+    } catch (e) {
+      // aikakatkaisu tai yhteysvirhe: kirjataan. Aikakatkaisun jälkeen ei kokeilla muita malleja (ne jumittaisivat
+      // samoin ja kuluttaisivat koko aikabudjetin), vaan siirrytään seuraavaan tekoälyyn / varakutsuun.
+      last = { status: e.status || 502, msg: e.message };
+      attempts.push(`${model} ${last.status}`);
+      if (!firstOther) firstOther = last;
+      if (e.status === 504) break;
+      continue;
+    }
     if (res.ok) {
       workingModel.gemini = model;
       return { data: await res.json(), model };
@@ -238,7 +269,7 @@ async function discoverOpenRouterFree(key, needVision) {
 }
 
 // cfg: { name, url, staticModels, discover?, extraHeaders? }
-async function callChatProvider(cfg, key, payload) {
+async function callChatProvider(cfg, key, payload, ctx = {}) {
   const parts = payload.contents?.[0]?.parts || [];
   const hasImage = parts.some(p => p.inlineData);
   const wantJson = payload.generationConfig?.responseMimeType === "application/json";
@@ -256,13 +287,23 @@ async function callChatProvider(cfg, key, payload) {
   const attempts = [], quotas = [];
   if (ids.length === 0) last = { status: 404, msg: hasImage ? "Kuvia ymmärtävää mallia ei löytynyt" : "Mallia ei löytynyt" };
   for (const model of ids) {
+    if (ctx.deadline && ctx.deadline - Date.now() < 4000) { last = { status: 504, msg: "Aikabudjetti loppui" }; break; }
     const body = { model, messages, max_tokens: MAX_OUT_TOKENS };
     if (Number.isFinite(payload.generationConfig?.temperature)) body.temperature = payload.generationConfig.temperature;
-    const res = await safeFetch(cfg.url, {
-      method: "POST",
-      headers: { "content-type": "application/json", Authorization: `Bearer ${key}`, ...(cfg.extraHeaders || {}) },
-      body: JSON.stringify(body)
-    });
+    let res;
+    try {
+      res = await timedFetch(cfg.url, {
+        method: "POST",
+        headers: { "content-type": "application/json", Authorization: `Bearer ${key}`, ...(cfg.extraHeaders || {}) },
+        body: JSON.stringify(body)
+      }, ctx, 30000);
+    } catch (e) {
+      last = { status: e.status || 502, msg: e.message };
+      attempts.push(`${model} ${last.status}`);
+      if (!firstOther) firstOther = last;
+      if (e.status === 504) break;
+      continue;
+    }
     if (res.ok) {
       const data = await res.json();
       workingModel[cfg.name] = model;
@@ -285,13 +326,13 @@ async function callChatProvider(cfg, key, payload) {
   throw error;
 }
 
-const callGroqProvider = (key, payload) => callChatProvider({ name: "groq", url: GROQ_URL, staticModels: GROQ_MODELS }, key, payload);
-const callOpenRouterProvider = (key, payload) => callChatProvider({
+const callGroqProvider = (key, payload, ctx) => callChatProvider({ name: "groq", url: GROQ_URL, staticModels: GROQ_MODELS }, key, payload, ctx);
+const callOpenRouterProvider = (key, payload, ctx) => callChatProvider({
   name: "openrouter", url: OPENROUTER_URL,
   staticModels: process.env.OPENROUTER_MODEL ? [{ id: process.env.OPENROUTER_MODEL, vision: true }] : [],
   discover: discoverOpenRouterFree,
   extraHeaders: { "X-Title": "Corsia" }
-}, key, payload);
+}, key, payload, ctx);
 
 const PROVIDERS = {
   gemini: { call: callGeminiProvider, search: true },
@@ -311,7 +352,7 @@ async function callGemini(creds, payload) {
   for (const p of providerOrder(creds)) {
     if (wantSearch && !PROVIDERS[p].search) { skippedForSearch = true; continue; }
     try {
-      const out = await PROVIDERS[p].call(creds[p], payload);
+      const out = await PROVIDERS[p].call(creds[p], payload, { deadline: creds.deadline });
       // Ilman verkkohakua tehdyt vastaukset eivät ole maadoitettuja: reseptilinkit voivat olla keksittyjä
       if (!wantSearch && out.data && typeof out.data === "object") out.data._ungrounded = true;
       return { ...out, provider: p };
@@ -346,20 +387,22 @@ async function callGemini(creds, payload) {
 
 // Virheet, joiden jälkeen verkkohakua käyttämätön varakutsu kannattaa yrittää (kiintiö, ruuhka, ei hakutukea).
 // Verkkohaulla (grounding) on oma, pienempi kiintiönsä, joten sen täyttyminen ei estä tavallista kutsua.
-const SEARCH_SOFT_FAIL = [400, 404, 413, 429, 500, 502, 503, 529];
+const SEARCH_SOFT_FAIL = [400, 404, 413, 429, 500, 502, 503, 504, 529];
+let searchBlockedUntil = 0; // kun haku kaatuu kiintiöön tai aikaan, ohitetaan se 10 min tällä lämpimällä instanssilla
 
 // Ensin verkkohaulla maadoitettu kutsu, sitten puhdas JSON-tila. parse(data) palauttaa listan.
 // requireSearch = true (esim. tarjoukset): ilman verkkohakua ei tehdä varakutsua, koska hinnat olisivat keksittyjä.
 // useSearch = false: ohitetaan verkkohaku kokonaan (säästää haun kiintiötä; vastaus ei ole maadoitettu).
 async function callWithSearchFallback(key, contents, parse, temperature = 0.4, requireSearch = false, useSearch = true) {
   let result = [];
-  if (useSearch || requireSearch) {
+  if (requireSearch || (useSearch && Date.now() >= searchBlockedUntil)) {
     try {
       const { data } = await callGemini(key, { contents, tools: [{ google_search: {} }], generationConfig: { temperature } });
       try { result = parse(data); } catch (e) { result = []; }
     } catch (e) {
       const keyProblem = /api key|API_KEY/i.test(e?.message || "") || e?.status === 401 || e?.status === 403;
       const soft = e instanceof ApiError && !keyProblem && (SEARCH_SOFT_FAIL.includes(e.status) || e.skippedForSearch);
+      if (e?.status === 429 || e?.status === 504) searchBlockedUntil = Date.now() + 10 * 60 * 1000;
       if (!soft || requireSearch) throw e;
     }
   }
@@ -405,6 +448,7 @@ function createHandler(work) {
     if (req.method !== "POST") return res.status(405).json({ error: "Vain POST sallittu" });
 
     const keys = resolveKeys(req);
+    keys.deadline = Date.now() + (Number(process.env.AI_TIME_BUDGET_MS) || 50000); // vercel.json maxDuration 60 s
     if (!keys.gemini && !keys.groq && !keys.openrouter) {
       return res.status(500).json({ error: "Tekoälyn API-avain puuttuu palvelimelta (GEMINI_API_KEY, GROQ_API_KEY tai OPENROUTER_API_KEY)", code: "NO_KEY" });
     }
