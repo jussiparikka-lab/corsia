@@ -52,7 +52,20 @@ Nimet suomeksi perusmuodossa, ilman määriä. Jos mitään ei tunnisteta, palau
   };
 }
 
-function buildRecipePrompt({ ingredients, diners, cookTwice, effective, cuisines, categories, count = 3, days = [], avoid = [], deals = [], dayCuisines = {} }) {
+// Ruokavalio: "all" = tavallinen, "vege" = kaikki kasvisruokaa, "mixed" = yksi kasvissyöjä (vege-vinkit)
+function dietBlock(diet, isWeek, count) {
+  if (diet === "vege") return `
+RUOKAVALIO: KASVISRUOKA. Kaikkien reseptien pitää olla täysin kasvisruokaa: ei lihaa, kalaa, äyriäisiä eikä niistä tehtyjä liemiä tai valmisteita. Kananmunat, maitotuotteet ja juustot ovat sallittuja. Tee oikeita, ravitsevia pääruokia (proteiinia esim. pavuista, linsseistä, tofusta, tempehistä, kikherneistä, kananmunasta tai juustosta), älä pelkkiä lisukkeita. Jos käyttäjän aineksissa on lihaa tai kalaa, jätä ne käyttämättä.
+Kun keittiötyyli on valittu, tee siitä aito kasvisversio (esim. italialainen = pasta, risotto tai pizza ilman lihaa; thai = tofu- tai kasviscurry; intialainen = dal tai paneer; amerikkalainen = kasvisburgeri tai mac & cheese). Aseta "is_vegetarian": true.`;
+  if (diet === "mixed") return `
+RUOKAVALIO: PERHEESSÄ ON YKSI KASVISSYÖJÄ. Reseptit voivat olla tavallisia, mutta:
+- Täytä jokaiselle reseptille "vege_note": yksi lyhyt lause, jolla yhden annoksen saa kasvisversioksi (esim. "Korvaa kana 150 g:lla paistettua tofua tai halloumia"). Jos resepti on jo kasvisruokaa, kirjoita "Sopii sellaisenaan kasvissyöjälle" ja aseta "is_vegetarian": true.
+- ${isWeek ? `Vähintään ${count >= 4 ? "kaksi" : "yksi"} viikon ruoista on sellaisenaan kasvisruokaa (is_vegetarian: true).` : "Vähintään yksi ehdotuksista on sellaisenaan kasvisruokaa (is_vegetarian: true)."}
+- vege_note ei saa sisältää lihaa, kalaa tai äyriäisiä.`;
+  return "";
+}
+
+function buildRecipePrompt({ ingredients, diners, cookTwice, effective, cuisines, categories, count = 3, days = [], avoid = [], deals = [], dayCuisines = {}, diet = "all" }) {
   const dcEntries = days.filter(d => dayCuisines[d]).map(d => `${d} = ${dayCuisines[d]}`);
   const cuisineStr = dcEntries.length > 0 ? "vaihtelee päivittäin (katso KEITTIÖ PÄIVITTÄIN)" : (cuisines.length > 0 ? cuisines.join(", ") : "vapaavalintainen");
   const catLine = categories.length > 0 ? `TÄSMÄLLEEN yksi näistä: ${categories.join(", ")}` : "kaupan osasto suomeksi";
@@ -63,7 +76,7 @@ function buildRecipePrompt({ ingredients, diners, cookTwice, effective, cuisines
 
 KÄYTTÄJÄLLÄ ON JO (tunnistettu jääkaappikuvasta): ${ingredients.length > 0 ? ingredients.join(", ") : "ei tunnistettuja aineksia"}.
 TOIVOTUT KEITTIÖTYYLIT: ${cuisineStr}.
-RUOKAILIJAT: ${diners}${cookTwice ? " (ruoka syödään kahdesti)" : ""} => skaalaa TÄSMÄLLEEN ${effective} annokselle.${deals.length > 0 ? `\nTÄMÄN VIIKON TARJOUKSET (suosi, jos sopivat): ${deals.join("; ")}.` : ""}${avoid.length > 0 ? `\nÄLÄ EHDOTA NÄITÄ (jo suunniteltu): ${avoid.join(", ")}.` : ""}
+RUOKAILIJAT: ${diners}${cookTwice ? " (ruoka syödään kahdesti)" : ""} => skaalaa TÄSMÄLLEEN ${effective} annokselle.${dietBlock(diet, days.length > 0, count)}${deals.length > 0 ? `\nTÄMÄN VIIKON TARJOUKSET (suosi, jos sopivat): ${deals.join("; ")}.` : ""}${avoid.length > 0 ? `\nÄLÄ EHDOTA NÄITÄ (jo suunniteltu): ${avoid.join(", ")}.` : ""}
 
 TEHTÄVÄT:
 ${weekTask}
@@ -82,11 +95,13 @@ Vastaa PELKÄLLÄ JSON-taulukolla, ei muuta tekstiä:
   "original_servings": 4,
   "target_servings": ${effective},
   "ingredients": [{"name": "aines perusmuodossa suomeksi", "amount_needed": "esim. 400 g", "in_fridge": false, "to_shopping_list": "Aines (400 g)", "cat": ${JSON.stringify(catLine)}}],
+  "is_vegetarian": false,
+  "vege_note": ${diet === "mixed" ? '"yksi lause kasvisversiosta"' : '""'},
   "instructions_brief": "2-3 lausetta suomeksi"
 }]`;
 }
 
-function normalizeRecipes(parsed, effective, max = 5) {
+function normalizeRecipes(parsed, effective, max = 5, diet = "all") {
   const arr = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.recipes) ? parsed.recipes : []);
   return arr
     .filter(r => r && r.recipe_title)
@@ -107,6 +122,8 @@ function normalizeRecipes(parsed, effective, max = 5) {
           if (!inFridge && !toList) toList = amount ? `${name} (${amount})` : name;
           return { name, amount_needed: amount, in_fridge: inFridge, to_shopping_list: toList, cat: i.cat ? String(i.cat) : null };
         }),
+      is_vegetarian: diet === "vege" ? true : (r.is_vegetarian === true || r.is_vegetarian === "true"),
+      vege_note: diet === "mixed" ? String(r.vege_note || "").trim().slice(0, 240) : "",
       instructions_brief: String(r.instructions_brief || "")
     }));
 }
@@ -125,9 +142,10 @@ async function generateRecipes(key, body, mode) {
   if (mode === "week" && body.day_cuisines && typeof body.day_cuisines === "object") {
     days.forEach(d => { const c = String(body.day_cuisines[d] || "").trim().slice(0, 40); if (c) dayCuisines[d] = c; });
   }
+  const diet = ["vege", "mixed"].includes(body.diet) ? body.diet : "all";
   const prompt = buildRecipePrompt({
     ingredients: strList(body.ingredients, 60),
-    dayCuisines,
+    dayCuisines, diet,
     diners, cookTwice, effective, count, days,
     cuisines: strList(body.cuisines, 10),
     categories: strList(body.categories, 40),
@@ -138,7 +156,7 @@ async function generateRecipes(key, body, mode) {
     key,
     [{ role: "user", parts: [{ text: prompt }] }],
     data => {
-      const list = normalizeRecipes(parseJson(extractText(data), "[", "]"), effective, count);
+      const list = normalizeRecipes(parseJson(extractText(data), "[", "]"), effective, count, diet);
       // Ilman verkkohakua tehdyt reseptit: linkit voisivat olla keksittyjä, joten ne poistetaan
       if (data?._ungrounded) list.forEach(r => { r.source_url = null; });
       return list;
