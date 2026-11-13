@@ -26,6 +26,15 @@ const GEMINI_MODEL_CANDIDATES = [
 ].filter(Boolean);
 
 // Groq: ilmainen, ei luottokorttia. Llama 4 -mallit ymmärtävät myös kuvia.
+// Verkkohakua (Google Search grounding) vaativissa kutsuissa EI käytetä Lite-malleja: ne eivät tue hakua luotettavasti.
+// Ensisijainen on gemini-2.5-flash; jos se on poistunut (404, Google rajoittaa 2.5-malleja vain aiemmin käyttäneille),
+// kokeillaan vain tavallisia Flash-malleja. Mallin voi pakottaa muuttujalla GEMINI_SEARCH_MODEL.
+const GEMINI_SEARCH_MODELS = [process.env.GEMINI_SEARCH_MODEL, "gemini-2.5-flash", "gemini-3.5-flash", "gemini-3.6-flash"].filter(Boolean);
+
+// REST API:ssa työkalu annetaan camelCase-muodossa: "tools": [{ "googleSearch": {} }]
+const SEARCH_TOOLS = () => [{ googleSearch: {} }];
+const hasSearchTool = payload => Array.isArray(payload?.tools) && payload.tools.some(t => t && (t.googleSearch || t.google_search));
+
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_MODELS = [
   process.env.GROQ_MODEL ? { id: process.env.GROQ_MODEL, vision: true } : null,
@@ -45,7 +54,7 @@ const LABELS = { gemini: "Gemini", groq: "Groq", openrouter: "OpenRouter" };
 const PROVIDER_IDS = ["gemini", "groq", "openrouter"];
 const RETRYABLE = [404, 413, 429, 500, 502, 503, 504, 529];
 const MAX_IMAGE_BASE64 = 3 * 1024 * 1024; // ~2,2 Mt kuva; asiakas pakkaa n. 150–300 kt:hen
-const MAX_OUT_TOKENS = 6000;
+const MAX_OUT_TOKENS = 8000;
 
 const workingModel = { gemini: null, groq: null, openrouter: null }; // muistetaan toimiva malli lämpimän instanssin ajan
 
@@ -194,12 +203,14 @@ function geminiPayloadFor(payload, model, useThinking) {
 
 // Kokeilee malleja järjestyksessä; 404/429/5xx -> seuraava malli.
 async function callGeminiProvider(key, payload, ctx = {}) {
-  const wantGround = Array.isArray(payload.tools) && payload.tools.some(t => t && t.google_search);
-  const maxAttempts = wantGround ? 3 : Infinity; // verkkohaun kiintiö on yhteinen: turha kokeilla kaikkia malleja
+  const wantGround = hasSearchTool(payload);
+  const maxAttempts = wantGround ? GEMINI_SEARCH_MODELS.length : Infinity;
   let attemptCount = 0;
-  const queue = [...new Set([workingModel.gemini, ...GEMINI_MODEL_CANDIDATES].filter(Boolean))];
+  const queue = wantGround
+    ? [...new Set(GEMINI_SEARCH_MODELS)]                                         // vain hakua tukevat, ei Lite-malleja
+    : [...new Set([workingModel.gemini, ...GEMINI_MODEL_CANDIDATES].filter(Boolean))];
   const tried = new Set();
-  let discovered = false;
+  let discovered = wantGround;                                                   // hakukutsuissa ei mallilistan hakua
   let last = { status: 502, msg: "Tekoälyyn ei saatu yhteyttä" };
   let firstOther = null;   // ensimmäinen muu virhe kuin 404 – kertovampi kuin viimeisen mallin 404
   const attempts = [];
@@ -242,7 +253,7 @@ async function callGeminiProvider(key, payload, ctx = {}) {
       continue;
     }
     if (res.ok) {
-      workingModel.gemini = model;
+      if (!wantGround) workingModel.gemini = model;
       return { data: await res.json(), model };
     }
     const err = preErr || await res.json().catch(() => ({}));
@@ -250,6 +261,7 @@ async function callGeminiProvider(key, payload, ctx = {}) {
     attempts.push(`${model} ${res.status}`);
     if (res.status === 429) quotas.push(classifyQuota(err, last.msg, res.headers));
     if (res.status !== 404 && !firstOther) firstOther = last;
+    if (wantGround && res.status !== 404) break; // hakukiintiö/-tuki on yhteinen mallien kesken: vain puuttuva malli (404) vaihdetaan
     if (!RETRYABLE.includes(res.status)) break; // esim. väärä avain tai ei-tuettu työkalu
     if (workingModel.gemini === model) workingModel.gemini = null;
   }
@@ -401,7 +413,7 @@ const PROVIDERS = {
 // creds = resolveKeys(req) (tai pelkkä Gemini-avain merkkijonona). Palauttaa { data, model, provider }.
 async function callGemini(creds, payload) {
   if (typeof creds === "string") creds = { gemini: creds, preferred: "gemini" };
-  const wantSearch = Array.isArray(payload.tools) && payload.tools.some(t => t && t.google_search);
+  const wantSearch = hasSearchTool(payload);
   const failures = [];
   let skippedForSearch = false;
 
@@ -453,12 +465,12 @@ async function callWithSearchFallback(key, contents, parse, temperature = 0.4, r
   let result = [];
   if (requireSearch || (useSearch && Date.now() >= searchBlockedUntil)) {
     try {
-      const { data } = await callGemini(key, { contents, tools: [{ google_search: {} }], generationConfig: { temperature } });
+      const { data } = await callGemini(key, { contents, tools: SEARCH_TOOLS(), generationConfig: { temperature } });
       try { result = parse(data); } catch (e) { result = []; }
     } catch (e) {
       const keyProblem = /api key|API_KEY/i.test(e?.message || "") || e?.status === 401 || e?.status === 403;
       const soft = e instanceof ApiError && !keyProblem && (SEARCH_SOFT_FAIL.includes(e.status) || e.skippedForSearch);
-      if (e?.status === 429 || e?.status === 504) searchBlockedUntil = Date.now() + 10 * 60 * 1000;
+      if (soft) searchBlockedUntil = Date.now() + 10 * 60 * 1000;   // haku ei toimi juuri nyt: ohitetaan 10 min
       if (!soft || requireSearch) throw e;
     }
   }
@@ -467,10 +479,14 @@ async function callWithSearchFallback(key, contents, parse, temperature = 0.4, r
   return parse(data);
 }
 
+// Yhdistää vastauksen kaikkien osien (parts) tekstikentät. Maadoituksen metatieto (groundingMetadata) on
+// parts-taulukon ulkopuolella eikä kuulu tekstiin; "thought"-osat ohitetaan.
 function extractText(data) {
-  return (data?.candidates?.[0]?.content?.parts || [])
-    .filter(p => !p.thought)
-    .map(p => p.text || "")
+  const parts = data?.candidates?.[0]?.content?.parts;
+  if (!Array.isArray(parts)) return "";
+  return parts
+    .filter(p => p && !p.thought && typeof p.text === "string")
+    .map(p => p.text)
     .join("")
     .replace(/```json/gi, "")
     .replace(/```/g, "")
@@ -527,7 +543,9 @@ function createHandler(work) {
   return handler;
 }
 
+const isSearchBlocked = () => Date.now() < searchBlockedUntil;
+
 module.exports = {
-  ApiError, callGemini, callWithSearchFallback, extractText, parseJson, validateImage, strList, createHandler,
+  isSearchBlocked, ApiError, callGemini, callWithSearchFallback, extractText, parseJson, validateImage, strList, createHandler,
   resolveKeys, classifyQuota
 };
