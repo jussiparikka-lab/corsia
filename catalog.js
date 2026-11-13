@@ -11,10 +11,10 @@ const CATALOG_BY_CATEGORY = {
     "Kevätsipuli", "Kiinankaali", "Kirsikkatomaatti", "Kukkakaali", "Kurkku", "Lehtikaali", "Maissi", "Miniluumutomaatti",
     "Parsakaali", "Pavut", "Punainen paprika", "Punasipuli", "Rucola", "Salaattisekoitus", "Salottisipuli", "Sitruunaruoho",
     "Sokeriherne", "Suippopaprika", "Tomaatti", "Valkosipuli",
-    "YRTTI: Basilika (tuore)", "YRTTI: Korianteri", "YRTTI: Persilja", "YRTTI: Salvia", "YRTTI: Tuoreet yrtit"
+    "YRTTI: Basilika (tuore)", "YRTTI: Korianteri", "YRTTI: Minttu", "YRTTI: Persilja", "YRTTI: Salvia", "YRTTI: Thai-basilika", "YRTTI: Tuoreet yrtit"
   ],
   "Juurekset": [
-    "Keittojuurekset (setti)", "Peruna (keitto)", "Peruna (yleis / uusi)", "Perunamuusiaines", "Porkkana"
+    "Keittojuurekset (setti)", "Peruna (keitto)", "Peruna (yleis / uusi)", "Perunamuusiaines", "Porkkana", "Retiisi (daikon)"
   ],
   "Hedelmät": [
     "Ananas (tuore)", "Appelsiini (Tarocco)", "Avokado", "Banaani", "Cantaloupe-meloni", "Hunajameloni", "Kiwi", "Lime",
@@ -61,7 +61,7 @@ const CATALOG_BY_CATEGORY = {
     "RIISI: Basmati", "RIISI: Jasmin", "RIISI: Risotto", "RIISI: Sushiriisi", "RIISI: Valkoinen riisi",
     "MAUSTE: Basilika", "MAUSTE: Cayennepippuri", "MAUSTE: Hieno merisuola", "MAUSTE: Kanaliemikuutiot",
     "MAUSTE: Kanelitanko", "MAUSTE: Karkea merisuola", "MAUSTE: Kasvisliemikuutiot", "MAUSTE: Laakerinlehti",
-    "MAUSTE: Lihaliemikuutiot", "MAUSTE: Mustapippuri", "MAUSTE: Oregano", "MAUSTE: Paprikajauhe", "MAUSTE: Rakuuna",
+    "MAUSTE: Lihaliemikuutiot", "MAUSTE: Mustapippuri", "MAUSTE: Oregano", "MAUSTE: Paprikajauhe", "MAUSTE: Rakuuna", "MAUSTE: Tähtianis",
     "MAUSTE: Ribs rub", "MAUSTE: Sipulijauhe", "MAUSTE: Valkosipulijauhe", "MAUSTE: Valkopippuri (jauhettu)",
     "MAUSTE: Valkopippuri (kokonainen)",
     "PASTA: Cannelloni", "PASTA: Farfalle", "PASTA: Fusilli", "PASTA: Gluteeniton lasagne", "PASTA: Gluteeniton pasta",
@@ -97,10 +97,10 @@ const CATALOG_BY_CATEGORY = {
     "Ranskalainen sipulikeitto -pussi"
   ],
   "Aasia / Texmex": [
-    "Chiliöljy", "Dark soy sauce", "Garam masala", "Kalakastike", "Kananuudelit", "Kiukkutahna (chilitahna)",
+    "Chiliöljy", "Dark soy sauce", "Garam masala", "Hoisin-kastike", "Kalakastike", "Kananuudelit", "Kiukkutahna (chilitahna)",
     "Kookosmaito", "Korean chicken powder mix", "Kuppinuudelit", "Leveät riisinuudelit", "Osterikastike",
     "Paahdettu seesamiöljy", "Panang curry -tahna", "Ponzu (soija-sitrus)", "Ramen-nuudelit", "Riisinuudelit",
-    "Riisiviinietikka", "Shaoxing-viini", "Soijakastike", "Sriracha", "Sriracha mayo", "Sweet chili -kastike",
+    "Riisipaperi (kevätrullat)", "Riisiviinietikka", "Riisivermiselli", "Shaoxing-viini", "Soijakastike", "Sriracha", "Sriracha mayo", "Sweet chili -kastike",
     "Teriyaki-kastike", "TEXMEX nachot", "TEXMEX tortillat"
   ],
   "Pakasteet": [

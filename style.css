@@ -410,3 +410,66 @@ body.cook-open { overflow: hidden; }
 .route-arrows button { width: 34px; height: 20px; border: none; border-radius: 6px; background: rgba(0, 0, 0, 0.06); color: #475569; font-size: 0.7rem; cursor: pointer; padding: 0; }
 .route-reset-btn { width: 100%; margin-top: 14px; min-height: 44px; border-radius: 10px; border: 1.5px solid #fdba74; background: #fff7ed; color: #c2410c; font-weight: 800; font-size: 0.84rem; cursor: pointer; font-family: inherit; }
 body.route-drag-active { cursor: grabbing; user-select: none; -webkit-user-select: none; overscroll-behavior: contain; }
+
+/* Ääniohjaus */
+.store-tools { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.store-tools .route-edit-btn { margin-top: 0; }
+.audio-btn-on { background: #16a34a; border-color: #16a34a; color: #ffffff; }
+.audio-panel { background: #eff6ff; border: 1.5px solid #bfdbfe; border-radius: 12px; padding: 10px 12px; margin-bottom: 12px; }
+.audio-title { font-size: 0.9rem; font-weight: 800; color: #1e40af; }
+.audio-status { font-size: 0.82rem; font-weight: 700; color: #0f172a; margin-top: 4px; min-height: 1.2em; }
+.audio-next { font-size: 0.76rem; color: #1e3a8a; margin-top: 4px; line-height: 1.4; }
+.audio-hint { font-size: 0.7rem; color: #64748b; margin-top: 6px; line-height: 1.4; }
+.audio-actions { display: flex; gap: 6px; margin-top: 8px; }
+.audio-actions button { flex: 1; min-height: 44px; border-radius: 10px; border: 1.5px solid #93c5fd; background: #ffffff; color: #1e40af; font-weight: 800; font-size: 0.8rem; cursor: pointer; font-family: inherit; }
+.audio-actions button:first-child { background: #2563eb; border-color: #2563eb; color: #ffffff; }
+.audio-top-item { border-left: 4px solid #2563eb; background: #eff6ff; }
+.audio-skip-tag { font-size: 0.66rem; font-weight: 800; color: #b45309; background: #fef3c7; border-radius: 6px; padding: 1px 6px; margin-left: 4px; }
+
+/* Reseptin raaka-ainekytkimet */
+.fp-ing-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 10px; font-size: 0.68rem; font-weight: 800; color: #64748b; }
+.fp-ing-bulk { display: flex; gap: 6px; flex-shrink: 0; }
+.fp-ing-bulk button { padding: 4px 8px; border-radius: 8px; border: 1px solid #cbd5e1; background: #ffffff; color: #334155; font-weight: 800; font-size: 0.66rem; cursor: pointer; font-family: inherit; }
+.fp-ing-list { margin-top: 6px; }
+.fp-ing { position: relative; display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 6px 10px; margin-bottom: 5px; border: 1px solid; border-radius: 10px; cursor: pointer; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; }
+.fp-ing-buy { background: #fff7ed; border-color: #fed7aa; }
+.fp-ing-have { background: #f0fdf4; border-color: #bbf7d0; }
+.fp-ing-input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; }
+.fp-switch { position: relative; flex-shrink: 0; width: 46px; height: 28px; border-radius: 999px; background: #16a34a; transition: background 0.15s ease; }
+.fp-switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #ffffff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); transition: transform 0.15s ease; }
+.fp-ing-input:checked + .fp-switch { background: #ea580c; }
+.fp-ing-input:checked + .fp-switch::after { transform: translateX(18px); }
+.fp-ing-input:focus-visible + .fp-switch { outline: 3px solid #93c5fd; outline-offset: 2px; }
+.fp-ing-main { display: flex; flex-direction: column; min-width: 0; }
+.fp-ing-name { font-size: 0.86rem; font-weight: 800; color: #1e293b; }
+.fp-ing-state { font-size: 0.7rem; font-weight: 700; color: #64748b; }
+.fp-ing-buy .fp-ing-state { color: #c2410c; }
+.fp-ing-have .fp-ing-state { color: #15803d; }
+.fp-add-btn { width: 100%; margin-top: 10px; min-height: 46px; padding: 10px; border-radius: 10px; border: none; background: #16a34a; color: #ffffff; font-weight: 800; font-size: 0.86rem; cursor: pointer; font-family: inherit; transition: background 0.15s ease; }
+.fp-add-btn-done { background: #bbf7d0; color: #166534; cursor: default; }
+.fp-add-btn-off { background: #e2e8f0; color: #64748b; cursor: default; }
+.fp-add-btn:disabled { cursor: default; }
+
+/* Lisukkeet */
+.fp-sides { margin-top: 12px; padding-top: 10px; border-top: 1px dashed #cbd5e1; }
+.fp-sides-head { font-size: 0.82rem; font-weight: 800; color: #166534; }
+.fp-sides-head span { font-size: 0.68rem; font-weight: 700; color: #64748b; }
+.fp-side-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.fp-side-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 6px 12px; border-radius: 999px; border: 1.5px solid #cbd5e1; background: #ffffff; color: #334155; font-family: inherit; cursor: pointer; text-align: left; -webkit-tap-highlight-color: transparent; transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease; }
+.fp-side-mark { flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%; background: #e2e8f0; color: #475569; font-size: 0.8rem; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+.fp-side-name { font-size: 0.8rem; font-weight: 800; }
+.fp-side-count { font-size: 0.64rem; font-weight: 700; color: #94a3b8; white-space: nowrap; }
+.fp-side-on { background: #16a34a; border-color: #16a34a; color: #ffffff; }
+.fp-side-on .fp-side-mark { background: #ffffff; color: #16a34a; }
+.fp-side-on .fp-side-count { color: #dcfce7; }
+.fp-side-group { margin-top: 10px; padding-left: 8px; border-left: 4px solid #86efac; }
+.fp-side-title { font-size: 0.78rem; font-weight: 800; color: #166534; margin-bottom: 5px; }
+
+/* Tavoitevalmistusaika */
+.fp-time { margin-top: 14px; }
+.fp-time-label { font-size: 0.76rem; font-weight: 800; color: #64748b; }
+.fp-time-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.fp-time-chip { min-height: 40px; padding: 7px 14px; border-radius: 999px; border: 1.5px solid #cbd5e1; background: #ffffff; color: #475569; font-weight: 800; font-size: 0.8rem; cursor: pointer; font-family: inherit; -webkit-tap-highlight-color: transparent; transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease; }
+.fp-time-on { background: #16a34a; border-color: #16a34a; color: #ffffff; }
+.fp-time-hint { font-size: 0.7rem; color: #64748b; margin-top: 5px; line-height: 1.4; }
+.fp-time-badge { background: #e0f2fe; color: #075985; font-size: 0.68rem; font-weight: 800; padding: 2px 8px; border-radius: 999px; }

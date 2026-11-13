@@ -476,6 +476,13 @@ function categorizeProductName(rawName) {
   if (fromCatalog) return fromCatalog;
   const n = (rawName || "").toLowerCase();
   const has = (...words) => words.some(w => n.includes(w));
+  // Aasialaiset ainekset ensin: "kalakastike" ei ole kalaa, "riisipaperi" ei ole paperia, "nuudeli" ei ole pastaa
+  if (has("riisipaperi", "kevätrullalevy", "nuudeli", "vermiselli", "kalakastike", "soijakastike", "hoisin", "osterikastike", "sriracha", "sambal", "riisiviinietikka", "teriyaki", "currytahna", "curry-tahna", "kookosmaito")) return "Aasia / Texmex";
+  if (has("tähtianis", "kardemumma", "kaneli", "korianterinsiemen")) return "Kuivat";
+  if (has("tofu", "tempeh")) return "Vegaaniset";
+  if (has("limetti") || (has("lime") && !has("mehu", "limu"))) return "Hedelmät";
+  if (has("daikon", "retiisi")) return "Juurekset";
+  if (has("korianteri", "minttu", "basilika", "vihersipuli", "kevätsipuli", "idut", "inkivääri", "sitruunaruoho")) return "Hevi";
   if (has("kananmun", "munat")) return "Maitotuotteet";
   if (has("olut", "kalja", "koff", "karhu", "siideri", "lonkero", "mehu", "öljy", "säilyke", "purkki", "limu", "vissy")) return "Kuivat (mutta märät)";
   if (has("sips", "suklaa", "karkki", "keksi", "naks")) return "Herkut";
@@ -486,7 +493,7 @@ function categorizeProductName(rawName) {
   if (has("kurkku", "tomaatti", "salaatti", "sipuli", "paprika", "chili", "sieni", "kaali")) return "Hevi";
   if (has("peruna", "porkkana", "juures", "punajuuri", "lanttu")) return "Juurekset";
   if (has("banaani", "omena", "appelsiini", "avokado", "päärynä", "sitruuna", "meloni", "marja")) return "Hedelmät";
-  if (has("jauheliha", "kana", "lohi", "kala", "pihvi", "liha", "possu", "nauta")) return "Liha";
+  if (has("jauheliha", "kana", "lohi", "kala", "pihvi", "liha", "possu", "nauta", "naudan", "broileri", "paisti", "ulkofile", "sisäfile", "katkarap", "katkarav", "ravut", "äyriäi")) return "Liha";
   if (has("leipä", "ruis", "paahto", "sämpylä", "patonki")) return "Leivät";
   if (has("jauho", "sokeri", "hiiva")) return "Jauhot";
   if (has("pasta", "riisi", "kahvi", "tee", "mauste", "muro", "puuro")) return "Kuivat";
@@ -655,6 +662,7 @@ window.navigate = async function(view, storeKey = "") {
   currentView = view;
   activeStoreKey = storeKey;
   routeEdit = null;   // reitin muokkaus päättyy aina näkymää vaihdettaessa
+  if (typeof audioMode !== "undefined" && audioMode) stopAudioMode(true);   // Ääniohjaus (views.js) päättyy näkymää vaihdettaessa
 
   if (view === "home" || view === "soffa") {
     let needsSave = false;
@@ -1182,7 +1190,8 @@ let foodPlan = {
   image: null,          // { file, previewUrl } – pakataan vasta haun yhteydessä
   diners: 4,
   cookTwice: false,
-  cuisines: ["Aasialainen"],
+  cuisines: [],         // valitut keittiöt (valinnainen)
+  prepTime: null,       // tavoitevalmistusaika: null | "20min" | "30min" | "45min" | "60min" | "over60min"
   diet: "all",          // ruokavalio: "all" | "vege" (kaikki kasvisruokaa) | "mixed" (yksi kasvissyöjä, vege-vinkit)
   recipes: [],
   detected: [],         // kuvasta tunnistetut raaka-aineet
@@ -1191,7 +1200,10 @@ let foodPlan = {
   loading: false,
   stage: null,          // "compress" | "identify" | "recipes"
   error: null,
-  addedRecipes: {},     // reseptin indeksi -> true kun ainekset lisätty listalle
+  addedRecipes: {},     // (vanha) reseptin indeksi -> true kun ainekset lisätty listalle
+  ingChoice: {},        // käyttäjän valinnat aineskohtaisesti: "resepti|aines" -> true = löytyy kotoa, false = ostetaan
+  addConfirm: {},       // "source-idx" -> true hetken aikaa, kun ainekset on lisätty (napin vahvistusteksti)
+  sideChoice: {},       // valitut lisukkeet: "resepti|side|lisuke" -> true
   tab: "search",        // "search" | "week" | "favorites"
   loadingKind: null,    // "search" | "week" – kumpi haku on käynnissä
   weekError: null,      // viikon automaattiehdotuksen virhe
@@ -1230,7 +1242,7 @@ window.handleFoodPlanImage = function(input) {
   foodPlan.recipes = [];
   foodPlan.detected = [];
   foodPlan.error = null;
-  foodPlan.addedRecipes = {};
+  foodPlan.addedRecipes = {}; foodPlan.ingChoice = {}; foodPlan.addConfirm = {}; foodPlan.sideChoice = {};
   input.value = ""; // sama kuva voidaan valita uudelleen
   render();
 };
@@ -1290,7 +1302,7 @@ async function processSpokenIngredients(text) {
     showToast(`⚠️ ${e?.message || "Tekoäly ei vastannut"} – lisättiin puhe sellaisenaan (${added} kpl)`, "error");
   } finally {
     foodPlan.voiceLoading = false;
-    if (added > 0) { foodPlan.recipes = []; foodPlan.addedRecipes = {}; }
+    if (added > 0) { foodPlan.recipes = []; foodPlan.addedRecipes = {}; foodPlan.ingChoice = {}; foodPlan.addConfirm = {}; foodPlan.sideChoice = {}; }
     render();
   }
 }
@@ -1342,7 +1354,7 @@ window.searchFoodPlanRecipes = async function() {
   foodPlan.recipes = [];
   foodPlan.detected = [];
   foodPlan.error = null;
-  foodPlan.addedRecipes = {};
+  foodPlan.addedRecipes = {}; foodPlan.ingChoice = {}; foodPlan.addConfirm = {}; foodPlan.sideChoice = {};
 
   try {
     if (foodPlan.image) {
@@ -1362,6 +1374,7 @@ window.searchFoodPlanRecipes = async function() {
     const recRes = await postApi(RECIPE_API_URL, {
       step: "recipes",
       diet: foodPlan.diet,
+      max_prep_time: foodPlan.prepTime || undefined,
       ingredients: allIngredients(),
       diners: foodPlan.diners,
       cook_twice: foodPlan.cookTwice,
@@ -1388,8 +1401,16 @@ window.searchFoodPlanRecipes = async function() {
 // ---------- Viikon automaattiehdotus ----------
 // Täyttää valitun viikon TYHJÄT päivät tekoälyllä: jääkaappikuva/puhe (jos annettu), makumaailma, ruokailijat ja tarjoukset.
 // opts.mix = true: jokaiselle päivälle eri keittiö (valituista keittiöistä, tai maailman keittiöistä jos valittu alle 2).
-const STYLE_CUISINES = ["Aasialainen", "Pasta", "Wok", "Nopea", "Klassikko"];
-const WORLD_CUISINES = ["Italialainen", "Kreikkalainen", "Thai", "Intialainen", "Singaporelainen", "Amerikkalainen",
+// Tavoitevalmistusaika (esivalmistelu + kypsennys); arvo lähetetään palvelimelle kenttänä max_prep_time
+const PREP_TIME_OPTIONS = [
+  { v: "20min", label: "20 min" }, { v: "30min", label: "30 min" }, { v: "45min", label: "45 min" },
+  { v: "60min", label: "60 min" }, { v: "over60min", label: "Yli 60 min" }
+];
+window.setPrepTime = function(v) {
+  foodPlan.prepTime = foodPlan.prepTime === v || !PREP_TIME_OPTIONS.some(o => o.v === v) ? null : v;   // uusi napautus poistaa valinnan
+  render();
+};
+const WORLD_CUISINES = ["Italialainen", "Kreikkalainen", "Thai", "Vietnamilainen", "Intialainen", "Singaporelainen", "Amerikkalainen",
   "Meksikolainen", "Japanilainen", "Kiinalainen", "Korealainen", "Ranskalainen", "Espanjalainen", "Lähi-itä", "Suomalainen"];
 
 function shuffled(arr) {
@@ -1447,6 +1468,7 @@ window.autoFillWeek = async function(opts) {
     const res = await postApi(RECIPE_API_URL, {
       step: "week",
       diet: foodPlan.diet,
+      max_prep_time: foodPlan.prepTime || undefined,
       days,
       ingredients: allIngredients(),
       diners: foodPlan.diners,
@@ -1515,8 +1537,9 @@ window.clearWeekAndFields = function() {
   foodPlan.detected = [];
   foodPlan.spoken = [];
   foodPlan.recipes = [];
-  foodPlan.addedRecipes = {};
+  foodPlan.addedRecipes = {}; foodPlan.ingChoice = {}; foodPlan.addConfirm = {}; foodPlan.sideChoice = {};
   foodPlan.cuisines = [];
+  foodPlan.prepTime = null;
   foodPlan.error = null;
   foodPlan.weekError = null;
   foodPlan.weekAdded = false;
@@ -1585,6 +1608,7 @@ window.setFavoriteServings = function(idx, delta) {
   // Alkuperäiset ainekset talteen ensimmäisellä kerralla, jotta toistuva skaalaus ei kerrytä pyöristysvirhettä.
   if (!Array.isArray(f.base_ingredients)) {
     f.base_ingredients = JSON.parse(JSON.stringify(f.ingredients || []));
+    f.base_side_dishes = JSON.parse(JSON.stringify(f.side_dishes || []));
     f.base_servings = Number(f.target_servings) || 4;
   }
   const next = Math.min(24, Math.max(1, (Number(f.target_servings) || f.base_servings) + delta));
@@ -1599,6 +1623,14 @@ window.setFavoriteServings = function(idx, delta) {
       to_shopping_list: i.in_fridge ? "" : (amount ? `${i.name} (${amount})` : i.name)
     };
   });
+  // Lisukkeiden määrät skaalataan samalla kertoimella
+  f.side_dishes = (f.base_side_dishes || []).map(sd => ({
+    ...sd,
+    ingredients: (sd.ingredients || []).map(i => {
+      const amount = scaleAmount(i.amount_needed, factor);
+      return { ...i, amount_needed: amount, to_shopping_list: i.in_fridge ? "" : (amount ? `${i.name} (${amount})` : i.name) };
+    })
+  }));
   pushToCloud();
   render();
 };
@@ -1638,9 +1670,44 @@ function getRecipe(source, idx) {
   return source === "fav" ? appState.favorites[idx] : foodPlan.recipes[idx];
 }
 
+// Reseptin aineslista (vain nimelliset rivit). Indeksi on sama kuin reseptikortin kytkimissä.
+function recipeIngredients(r) {
+  return (Array.isArray(r?.ingredients) ? r.ingredients : []).filter(i => i && i.name);
+}
+
+const ingChoiceKey = (r, ing) => `${String(r?.recipe_title || "").trim().toLowerCase()}|${String(ing?.name || "").trim().toLowerCase()}`;
+
+// Aineksen tila: käyttäjän valinta, ja ellei sitä ole, tekoälyn arvio (in_fridge)
+function effectiveInFridge(r, ing) {
+  const k = ingChoiceKey(r, ing);
+  return Object.prototype.hasOwnProperty.call(foodPlan.ingChoice, k) ? !!foodPlan.ingChoice[k] : !!ing.in_fridge;
+}
+
+// ---------- Lisukkeet (side_dishes) ----------
+const recipeKeyOf = r => String(r?.recipe_title || "").trim().toLowerCase();
+const sideKeyOf = (r, sd) => `${recipeKeyOf(r)}|side|${String(sd?.title || "").trim().toLowerCase()}`;
+const sideIngKey = (r, sd, ing) => `${sideKeyOf(r, sd)}|${String(ing?.name || "").trim().toLowerCase()}`;
+
+function recipeSideDishes(r) {
+  return (Array.isArray(r?.side_dishes) ? r.side_dishes : [])
+    .filter(sd => sd && String(sd.title || "").trim() && Array.isArray(sd.ingredients));
+}
+const isSideSelected = (r, sd) => !!foodPlan.sideChoice[sideKeyOf(r, sd)];
+const selectedSideDishes = r => recipeSideDishes(r).filter(sd => isSideSelected(r, sd));
+const sideIngredients = sd => (Array.isArray(sd?.ingredients) ? sd.ingredients : []).filter(i => i && i.name);
+
+// Lisukkeen aineksen tila: käyttäjän valinta, muuten tekoälyn/palvelimen arvio (in_fridge)
+function effectiveSideInFridge(r, sd, ing) {
+  const k = sideIngKey(r, sd, ing);
+  return Object.prototype.hasOwnProperty.call(foodPlan.ingChoice, k) ? !!foodPlan.ingChoice[k] : !!ing.in_fridge;
+}
+
+// Ostettavat ainekset: pääruoka + VALITTUJEN lisukkeiden ainekset (käyttäjän valinnat huomioiden)
 function missingIngredients(r) {
-  return (Array.isArray(r?.ingredients) ? r.ingredients : [])
-    .filter(i => i && !i.in_fridge && String(i.to_shopping_list || i.name || "").trim());
+  const main = recipeIngredients(r).filter(i => !effectiveInFridge(r, i) && String(i.to_shopping_list || i.name || "").trim());
+  const sides = selectedSideDishes(r).flatMap(sd =>
+    sideIngredients(sd).filter(i => !effectiveSideInFridge(r, sd, i) && String(i.to_shopping_list || i.name || "").trim()));
+  return [...main, ...sides];
 }
 
 const sameRecipe = (a, b) => String(a?.recipe_title || "").toLowerCase() === String(b?.recipe_title || "").toLowerCase();
@@ -1654,21 +1721,9 @@ window.setFoodPlanTab = function(tab) {
   render();
 };
 
-// Lisää reseptin kaikki to_shopping_list-rivit pääkauppalapulle oikeisiin kategorioihin.
-window.addRecipeToShoppingList = async function(idx) {
-  const r = foodPlan.recipes[idx];
-  if (!r || foodPlan.addedRecipes[idx]) return;
-  const count = await addIngredientsToList(missingIngredients(r));
-  if (count > 0) {
-    foodPlan.addedRecipes[idx] = true;
-    render();
-  }
-};
-
-window.addFavoriteToShoppingList = function(idx) {
-  const r = appState.favorites[idx];
-  if (r) addIngredientsToList(missingIngredients(r));
-};
+// Vanhat nimet säilytetty: lisäävät reseptin valitut (ostettavat) ainekset kauppalapulle
+window.addRecipeToShoppingList = idx => addSelectedToShoppingList("result", idx);
+window.addFavoriteToShoppingList = idx => addSelectedToShoppingList("fav", idx);
 
 // Suosikki päälle/pois. Tallentuu Firebaseen, joten näkyy koko perheelle.
 window.toggleFavoriteRecipe = function(source, idx) {
@@ -1768,6 +1823,7 @@ window.shareRecipe = async function(source, idx) {
     `🍳 ${r.recipe_title}${r.target_servings ? ` (${r.target_servings} annosta)` : ""}`,
     r.instructions_brief ? `\n${r.instructions_brief}` : "",
     r.vege_note ? `\n🥦 Kasvissyöjälle: ${r.vege_note}` : "",
+    selectedSideDishes(r).length ? `\n🥗 Lisukkeet: ${selectedSideDishes(r).map(sd => sd.title).join(", ")}` : "",
     missing.length ? `\n🛒 Ostettavaa:\n${missing.map(i => `• ${i.to_shopping_list || i.name}`).join("\n")}` : "\n✓ Kaikki ainekset löytyvät kotoa",
     r.source_url ? `\n🔗 ${r.source_url}` : "",
     "\n– Corsia"
@@ -1775,43 +1831,58 @@ window.shareRecipe = async function(source, idx) {
   shareText(r.recipe_title, lines.join("\n"));
 };
 
-// Yhteinen lisäys kauppalapulle. Palauttaa lisättyjen rivien määrän.
-async function addIngredientsToList(missing) {
-  if (missing.length === 0) {
-    showToast("✓ Kaikki ainekset löytyvät jo jääkaapista!", "success");
-    return 0;
-  }
-
-  const added = [];
+// Yhdistää ainekset ostoslistaan (appState.items) ilman tuplia. Palauttaa { fresh, already }:
+//  fresh = uusi tai uudelleen aktivoitu rivi, already = sama tuote oli jo aktiivisena listalla (ei muutosta).
+// Sama tuote löytyy katalogista nimellä (findProduct) tai aiemmin lisätystä rivistä (sama nimi, isot/pienet kirjaimet ohitetaan).
+function mergeIngredientsIntoItems(missing) {
+  let fresh = 0, already = 0;
   missing.forEach(ing => {
     const name = String(ing.name || "").trim();
-    const line = String(ing.to_shopping_list || "").trim() || name;
+    const amount = String(ing.amount_needed || ing.amount || "").trim();
+    const line = String(ing.to_shopping_list || "").trim() || (amount ? `${name} (${amount})` : name);
     const cat = normalizeCategory(ing.cat) || categorizeProductName(name || line);
     // Katalogissa oleva tuote aktivoidaan (säilyttää kaupan järjestyksen), muuten lisätään uusi rivi.
     const existing = name ? findProduct(name) : -1;
-    if (existing >= 0) {
-      const it = appState.items[existing];
-      it.active = true;
-      it.done = false;
-      added.push(it.name);
-    } else {
+    let item = null;
+    if (existing >= 0) item = appState.items[existing];
+    else {
       const label = line.charAt(0).toUpperCase() + line.slice(1);
-      const dup = appState.items.find(i => i.name.toLowerCase() === label.toLowerCase());
-      if (dup) { dup.active = true; dup.done = false; }
-      else appState.items.push({ name: label, cat, active: true, done: false, qty: null });
-      added.push(label);
+      item = appState.items.find(i => i.name.toLowerCase() === label.toLowerCase()) || null;
+      if (!item) {
+        appState.items.push({ name: label, cat, active: true, done: false, qty: null });
+        fresh++;
+        return;
+      }
     }
+    if (item.active && !item.done) already++;
+    else { item.active = true; item.done = false; fresh++; }
   });
+  return { fresh, already };
+}
 
+// Yhteinen lisäys kauppalapulle (viikon ostokset, suosikit ym.). Palauttaa käsiteltyjen rivien määrän.
+async function addIngredientsToList(missing) {
+  const res = await addIngredientsToListDetailed(missing);
+  return res.fresh + res.already;
+}
+
+async function addIngredientsToListDetailed(missing) {
+  if (missing.length === 0) {
+    showToast("Ei lisättäviä aineksia", "info");
+    return { fresh: 0, already: 0 };
+  }
+  const res = mergeIngredientsIntoItems(missing);
   render();
   try {
-    await pushToCloud();
-    showToast(`🛒 Lisätty ${added.length} ainesta kauppalapulle`, "success");
+    await pushToCloud();   // synkronoituu perheen yhteiseen Firebase-tilaan
+    showToast(res.fresh === 0
+      ? "✓ Kaikki oli jo ostoslistalla"
+      : `🛒 Lisätty ${res.fresh} ainesta ostoslistalle${res.already ? ` (${res.already} oli jo listalla)` : ""}`, "success");
   } catch (e) {
     console.warn("Tallennus epäonnistui:", e);
     showToast("⚠️ Lisätty listalle, mutta pilvitallennus epäonnistui", "error");
   }
-  return added.length;
+  return res;
 }
 
 // ---------- Asetukset ----------

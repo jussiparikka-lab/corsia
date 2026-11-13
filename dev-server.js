@@ -20,6 +20,35 @@ const PORT = process.env.PORT || 3000;
 const PREFIX = process.env.STATIC_PREFIX || "";
 global.__calls = [];
 
+// Vietnamilaisen keittiön testireseptit (Phở, Bún chả, Bánh mì) oikeilla kauppakategorioilla
+// Tavoitevalmistusaika kehotteesta ("enintään 30 minuuttia" / "yli 60 minuuttia") -> mock-reseptien kokonaisaika
+function mockTotalMinutes(raw) {
+  const m = raw.match(/enintään (\d+) minuuttia/);
+  if (m) return Math.max(10, Number(m[1]) - 5);
+  return /saa olla yli 60 minuuttia/.test(raw) ? 80 : 35;
+}
+
+function vietnamMock(minutes = 35) {
+  const ing = (name, amount, cat) => ({ name, amount_needed: amount, in_fridge: false, to_shopping_list: `${name} (${amount})`, cat });
+  const side = (title, items) => ({ title, ingredients: items.map(([n, a, c]) => ({ name: n, amount_needed: a, cat: c })) });
+  const base = { cuisine: "Vietnamilainen", source_url: null, original_servings: 4, target_servings: 4, is_vegetarian: false, vege_note: "", total_time_minutes: minutes };
+  return [
+    { ...base, recipe_title: "Phở bò (testi)", instructions_brief: "Keitä tähtianis-inkiväärilientä, lisää nuudelit ja ohuet naudan siivut. Tarjoile yrttien, itujen ja limetin kanssa.",
+      ingredients: [ing("Naudan ulkofile", "300 g", "Liha"), ing("Riisinuudelit", "250 g", "Aasia / Texmex"), ing("Tähtianis", "3 kpl", "Kuivat"), ing("Inkivääri", "1 pala", "Hevi"),
+        ing("Korianteri", "1 nippu", "Hevi"), ing("Kevätsipuli", "3 kpl", "Hevi"), ing("Idut", "100 g", "Hevi"), ing("Limetti", "2 kpl", "Hedelmät"), ing("Kalakastike", "2 rkl", "Aasia / Texmex")],
+      side_dishes: [side("Tuorekevätrullat (gỏi cuốn)", [["Riisipaperi", "8 kpl", "Aasia / Texmex"], ["Riisivermiselli", "100 g", "Aasia / Texmex"], ["Katkaravut", "200 g", "Liha"], ["Minttu", "1 nippu", "Hevi"]]),
+        side("Pikkelöity porkkana ja retiisi", [["Porkkana", "2 kpl", "Juurekset"], ["Retiisi (daikon)", "1 kpl", "Juurekset"], ["Riisiviinietikka", "1 dl", "Aasia / Texmex"]])] },
+    { ...base, recipe_title: "Bún chả (testi)", instructions_brief: "Marinoi possunjauheliha kalakastikkeessa ja paista pihveiksi. Tarjoile riisivermisellin, yrttien ja dippikastikkeen kanssa.",
+      ingredients: [ing("Possun jauheliha", "500 g", "Liha"), ing("Riisivermiselli", "250 g", "Aasia / Texmex"), ing("Kalakastike", "3 rkl", "Aasia / Texmex"), ing("Valkosipuli", "3 kpl", "Hevi"),
+        ing("Minttu", "1 nippu", "Hevi"), ing("Jäävuorisalaatti", "1 kpl", "Hevi"), ing("Kurkku", "1 kpl", "Hevi"), ing("Limetti", "1 kpl", "Hedelmät")],
+      side_dishes: [side("Tuorekevätrullat (gỏi cuốn)", [["Riisipaperi", "8 kpl", "Aasia / Texmex"], ["Salaatti", "1 kpl", "Hevi"]])] },
+    { ...base, recipe_title: "Bánh mì (testi)", instructions_brief: "Täytä rapea patonki possulla, pikkelöidyillä kasviksilla, korianterilla ja chilillä.",
+      ingredients: [ing("Patonki", "4 kpl", "Leivät"), ing("Possun ulkofile", "400 g", "Liha"), ing("Porkkana", "2 kpl", "Juurekset"), ing("Retiisi (daikon)", "1 kpl", "Juurekset"),
+        ing("Korianteri", "1 nippu", "Hevi"), ing("Chili (pieni)", "2 kpl", "Hevi"), ing("Majoneesi", "1 dl", "Kuivat (mutta märät)"), ing("Soijakastike", "2 rkl", "Aasia / Texmex")],
+      side_dishes: [side("Raikas kurkkusalaatti", [["Kurkku", "1 kpl", "Hevi"], ["Limetti", "1 kpl", "Hedelmät"]])] }
+  ];
+}
+
 if (process.env.MOCK_GEMINI === "1") {
   const realFetch = global.fetch;
   global.fetch = async (url, opts = {}) => {
@@ -35,8 +64,12 @@ if (process.env.MOCK_GEMINI === "1") {
       text = "Tässä: " + JSON.stringify([{ cat: "🐟 Kala", name: "Testilohi", price: "9,90 €/kg", store: "Prisma Jumbo", mainCat: "Liha" }]);
     } else if (raw.includes("viikon ruokalista")) {
       const days = (raw.match(/päivälle tässä järjestyksessä: ([A-Za-z, ]+)\./) || [, "Ma"])[1].split(", ");
-      text = JSON.stringify(days.map((d, i) => ({
-        recipe_title: "Viikkoresepti " + d, cuisine: "Klassikko", source_url: null, original_servings: 4, target_servings: 4,
+      // Päiväkohtaiset keittiöt (🌍 Sekoita keittiöt): "Ma = Thai; Ti = Vietnamilainen"
+      const dayCuisine = {};
+      for (const m of raw.matchAll(/\b(Ma|Ti|Ke|To|Pe|La|Su) = ([^;."\\]+)/g)) dayCuisine[m[1]] = m[2].trim();
+      const vn = vietnamMock(mockTotalMinutes(raw));
+      text = JSON.stringify(days.map((d, i) => /vietnam/i.test(dayCuisine[d] || "") ? { ...vn[i % vn.length], recipe_title: vn[i % vn.length].recipe_title + " " + d } : ({
+        recipe_title: "Viikkoresepti " + d, cuisine: dayCuisine[d] || "Klassikko", source_url: null, original_servings: 4, target_servings: 4, total_time_minutes: mockTotalMinutes(raw),
         ingredients: [
           { name: "Naudan sisäpaisti", amount_needed: "600 g", in_fridge: false, to_shopping_list: "Naudan sisäpaisti (600 g)", cat: "Liha" },
           { name: "Kerma", amount_needed: "1 dl", in_fridge: false, to_shopping_list: "Kerma (1 dl)", cat: "Maitotuotteet" }
@@ -59,13 +92,19 @@ if (process.env.MOCK_GEMINI === "1") {
       text = JSON.stringify({ ingredients: ["Kananmunat", "Paprika", "Riisi"] });
     } else {
       const t = raw.includes("Pasta") ? "Pastacarbonara" : "Kanawok";
-      text = JSON.stringify([{
-        recipe_title: t, cuisine: "Aasialainen", source_url: "https://www.k-ruoka.fi/reseptit/" + t.toLowerCase(),
+      if (raw.includes("Vietnamilainen")) text = JSON.stringify(vietnamMock(mockTotalMinutes(raw)));
+      else text = JSON.stringify([{
+        recipe_title: t, cuisine: "Aasialainen", total_time_minutes: mockTotalMinutes(raw), source_url: "https://www.k-ruoka.fi/reseptit/" + t.toLowerCase(),
         original_servings: 4, target_servings: 8,
         ingredients: [
           { name: "Paprika", amount_needed: "2 kpl", in_fridge: true, to_shopping_list: "", cat: "Hevi" },
           { name: "Kerma", amount_needed: "2 dl", in_fridge: false, to_shopping_list: "Kerma (2 dl)", cat: "Maitotuotteet" },
           { name: "Testiaines " + t, amount_needed: "100 g", in_fridge: false, to_shopping_list: "Testiaines " + t + " (100 g)", cat: "Muut" }
+        ],
+        side_dishes: [
+          { title: "Valkosipuli-kermaperunat", ingredients: [{ name: "Peruna", amount_needed: "800 g", cat: "Juurekset" }, { name: "Kerma", amount_needed: "2 dl", cat: "Maitotuotteet" }, { name: "Valkosipuli", amount_needed: "2 kpl", cat: "Hevi" }] },
+          { title: "Raikas vihreä salaatti", ingredients: [{ name: "Jäävuorisalaatti", amount_needed: "1 kpl", cat: "Hevi" }, { name: "Kurkku", amount_needed: "1 kpl", cat: "Hevi" }] },
+          { title: "Uunijuurekset", ingredients: [{ name: "Porkkana", amount_needed: "500 g", cat: "Juurekset" }, { name: "Oliiviöljy", amount_needed: "2 rkl", cat: "Kuivat (mutta märät)" }] }
         ],
         instructions_brief: "Testiohje."
       }]);

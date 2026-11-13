@@ -276,6 +276,7 @@ function renderStore(storeKey) {
   const storeName = STORE_NAMES[storeKey] || "Kauppareitti";
   if (routeEdit && routeEdit.storeKey === storeKey) return renderRouteEditor(storeKey, storeName);
   const layout = getStoreLayout(storeKey);   // tallennettu oma reitti tai STORE_LAYOUTS-oletus
+  const audioTop = audioMode && audioMode.storeKey === storeKey ? audioQueue(storeKey)[0] : null;   // Ääniohjauksen "seuraava"
 
   const activeInStore = appState.items.filter(i => i.active && !i.done && layout.includes(i.cat));
   const doneInStore = appState.items.filter(i => i.active && i.done && layout.includes(i.cat));
@@ -307,9 +308,9 @@ function renderStore(storeKey) {
       deptActive.forEach(item => {
         const originalIdx = appState.items.indexOf(item);
         itemsHtml += `
-          <div class="store-collect-item" onclick="markItemDone(${originalIdx})">
+          <div class="store-collect-item ${audioTop === item ? "audio-top-item" : ""}" onclick="markItemDone(${originalIdx})">
             <div style="flex: 1; min-width: 0;">
-              <div style="font-size: 0.92rem; font-weight: 800; color: #0f172a;">${esc(item.name)}</div>
+              <div style="font-size: 0.92rem; font-weight: 800; color: #0f172a;">${esc(item.name)}${audioItemTag(item)}</div>
               <div style="font-size: 0.74rem; color: #64748b;">Määrä: <strong>${item.qty ? item.qty + " kpl" : "1 kpl"}</strong></div>
             </div>
             <button class="btn-mark-done">Ruksaa valmiiksi ✓</button>
@@ -330,7 +331,7 @@ function renderStore(storeKey) {
         itemsHtml += `
           <div class="store-collect-item" style="border-color: #fcd34d;" onclick="markItemDone(${originalIdx})">
             <div style="flex: 1; min-width: 0;">
-              <div style="font-size: 0.92rem; font-weight: 800; color: #0f172a;">${esc(item.name)}</div>
+              <div style="font-size: 0.92rem; font-weight: 800; color: #0f172a;">${esc(item.name)}${audioItemTag(item)}</div>
               <div style="font-size: 0.74rem; color: #64748b;">Osasto: ${esc(item.cat)} • <strong>${item.qty ? item.qty + " kpl" : "1 kpl"}</strong></div>
             </div>
             <button class="btn-mark-done">Ruksaa valmiiksi ✓</button>
@@ -366,10 +367,14 @@ function renderStore(storeKey) {
         <div>
           <div style="font-size: 0.96rem; font-weight: 800; color: #166534;">${esc(storeName)}</div>
           <div style="font-size: 0.72rem; color: #15803d;">Kerättävää jäljellä: <strong>${activeInStore.length + activeOutStore.length} tuotetta</strong></div>
-          ${layout.length > 1 ? `<button class="route-edit-btn" onclick="startRouteEdit('${storeKey}')">⚙️ Muokkaa reittiä${hasCustomLayout(storeKey) ? " · oma" : ""}</button>` : ""}
+          <div class="store-tools">
+            ${layout.length > 1 ? `<button class="route-edit-btn" onclick="startRouteEdit('${storeKey}')">⚙️ Muokkaa reittiä${hasCustomLayout(storeKey) ? " · oma" : ""}</button>` : ""}
+            ${renderAudioButton(storeKey)}
+          </div>
         </div>
         <div style="width: 70px; height: 28px;">${renderStoreLogo(storeKey)}</div>
       </div>
+      ${audioMode && audioMode.storeKey === storeKey ? renderAudioPanel(storeKey) : ""}
       <div>${itemsHtml}</div>
     </div>
   `;
@@ -435,24 +440,36 @@ function renderFoodPlanTabs() {
 
 // Yksi reseptikortti. source: "result" (hakutulos) tai "fav" (suosikki).
 function renderRecipeCard(r, idx, source, effective) {
-  const ings = Array.isArray(r.ingredients) ? r.ingredients.filter(i => i && i.name) : [];
-  const missing = ings.filter(i => !i.in_fridge);
-  const added = source === "result" && !!foodPlan.addedRecipes[idx];
+  const ings = recipeIngredients(r);
+  const buyCount = missingIngredients(r).length;                    // "Lisää kauppalapulle" -tilassa olevat
+  const key = `${source}-${idx}`;
+  const confirmed = !!foodPlan.addConfirm[key];
   const fav = isFavoriteRecipe(r);
-  const addFn = source === "fav" ? `addFavoriteToShoppingList(${idx})` : `addRecipeToShoppingList(${idx})`;
-  const ingRows = ings.map(i => {
-    const inFridge = !!i.in_fridge;
-    const deal = inFridge ? null : dealForIngredient(i.name);
+  // Aineskohtainen kytkin: päällä = ostetaan (🛒), pois = löytyy kotoa (🟢). Pohjana tekoälyn in_fridge-arvio.
+  const ingRows = ings.map((i, n) => {
+    const buy = !effectiveInFridge(r, i);
+    const deal = buy ? dealForIngredient(i.name) : null;
+    const amount = esc(i.amount_needed || i.amount || "");
+    const id = `ing-${source}-${idx}-${n}`;
     return `
-      <div style="padding: 5px 8px; border-radius: 8px; background: ${inFridge ? "#f0fdf4" : "#fff7ed"}; border: 1px solid ${inFridge ? "#bbf7d0" : "#fed7aa"}; margin-bottom: 4px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
-          <span style="font-size: 0.8rem; font-weight: 700; color: #1e293b;">${inFridge ? "✓" : "🛒"} ${esc(i.name)}</span>
-          <span style="font-size: 0.74rem; font-weight: 700; color: ${inFridge ? "#15803d" : "#c2410c"}; white-space: nowrap;">${esc(i.amount_needed || i.amount || "")}${inFridge ? " · kotona" : ""}</span>
-        </div>
-        ${deal ? `<div class="fp-deal-badge">🔥 Tarjous: ${esc(deal.name)} – ${esc(deal.price)}${deal.store ? ` · ${esc(deal.store)}` : ""}</div>` : ""}
-      </div>
-    `;
+      <label class="fp-ing ${buy ? "fp-ing-buy" : "fp-ing-have"}" for="${id}">
+        <input type="checkbox" class="fp-ing-input" id="${id}" ${buy ? "checked" : ""} onchange="toggleIngredientBuy('${source}', ${idx}, ${n})">
+        <span class="fp-switch" aria-hidden="true"></span>
+        <span class="fp-ing-main">
+          <span class="fp-ing-name">${esc(i.name)}</span>
+          <span class="fp-ing-state">${buy ? "🛒 Lisää kauppalapulle" : "🟢 Löytyy jo kotoa"}${amount ? ` · ${amount}` : ""}</span>
+        </span>
+      </label>
+      ${deal ? `<div class="fp-deal-badge" style="margin: -2px 0 6px 4px;">🔥 Tarjous: ${esc(deal.name)} – ${esc(deal.price)}${deal.store ? ` · ${esc(deal.store)}` : ""}</div>` : ""}`;
   }).join("");
+  const ingHeader = ings.length ? `
+      <div class="fp-ing-head">
+        <span>RAAKA-AINEET · kytkin = ostetaan</span>
+        <span class="fp-ing-bulk">
+          <button onclick="setAllIngredients('${source}', ${idx}, false)">🟢 Kaikki kotona</button>
+          <button onclick="setAllIngredients('${source}', ${idx}, true)">🛒 Kaikki ostoon</button>
+        </span>
+      </div>` : "";
   const servingsHtml = source === "fav" ? `
       <div class="fp-servings" id="fav-servings-${idx}">
         <span style="font-size: 0.76rem; font-weight: 800; color: #1e293b;">🍽️ Annoksia</span>
@@ -478,17 +495,20 @@ function renderRecipeCard(r, idx, source, effective) {
       <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 5px; align-items: center;">
         <span style="background: #ffedd5; color: #9a3412; font-size: 0.68rem; font-weight: 800; padding: 2px 8px; border-radius: 999px;">${esc(r.cuisine || "Resepti")}</span>
         ${r.is_vegetarian ? `<span class="fp-vege-badge">🥦 Kasvis</span>` : ""}
+        ${r.total_time_minutes ? `<span class="fp-time-badge">⏱️ ${r.total_time_minutes} min</span>` : ""}
         <span style="font-size: 0.7rem; color: #64748b; font-weight: 700;">🍽️ ${esc(String(r.target_servings || effective))} annosta${r.original_servings ? ` (alkup. ${esc(String(r.original_servings))})` : ""}</span>
         ${r.source_url ? `<a href="${esc(r.source_url)}" target="_blank" rel="noopener" style="font-size: 0.7rem; color: #0284c7; font-weight: 700;">🔗 Reseptin lähde</a>` : ""}
       </div>
       ${r.instructions_brief ? `<div style="font-size: 0.76rem; color: #475569; margin: 8px 0 2px; line-height: 1.45;">${esc(r.instructions_brief)}</div>` : ""}
       ${r.vege_note ? `<div class="fp-vege-note">🥦 <strong>Kasvissyöjälle:</strong> ${esc(r.vege_note)}</div>` : ""}
       ${servingsHtml}
-      <div style="margin-top: 8px;">${ingRows}</div>
+      ${ingHeader}
+      <div class="fp-ing-list">${ingRows}</div>
+      ${renderSideDishes(r, idx, source)}
       <div style="margin-top: 8px; font-size: 0.7rem; font-weight: 800; color: #64748b;">📅 LISÄÄ VIIKOLLE ${weekNumberOf(activeWeekKey())} (${formatWeekRange(activeWeekKey())})</div>
       <div class="fp-days">${dayChips}</div>
-      <button onclick="${addFn}" ${added || missing.length === 0 ? "disabled" : ""} style="width: 100%; margin-top: 10px; padding: 10px; border-radius: 10px; border: none; font-weight: 800; font-size: 0.84rem; cursor: ${added || missing.length === 0 ? "default" : "pointer"}; background: ${added ? "#bbf7d0" : missing.length === 0 ? "#e2e8f0" : "#16a34a"}; color: ${added || missing.length === 0 ? "#166534" : "#ffffff"};">
-        ${added ? "✓ Lisätty kauppalapulle" : missing.length === 0 ? "✓ Kaikki ainekset jo kotona" : `🛒 Lisää puuttuvat aineet kauppalapulle (${missing.length} kpl)`}
+      <button class="fp-add-btn ${confirmed ? "fp-add-btn-done" : buyCount === 0 ? "fp-add-btn-off" : ""}" id="add-btn-${source}-${idx}" onclick="addSelectedToShoppingList('${source}', ${idx})" ${confirmed || buyCount === 0 ? "disabled" : ""}>
+        ${confirmed ? "✓ Lisätty ostoslistalle!" : buyCount === 0 ? "✓ Kaikki ainekset löytyvät kotoa" : `🛒 Lisää tarvittavat ostoslistalle (${buyCount} kpl)`}
       </button>
       <button class="fp-cook-btn" onclick="openCookingMode('${source}', ${idx})">📖 Katso tarkka ohje</button>
     </div>
@@ -618,6 +638,134 @@ function weekCookBadge(r) {
 }
 
 // Viikkovalitsin: nuolet, viikkonumero + päivämäärät ja pikavalinta kuluvalle + 5 seuraavalle viikolle
+// ---------- Reseptikohtainen raaka-ainetarkistus: kytkimet ja valikoiva lisäys ostoslistalle ----------
+// Piirtää vain yhden reseptikortin uudelleen (vierityspaikka ja muut kortit säilyvät).
+function refreshRecipeCard(source, idx, focusId) {
+  const r = getRecipe(source, idx);
+  const el = document.getElementById(`recipe-${source}-${idx}`);
+  if (!r || !el) { render(); return; }
+  const tmp = document.createElement("div");
+  tmp.innerHTML = renderRecipeCard(r, idx, source, r.target_servings);
+  const fresh = tmp.firstElementChild;
+  if (!fresh) { render(); return; }
+  el.replaceWith(fresh);
+  if (focusId) { const f = document.getElementById(focusId); if (f && f.focus) f.focus({ preventScroll: true }); }
+}
+
+// Yhden aineksen tila: ostetaan <-> löytyy kotoa (vain tämä valinta; tekoälyn alkuperäinen arvio säilyy reseptissä)
+window.toggleIngredientBuy = function(source, idx, n) {
+  const r = getRecipe(source, idx);
+  const ing = r && recipeIngredients(r)[n];
+  if (!ing) return;
+  foodPlan.ingChoice[ingChoiceKey(r, ing)] = !effectiveInFridge(r, ing);   // arvo = "löytyy kotoa"; käännetään nykyinen tila
+  delete foodPlan.addConfirm[`${source}-${idx}`];                                         // uusi valinta -> vahvistus pois
+  refreshRecipeCard(source, idx, `ing-${source}-${idx}-${n}`);
+};
+
+// Kaikki ainekset kerralla: buy = true -> ostetaan, false -> kotona
+window.setAllIngredients = function(source, idx, buy) {
+  const r = getRecipe(source, idx);
+  if (!r) return;
+  recipeIngredients(r).forEach(i => { foodPlan.ingChoice[ingChoiceKey(r, i)] = !buy; });
+  selectedSideDishes(r).forEach(sd => sideIngredients(sd).forEach(i => { foodPlan.ingChoice[sideIngKey(r, sd, i)] = !buy; }));
+  delete foodPlan.addConfirm[`${source}-${idx}`];
+  refreshRecipeCard(source, idx);
+};
+
+// 🛒 Lisää vain ostettaviksi valitut ainekset ostoslistalle (kategorioittain, ilman tuplia, synkronoituu pilveen)
+window.addSelectedToShoppingList = async function(source, idx) {
+  const r = getRecipe(source, idx);
+  if (!r) return;
+  const key = `${source}-${idx}`;
+  if (foodPlan.addConfirm[key]) return;                  // vahvistus näkyy: tuplapainallus ei tee mitään
+  const selected = missingIngredients(r);
+  if (selected.length === 0) { showToast("Valitse ainakin yksi aines kauppalapulle", "info"); return; }
+  const btn = document.getElementById(`add-btn-${source}-${idx}`);
+  if (btn) btn.disabled = true;                           // estää kaksoisnapautuksen kesken tallennuksen
+  const res = await addIngredientsToListDetailed(selected);
+  foodPlan.addConfirm[key] = true;
+  refreshRecipeCard(source, idx);                         // nappi: "✓ Lisätty ostoslistalle!"
+  setTimeout(() => { delete foodPlan.addConfirm[key]; refreshRecipeCard(source, idx); }, 2500);
+  return res;
+};
+
+// 🥗 Ehdotetut lisukkeet: valittavat chipit; valitun lisukkeen ainekset tulevat aineslistaan samoilla kytkimillä
+function renderSideDishes(r, idx, source) {
+  const sides = recipeSideDishes(r);
+  if (sides.length === 0) return "";
+  const chips = sides.map((sd, sn) => {
+    const on = isSideSelected(r, sd);
+    return `<button class="fp-side-chip ${on ? "fp-side-on" : ""}" aria-pressed="${on}" onclick="toggleSideDish('${source}', ${idx}, ${sn})">
+      <span class="fp-side-mark">${on ? "✓" : "+"}</span>
+      <span class="fp-side-name">${esc(sd.title)}</span>
+      <span class="fp-side-count">${sideIngredients(sd).length} ainesta</span>
+    </button>`;
+  }).join("");
+  const groups = sides.map((sd, sn) => {
+    if (!isSideSelected(r, sd)) return "";
+    const rows = sideIngredients(sd).map((i, n) => {
+      const buy = !effectiveSideInFridge(r, sd, i);
+      const deal = buy ? dealForIngredient(i.name) : null;
+      const amount = esc(i.amount_needed || i.amount || "");
+      const id = `ing-${source}-${idx}-s${sn}-${n}`;
+      return `
+        <label class="fp-ing ${buy ? "fp-ing-buy" : "fp-ing-have"}" for="${id}">
+          <input type="checkbox" class="fp-ing-input" id="${id}" ${buy ? "checked" : ""} onchange="toggleSideIngredientBuy('${source}', ${idx}, ${sn}, ${n})">
+          <span class="fp-switch" aria-hidden="true"></span>
+          <span class="fp-ing-main">
+            <span class="fp-ing-name">${esc(i.name)}</span>
+            <span class="fp-ing-state">${buy ? "🛒 Lisää kauppalapulle" : "🟢 Löytyy jo kotoa"}${amount ? ` · ${amount}` : ""}</span>
+          </span>
+        </label>
+        ${deal ? `<div class="fp-deal-badge" style="margin: -2px 0 6px 4px;">🔥 Tarjous: ${esc(deal.name)} – ${esc(deal.price)}${deal.store ? ` · ${esc(deal.store)}` : ""}</div>` : ""}`;
+    }).join("");
+    return `<div class="fp-side-group"><div class="fp-side-title">🥗 ${esc(sd.title)}</div>${rows}</div>`;
+  }).join("");
+  return `
+    <div class="fp-sides" id="sides-${source}-${idx}">
+      <div class="fp-sides-head">🥗 Ehdotetut lisukkeet <span>· napauta valitaksesi</span></div>
+      <div class="fp-side-chips">${chips}</div>
+      ${groups}
+    </div>`;
+}
+
+window.toggleSideDish = function(source, idx, sn) {
+  const r = getRecipe(source, idx);
+  const sd = r && recipeSideDishes(r)[sn];
+  if (!sd) return;
+  const key = sideKeyOf(r, sd);
+  if (foodPlan.sideChoice[key]) delete foodPlan.sideChoice[key]; else foodPlan.sideChoice[key] = true;
+  delete foodPlan.addConfirm[`${source}-${idx}`];
+  refreshRecipeCard(source, idx);
+};
+
+window.toggleSideIngredientBuy = function(source, idx, sn, n) {
+  const r = getRecipe(source, idx);
+  const sd = r && recipeSideDishes(r)[sn];
+  const ing = sd && sideIngredients(sd)[n];
+  if (!ing) return;
+  foodPlan.ingChoice[sideIngKey(r, sd, ing)] = !effectiveSideInFridge(r, sd, ing);   // arvo = "löytyy kotoa"
+  delete foodPlan.addConfirm[`${source}-${idx}`];
+  refreshRecipeCard(source, idx, `ing-${source}-${idx}-s${sn}-${n}`);
+};
+
+// ⏱️ Tavoitevalmistusaika: yksi chip kerrallaan, uusi napautus poistaa valinnan (sama hakunäkymässä ja viikkonäkymässä)
+function renderPrepTimeSelector() {
+  const chips = PREP_TIME_OPTIONS.map(o => {
+    const on = foodPlan.prepTime === o.v;
+    return `<button class="fp-time-chip ${on ? "fp-time-on" : ""}" aria-pressed="${on}" onclick="setPrepTime('${o.v}')">${o.label}</button>`;
+  }).join("");
+  const hint = foodPlan.prepTime
+    ? (foodPlan.prepTime === "over60min" ? "Reseptit saavat kestää yli tunnin (rauhallinen, työläämpi ruoka)." : "Reseptien kokonaisaika (valmistelu + kypsennys) pysyy tavoitteessa.")
+    : "Ei rajaa: aikaa ei ole valittu.";
+  return `
+    <div class="fp-time" id="fp-time-${foodPlan.tab}">
+      <div class="fp-time-label">⏱️ TAVOITEVALMISTUSAIKA</div>
+      <div class="fp-time-chips" role="group" aria-label="Tavoitevalmistusaika">${chips}</div>
+      <div class="fp-time-hint">${hint}</div>
+    </div>`;
+}
+
 // Ruokavalinta (sama hakunäkymässä ja viikkonäkymässä): kaikki / vain kasvis / yksi kasvissyöjä
 function renderDietSelector() {
   const opts = [["all", "🍖 Kaikki ruoat"], ["vege", "🥦 Vain kasvisruokaa"], ["mixed", "👥 Yksi kasvissyöjä"]];
@@ -668,7 +816,7 @@ function renderWeekPlan() {
         <div class="fp-week-day">${d}<small>${dt.getUTCDate()}.${dt.getUTCMonth() + 1}.</small></div>
         <div style="flex: 1; min-width: 0;">
           ${r ? `<div style="font-size: 0.86rem; font-weight: 800; color: #0f172a;">${esc(r.recipe_title)}</div>
-                 <div style="font-size: 0.7rem; color: #64748b; font-weight: 700;">${esc(r.cuisine || "")} · ${missingIngredients(r).length} ostettavaa${r.is_vegetarian ? " · 🥦 Kasvis" : ""}${weekCookBadge(r)}</div>
+                 <div style="font-size: 0.7rem; color: #64748b; font-weight: 700;">${esc(r.cuisine || "")} · ${missingIngredients(r).length} ostettavaa${r.is_vegetarian ? " · 🥦 Kasvis" : ""}${r.total_time_minutes ? ` · ⏱️ ${r.total_time_minutes} min` : ""}${weekCookBadge(r)}</div>
                  ${r.vege_note && !r.is_vegetarian ? `<div class="fp-vege-note fp-vege-note-sm">🥦 ${esc(r.vege_note)}</div>` : ""}`
               : `<div style="font-size: 0.8rem; color: #94a3b8; font-weight: 700;">Ei suunniteltu</div>`}
         </div>
@@ -690,13 +838,14 @@ function renderWeekPlan() {
         return `<div class="fp-step fp-step-${st}" id="week-step-${k}"><span class="fp-step-icon">${icon}</span><span>${WEEK_STAGES[k]}</span></div>`;
       }).join("")}
     </div>` : "";
-  const settingsLine = `${foodPlan.diners} ruokailijaa${foodPlan.cookTwice ? " × 2" : ""} · ${foodPlan.cuisines.length ? esc(foodPlan.cuisines.join(", ")) : "kaikki tyylit"}${foodPlan.image ? " · jääkaappikuva mukana" : ""}${foodPlan.diet === "vege" ? " · 🥦 kasvisruoka" : foodPlan.diet === "mixed" ? " · 👥 vege-vinkit" : ""}`;
+  const settingsLine = `${foodPlan.diners} ruokailijaa${foodPlan.cookTwice ? " × 2" : ""} · ${foodPlan.cuisines.length ? esc(foodPlan.cuisines.join(", ")) : "kaikki keittiöt"}${foodPlan.prepTime ? ` · ⏱️ ${esc((PREP_TIME_OPTIONS.find(o => o.v === foodPlan.prepTime) || {}).label || "")}` : ""}${foodPlan.image ? " · jääkaappikuva mukana" : ""}${foodPlan.diet === "vege" ? " · 🥦 kasvisruoka" : foodPlan.diet === "mixed" ? " · 👥 vege-vinkit" : ""}`;
   return `
     ${renderWeekNav()}
     <div class="recipe-card" style="background: #fffbeb; border-color: #fde68a;">
       <div style="font-size: 0.9rem; font-weight: 800; color: #0f172a;">✨ Viikon ${weekNumberOf(wkKey)} automaattiehdotus</div>
       <div style="font-size: 0.74rem; color: #78350f; margin: 4px 0 8px;">${settingsLine}. Muuta muita asetuksia Haku-välilehdellä. Täyttää vain tyhjät päivät.</div>
       ${renderDietSelector()}
+      ${renderPrepTimeSelector()}
       ${foodPlan.weekError && !weekLoading ? `<div id="week-error" style="font-size: 0.76rem; color: #991b1b; font-weight: 700; margin-bottom: 8px;">⚠️ ${esc(foodPlan.weekError)}</div>` : ""}
       <button id="btn-autofill-week" onclick="autoFillWeek()" ${weekLoading || emptyDays === 0 ? "disabled" : ""} style="width: 100%; padding: 11px; border-radius: 10px; border: none; background: ${emptyDays === 0 ? "#e2e8f0" : "#ea580c"}; color: ${emptyDays === 0 ? "#64748b" : "#ffffff"}; font-weight: 800; font-size: 0.86rem; cursor: ${weekLoading || emptyDays === 0 ? "default" : "pointer"};">
         ${weekLoading ? `⏳ ${WEEK_STAGES[foodPlan.stage] || "Suunnitellaan..."}` : emptyDays === 0 ? "✓ Viikko on täynnä" : `✨ Täytä ${emptyDays} tyhjää päivää tekoälyllä`}
@@ -745,14 +894,12 @@ function renderFavorites() {
 function renderFoodPlan() {
   const fp = foodPlan;
   const effective = fp.diners * (fp.cookTwice ? 2 : 1);
-  const styleOptions = STYLE_CUISINES;
   const worldOptions = WORLD_CUISINES;
 
   const chip = c => {
     const on = fp.cuisines.includes(c);
     return `<button onclick="toggleFoodPlanCuisine('${c}')" style="padding: 7px 12px; border-radius: 999px; border: 1.5px solid ${on ? "#16a34a" : "#cbd5e1"}; background: ${on ? "#f0fdf4" : "#ffffff"}; color: ${on ? "#15803d" : "#475569"}; font-weight: 700; font-size: 0.78rem; cursor: pointer;">${on ? "✓ " : ""}${c}</button>`;
   };
-  const chipsHtml = styleOptions.map(chip).join("");
   const worldChipsHtml = worldOptions.map(chip).join("");
 
   // Puhutut raaka-aineet (poistettavissa yksitellen)
@@ -837,9 +984,8 @@ function renderFoodPlan() {
         ${fp.cookTwice ? `<div style="margin-top: 8px; background: #fff7ed; border: 1px solid #fed7aa; border-radius: 9px; padding: 7px 10px; font-size: 0.76rem; font-weight: 800; color: #c2410c;">🍽️ Skaalataan ${effective} hengelle</div>` : ""}
 
         ${renderDietSelector()}
-        <div style="margin-top: 14px; font-size: 0.76rem; font-weight: 800; color: #64748b; text-transform: uppercase;">Makumaailma (valinnainen)</div>
-        <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px;">${chipsHtml}</div>
-        <div style="margin-top: 10px; font-size: 0.72rem; font-weight: 800; color: #94a3b8; text-transform: uppercase;">Keittiöt maailmalta</div>
+        ${renderPrepTimeSelector()}
+        <div style="margin-top: 14px; font-size: 0.76rem; font-weight: 800; color: #64748b; text-transform: uppercase;">Keittiöt maailmalta (valinnainen)</div>
         <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px;">${worldChipsHtml}</div>
 
         <button id="btn-find-recipes" onclick="searchFoodPlanRecipes()" ${fp.loading ? "disabled" : ""} style="width: 100%; margin-top: 14px; padding: 12px; border-radius: 10px; border: none; background: #ea580c; color: #ffffff; font-weight: 800; font-size: 0.9rem; cursor: pointer;">
@@ -881,4 +1027,322 @@ function render() {
     if (titleSlot) titleSlot.innerHTML = `<span>🍳 Ruokasuunnittelija</span>`;
     root.innerHTML = renderFoodPlan();
   }
+}
+
+// =====================================================================================================
+// 🎧 Ääniohjaus (Audio Companion) kauppanäkymässä
+// - Lukee reitin mukaiset seuraavat 3 tuotetta ääneen (Web Speech, fi-FI).
+// - Kuulokkeiden painike (Media Session: play/pause) tai 🎤-painike käynnistää lyhyen puheentunnistuksen:
+//     "otettu" | "kärryssä" | "valmis" | "ok"  -> reitin päällimmäinen tuote kerätyksi + piippaus + seuraavat 3 ääneen
+//     "loppu" | "ei löydy" | "ohita"            -> tuote siirtyy jonon hännille + seuraavat 3 ääneen
+// - Tunnistus sulkeutuu heti vastauksen jälkeen (ei jää päälle). Virheen (no-speech, audio-capture, ...) jälkeen
+//   seuraava painallus lukee vain seuraavat tuotteet.
+// Media Session toimii vain, kun sivulla soi ääntä: siksi taustalla pyörii äänetön silmukka (käynnistetään napautuksesta).
+// =====================================================================================================
+let audioMode = null;  // { storeKey, listening, rec, recTimer, skipped: [avain], fallbackNext, recUnavailable, status, el, wavUrl }
+const AUDIO_DONE_WORDS = ["otettu", "kärryssä", "valmis", "ok", "okei"];
+const AUDIO_SKIP_PHRASES = ["loppu", "ei löydy", "ohita"];
+const AUDIO_LISTEN_MS = 7000;   // kuuntelun enimmäisaika
+const AUDIO_READ_COUNT = 3;     // montako tuotetta luetaan kerralla
+let audioLastPress = 0;
+
+const audioItemKey = it => `${it.cat}|${it.name}`;
+
+// Keräysjono reitin järjestyksessä: kategoriat getStoreLayout()-järjestyksessä, sitten muut osastot;
+// ohitetut tuotteet ovat jonon hännillä (ohitusjärjestyksessä). Ruksatut eivät ole mukana.
+function audioQueue(storeKey) {
+  const layout = getStoreLayout(storeKey);
+  const active = appState.items.filter(i => i.active && !i.done);
+  const ordered = [...layout.flatMap(dept => active.filter(i => i.cat === dept)), ...active.filter(i => !layout.includes(i.cat))];
+  const skipped = audioMode ? audioMode.skipped : [];
+  const rest = ordered.filter(i => !skipped.includes(audioItemKey(i)));
+  const tail = skipped.map(k => ordered.find(i => audioItemKey(i) === k)).filter(Boolean);
+  return [...rest, ...tail];
+}
+
+// "MAITO: Laktoositon kevyt (sininen)" -> "MAITO, Laktoositon kevyt sininen"; määrä mukaan, jos > 1
+function audioItemSpeech(item) {
+  const name = String(item.name).replace(/:\s*/, ", ").replace(/[()]/g, " ").replace(/\s+/g, " ").trim();
+  return item.qty > 1 ? `${name}, ${item.qty} kappaletta` : name;
+}
+
+function audioSpeak(text) {
+  if (!cookSpeechSupported()) return;
+  try {
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = "fi-FI";
+    const { voice } = pickFinnishVoice();
+    if (voice) u.voice = voice;
+    window.speechSynthesis.speak(u);
+  } catch (e) { console.warn("Ääniohjaus: puhe epäonnistui", e); }
+}
+
+// Lyhyt äänimerkki (WebAudio); AudioContext avataan napautuksella (unlockCookAudio)
+function audioBeep(kind) {
+  try {
+    unlockCookAudio();
+    const ctx = cookAudioCtx;
+    if (!ctx) return;
+    const seq = kind === "ok" ? [[880, 0, 0.09], [1175, 0.1, 0.13]]
+      : kind === "skip" ? [[523, 0, 0.1], [392, 0.12, 0.13]]
+      : [[220, 0, 0.22]];
+    seq.forEach(([freq, at, dur]) => {
+      const osc = ctx.createOscillator(), gain = ctx.createGain(), t0 = ctx.currentTime + at;
+      osc.type = "sine"; osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, t0);
+      gain.gain.exponentialRampToValueAtTime(0.28, t0 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(t0); osc.stop(t0 + dur + 0.02);
+    });
+  } catch (e) {}
+}
+
+function audioSetStatus(text) {
+  if (!audioMode) return;
+  audioMode.status = text;
+  const el = document.getElementById("audio-status");
+  if (el) el.textContent = text;
+}
+
+// Lukee reitin seuraavat 3 tuotetta
+function audioAnnounce(lead) {
+  if (!audioMode) return;
+  const next = audioQueue(audioMode.storeKey).slice(0, AUDIO_READ_COUNT);
+  if (next.length === 0) {
+    audioSpeak(`${lead || ""}Kaikki tuotteet on kerätty.`);
+    audioSetStatus("✅ Kaikki tuotteet kerätty");
+    return;
+  }
+  audioSpeak(`${lead || ""}Seuraavaksi: ${next.map(audioItemSpeech).join(". ")}.`);
+  audioSetStatus(`🔊 ${next.map(i => i.name).join(" · ")}`);
+}
+window.audioReadNext = function() { if (audioMode) { audioStopListening(); audioAnnounce(""); } };
+
+// ----- Puheen luokittelu -----
+function audioHasPhrase(text, phrase) {            // \b ei toimi ä/ö-kirjaimilla, joten käytetään välilyöntirajoja
+  return (" " + text + " ").includes(" " + phrase + " ");
+}
+function audioClassify(alternatives) {
+  const norm = alternatives.map(t => String(t).toLowerCase().replace(/[.,!?;:"']/g, " ").replace(/\s+/g, " ").trim()).filter(Boolean);
+  if (norm.some(t => AUDIO_SKIP_PHRASES.some(p => audioHasPhrase(t, p)))) return "skip";   // ohitus ensin ("ei löydy" ennen "ok")
+  if (norm.some(t => AUDIO_DONE_WORDS.some(w => audioHasPhrase(t, w)))) return "done";
+  return null;
+}
+
+function audioDone() {
+  const m = audioMode;
+  const item = audioQueue(m.storeKey)[0];
+  if (!item) { audioBeep("error"); audioAnnounce(""); return; }
+  audioBeep("ok");
+  markItemDone(appState.items.indexOf(item));   // sama kuin napautus: tallennus, kumoa-palkki ja uudelleenpiirto
+  audioSetStatus(`✓ Kerätty: ${item.name}`);
+  setTimeout(() => audioAnnounce(""), 280);     // piippaus ehtii soida ennen puhetta
+}
+
+function audioSkip() {
+  const m = audioMode;
+  const item = audioQueue(m.storeKey)[0];
+  if (!item) { audioBeep("error"); audioAnnounce(""); return; }
+  const key = audioItemKey(item);
+  m.skipped = m.skipped.filter(k => k !== key);
+  m.skipped.push(key);                           // jonon hännille
+  audioBeep("skip");
+  audioSetStatus(`⏭ Ohitettu: ${item.name}`);
+  if (currentView === "store") render();         // päivittää ohitusmerkinnän ja "seuraava"-korostuksen
+  setTimeout(() => audioAnnounce(""), 280);
+}
+
+function audioHandleHeard(alternatives) {
+  const kind = audioClassify(alternatives);
+  if (kind === "done") audioDone();
+  else if (kind === "skip") audioSkip();
+  else {
+    audioBeep("error");
+    audioSetStatus(`❓ Kuulin: "${alternatives[0] || ""}"`);
+    audioSpeak("En ymmärtänyt.");
+  }
+}
+
+// ----- Puheentunnistus (fi-FI), lyhyt ja itsestään sulkeutuva -----
+function audioStopListening() {
+  const m = audioMode;
+  if (!m) return;
+  if (m.recTimer) { clearTimeout(m.recTimer); m.recTimer = null; }
+  const rec = m.rec;
+  m.rec = null;
+  m.listening = false;
+  if (rec) {
+    rec.onresult = rec.onerror = rec.onend = null;
+    try { rec.abort(); } catch (e) { try { rec.stop(); } catch (e2) {} }
+  }
+}
+
+// Virhe: seuraava painallus lukee vain seuraavat tuotteet (pysyvän virheen jälkeen aina)
+function audioRecFailed(code) {
+  const m = audioMode;
+  if (!m) return;
+  if (code === "aborted") { audioSetStatus("🎧 Valmiina"); return; }
+  const fatal = ["not-allowed", "service-not-allowed", "language-not-supported"].includes(code);
+  if (fatal) m.recUnavailable = true; else m.fallbackNext = true;
+  audioBeep("error");
+  audioSetStatus(fatal ? "⚠️ Mikrofoni ei käytössä – painallus lukee seuraavat tuotteet"
+    : code === "no-speech" ? "🔇 En kuullut mitään – seuraava painallus lukee seuraavat tuotteet"
+    : "⚠️ Tunnistus epäonnistui – seuraava painallus lukee seuraavat tuotteet");
+}
+
+function audioStartListening(SR) {
+  const m = audioMode;
+  let rec;
+  try { rec = new SR(); } catch (e) { audioRecFailed("start-failed"); return; }
+  rec.lang = "fi-FI";
+  rec.continuous = false;        // yksi lausahdus
+  rec.interimResults = false;
+  rec.maxAlternatives = 3;
+  m.rec = rec;
+  m.listening = true;
+  audioSetStatus("🎤 Kuuntelen… sano “otettu” tai “ohita”");
+  let settled = false;
+  const settle = () => {         // sulkee tunnistuksen heti (mikrofoni vapautuu, akku säästyy)
+    if (settled) return false;
+    settled = true;
+    audioStopListening();
+    return true;
+  };
+  rec.onresult = e => {
+    const alts = [];
+    try { for (const res of e.results) for (let i = 0; i < res.length; i++) alts.push(res[i].transcript); } catch (err) {}
+    if (settle()) audioHandleHeard(alts);
+  };
+  rec.onerror = e => { if (settle()) audioRecFailed(e && e.error); };
+  rec.onend = () => { if (settle()) audioRecFailed("no-speech"); };
+  m.recTimer = setTimeout(() => { if (settle()) audioRecFailed("no-speech"); }, AUDIO_LISTEN_MS);
+  try { rec.start(); } catch (e) { if (settle()) audioRecFailed("start-failed"); }
+}
+
+// 🎤 / kuulokkeiden painallus
+window.audioMicPress = function() {
+  const m = audioMode;
+  if (!m) return;
+  unlockCookAudio();
+  if (m.listening) { audioStopListening(); audioSetStatus("🎧 Valmiina"); return; }   // toinen painallus keskeyttää
+  try { window.speechSynthesis.cancel(); } catch (e) {}                                // puhe ei saa kuulua mikrofoniin
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR || m.recUnavailable) { audioAnnounce(""); return; }
+  if (m.fallbackNext) { m.fallbackNext = false; audioAnnounce(""); return; }          // edellinen tunnistus epäonnistui
+  audioStartListening(SR);
+};
+
+// ----- Media Session (kuulokkeiden painikkeet) -----
+function audioMakeSilentWavUrl(seconds = 6, rate = 8000) {   // Chrome vaatii vähintään ~5 s mediatiedoston
+  const n = seconds * rate, buf = new Uint8Array(44 + n), dv = new DataView(buf.buffer);
+  const w = (o, str) => { for (let i = 0; i < str.length; i++) buf[o + i] = str.charCodeAt(i); };
+  w(0, "RIFF"); dv.setUint32(4, 36 + n, true); w(8, "WAVE"); w(12, "fmt ");
+  dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+  dv.setUint32(24, rate, true); dv.setUint32(28, rate, true); dv.setUint16(32, 1, true); dv.setUint16(34, 8, true);
+  w(36, "data"); dv.setUint32(40, n, true);
+  buf.fill(128, 44);                                          // 8-bittinen hiljaisuus
+  return URL.createObjectURL(new Blob([buf], { type: "audio/wav" }));
+}
+
+function audioKeepAlive() {   // kuulokkeen "pause" pysäyttäisi äänen -> jatketaan, jotta painikkeet pysyvät aktiivisina
+  const m = audioMode;
+  if (!m) return;
+  if (m.el && m.el.paused) { const p = m.el.play(); if (p && p.catch) p.catch(() => {}); }
+  try { if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "playing"; } catch (e) {}
+}
+
+function audioHeadsetPress() {
+  if (!audioMode) return;
+  const now = Date.now();
+  if (now - audioLastPress < 700) return;                      // jotkin kuulokkeet lähettävät play+pause peräkkäin
+  audioLastPress = now;
+  audioKeepAlive();
+  audioMicPress();
+}
+
+function audioSetupMediaSession(storeKey) {
+  if (!("mediaSession" in navigator)) return;
+  try {
+    if (typeof MediaMetadata !== "undefined") {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: "Ääniohjaus – kauppareitti", artist: STORE_NAMES[storeKey] || "Corsia", album: "Corsia",
+        artwork: [{ src: "corsia-icon-192.png", sizes: "192x192", type: "image/png" }, { src: "corsia-icon-512.png", sizes: "512x512", type: "image/png" }]
+      });
+    }
+    navigator.mediaSession.playbackState = "playing";
+    const set = (action, fn) => { try { navigator.mediaSession.setActionHandler(action, fn); } catch (e) {} };
+    set("play", audioHeadsetPress);
+    set("pause", audioHeadsetPress);
+    set("nexttrack", () => { audioKeepAlive(); window.audioReadNext(); });
+    set("previoustrack", () => { audioKeepAlive(); window.audioReadNext(); });
+    set("stop", () => window.stopAudioMode());
+  } catch (e) { console.warn("Media Session ei käytössä:", e); }
+}
+
+function audioTeardownMediaSession() {
+  if (!("mediaSession" in navigator)) return;
+  ["play", "pause", "nexttrack", "previoustrack", "stop"].forEach(a => { try { navigator.mediaSession.setActionHandler(a, null); } catch (e) {} });
+  try { navigator.mediaSession.playbackState = "none"; navigator.mediaSession.metadata = null; } catch (e) {}
+}
+
+window.startAudioMode = function(storeKey) {
+  if (audioMode) { window.stopAudioMode(); return; }            // painike toimii päälle/pois-kytkimenä
+  audioMode = { storeKey, listening: false, rec: null, recTimer: null, skipped: [], fallbackNext: false, recUnavailable: false, status: "🎧 Valmiina", el: null, wavUrl: null };
+  unlockCookAudio();
+  try {                                                         // äänetön silmukka pitää Media Sessionin hengissä
+    audioMode.wavUrl = audioMakeSilentWavUrl();
+    const el = new Audio(audioMode.wavUrl);
+    el.loop = true;
+    audioMode.el = el;
+    const p = el.play();
+    if (p && p.catch) p.catch(() => audioSetStatus("⚠️ Kuulokkeen painike ei välttämättä toimi – käytä 🎤-painiketta"));
+  } catch (e) { console.warn("Ääniohjaus: taustaääni ei käynnisty", e); }
+  audioSetupMediaSession(storeKey);
+  render();
+  setTimeout(() => audioAnnounce("Ääniohjaus päällä. "), 150);
+};
+
+window.stopAudioMode = function(silent) {
+  const m = audioMode;
+  if (!m) return;
+  audioStopListening();
+  try { window.speechSynthesis.cancel(); } catch (e) {}
+  if (m.el) { try { m.el.pause(); } catch (e) {} m.el.src = ""; }
+  if (m.wavUrl) { try { URL.revokeObjectURL(m.wavUrl); } catch (e) {} }
+  audioTeardownMediaSession();
+  audioMode = null;
+  if (silent !== true && currentView === "store") render();
+};
+
+// Taustalle siirryttäessä mikrofoni suljetaan heti
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden" && audioMode && audioMode.listening) { audioStopListening(); audioSetStatus("🎧 Valmiina"); }
+});
+
+// ----- Näkymäpalat -----
+function renderAudioButton(storeKey) {
+  const on = audioMode && audioMode.storeKey === storeKey;
+  return `<button class="route-edit-btn ${on ? "audio-btn-on" : ""}" onclick="startAudioMode('${storeKey}')">${on ? "🎧 Ääniohjaus: päällä" : "🎧 Ääniohjaus"}</button>`;
+}
+
+function renderAudioPanel(storeKey) {
+  const next = audioQueue(storeKey).slice(0, AUDIO_READ_COUNT);
+  return `
+    <div class="audio-panel" id="audio-panel">
+      <div class="audio-title">🎧 Ääniohjaus päällä</div>
+      <div class="audio-status" id="audio-status" role="status" aria-live="polite">${esc(audioMode.status)}</div>
+      <div class="audio-next">${next.length ? "Seuraavaksi: " + next.map(i => esc(i.name)).join(" · ") : "Ei kerättäviä tuotteita"}</div>
+      <div class="audio-hint">Paina kuulokkeen painiketta (tai 🎤) ja sano “otettu”, “kärryssä”, “valmis” tai “ok”. Sano “loppu”, “ei löydy” tai “ohita” siirtääksesi tuotteen jonon hännille.</div>
+      <div class="audio-actions">
+        <button onclick="audioMicPress()">🎤 Kuittaa</button>
+        <button onclick="audioReadNext()">🔊 Lue seuraavat</button>
+        <button onclick="stopAudioMode()">Lopeta</button>
+      </div>
+    </div>`;
+}
+
+function audioItemTag(item) {   // ⏭-merkintä ohitetuille tuotteille
+  return audioMode && audioMode.skipped.includes(audioItemKey(item)) ? ` <span class="audio-skip-tag">⏭ ohitettu</span>` : "";
 }
