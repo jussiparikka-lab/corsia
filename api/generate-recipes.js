@@ -65,18 +65,47 @@ RUOKAVALIO: PERHEESSÄ ON YKSI KASVISSYÖJÄ. Reseptit voivat olla tavallisia, m
   return "";
 }
 
-function buildRecipePrompt({ ingredients, diners, cookTwice, effective, cuisines, categories, count = 3, days = [], avoid = [], deals = [], dayCuisines = {}, diet = "all" }) {
+// Keittiökohtaiset ohjeet kehotteeseen: aidot ruoat, tyypilliset maut ja oikeat kauppakategoriat aineksille
+// (kategorianimet ovat sovelluksen omia: Hevi, Juurekset, Hedelmät, Liha, Aasia / Texmex, Kuivat, Jauhot, Leivät, Vegaaniset ...).
+const CUISINE_HINTS = [
+  {
+    match: /vietnam/i,
+    text: `KEITTIÖOHJE – VIETNAMILAINEN (Vietnamese): Tee aitoja vietnamilaisia ruokia, esim. Phở (nuudelikeitto), Bánh mì (patonkivoileipä), Bún chả (grillattu possu ja riisivermiselli), Gỏi cuốn (tuorekevätrullat riisipaperissa dippikastikkeineen), Bún bò, Cơm tấm tai Bánh xèo. Tyypillisiä makuja: kalakastike, limetti, chili, inkivääri, tuoreet yrtit (korianteri, minttu, thai-basilika), vihersipuli, idut, riisinuudelit tai -vermiselli; liemiin tähtianis ja kaneli.
+Raaka-ainekategoriat vietnamilaisille aineksille (käytä TÄSMÄLLEEN näitä kategorianimiä, jos ne ovat sallittujen listalla): tuoreet yrtit, vihersipuli, kevätsipuli, idut, inkivääri, chili, kurkku, salaatti, kaali -> "Hevi"; porkkana, retiisi (daikon) -> "Juurekset"; limetti -> "Hedelmät"; naudan-, possun- ja broilerinliha, kala ja katkaravut -> "Liha"; riisinuudelit, riisivermiselli, riisipaperi, kalakastike, soijakastike, hoisin, sriracha, riisiviinietikka -> "Aasia / Texmex"; jasmiiniriisi, tähtianis, kaneli, mausteet, liemikuutiot -> "Kuivat"; sokeri -> "Jauhot"; tofu -> "Vegaaniset"; patonki -> "Leivät"; kananmuna -> "Maitotuotteet". Kasvisversiossa korvaa kalakastike soijakastikkeella ja liha tofulla tai sienillä.`
+  }
+];
+
+function cuisineHintBlock(names) {
+  const picked = CUISINE_HINTS.filter(h => names.some(n => h.match.test(String(n))));
+  return picked.length > 0 ? "\n" + picked.map(h => h.text).join("\n") : "";
+}
+
+// Tavoitevalmistusaika (pyynnön kenttä max_prep_time): kokonaisaika = esivalmistelu + kypsennys
+const PREP_LIMITS = { "20min": 20, "30min": 30, "45min": 45, "60min": 60, "over60min": "over" };
+
+function prepTimeBlock(maxPrep, isWeek) {
+  const lim = PREP_LIMITS[maxPrep];
+  if (!lim) return "";
+  if (lim === "over") {
+    return `\nAIKATAVOITE: Kokonaisvalmistusaika (esivalmistelu + kypsennys) saa olla yli 60 minuuttia: rauhallisesti valmistuva, työläämpi ruoka sopii. Kirjoita arvioitu kokonaisaika kenttään "total_time_minutes".`;
+  }
+  return `\nAIKATAVOITE: Reseptin KOKONAISVALMISTUSAJAN (esivalmistelu + kypsennys) pitää olla enintään ${lim} minuuttia${isWeek ? " JOKAISENA päivänä" : " jokaisella ehdotuksella"}. Valitse vain reseptejä, jotka oikeasti ehtii valmistaa tässä ajassa, äläkä pyöristä aikaa alaspäin. Kirjoita arvioitu kokonaisaika kenttään "total_time_minutes" (kokonaisluku minuutteina).`;
+}
+
+function buildRecipePrompt({ ingredients, diners, cookTwice, effective, cuisines, categories, count = 3, days = [], avoid = [], deals = [], dayCuisines = {}, diet = "all", maxPrep = "" }) {
+  // Viikkolistassa lisukkeita on vähemmän ja lyhyempinä, jotta vastaus pysyy pienenä ja nopeana
+  const sideRule = days.length > 0 ? { count: "2", maxIng: 4 } : { count: "2-3", maxIng: 6 };
   const dcEntries = days.filter(d => dayCuisines[d]).map(d => `${d} = ${dayCuisines[d]}`);
   const cuisineStr = dcEntries.length > 0 ? "vaihtelee päivittäin (katso KEITTIÖ PÄIVITTÄIN)" : (cuisines.length > 0 ? cuisines.join(", ") : "vapaavalintainen");
   const catLine = categories.length > 0 ? `TÄSMÄLLEEN yksi näistä: ${categories.join(", ")}` : "kaupan osasto suomeksi";
   const weekTask = days.length > 0
-    ? `1. Laadi viikon ruokalista: ${count} ERI reseptiä, yksi kullekin päivälle tässä järjestyksessä: ${days.join(", ")}. Vaihtele pääraaka-ainetta (kana, kala, liha, kasvis) ja keittiötyyliä; arkipäiville nopeampia (alle 40 min), viikonlopulle saa olla työläämpi. Käytä jääkaapin ainekset ensimmäisinä päivinä.${dcEntries.length > 0 ? `\n   KEITTIÖ PÄIVITTÄIN (noudata tarkasti, jokaisen päivän resepti on aidosti kyseisen keittiön ruokaa ja "cuisine"-kenttään kyseisen keittiön nimi): ${dcEntries.join("; ")}.` : ""}`
+    ? `1. Laadi viikon ruokalista: ${count} ERI reseptiä, yksi kullekin päivälle tässä järjestyksessä: ${days.join(", ")}. Vaihtele pääraaka-ainetta (kana, kala, liha, kasvis) ja keittiötyyliä; ${PREP_LIMITS[maxPrep] ? "kaikkien päivien reseptit noudattavat AIKATAVOITETTA." : "arkipäiville nopeampia (alle 40 min), viikonlopulle saa olla työläämpi."} Käytä jääkaapin ainekset ensimmäisinä päivinä.${dcEntries.length > 0 ? `\n   KEITTIÖ PÄIVITTÄIN (noudata tarkasti, jokaisen päivän resepti on aidosti kyseisen keittiön ruokaa ja "cuisine"-kenttään kyseisen keittiön nimi): ${dcEntries.join("; ")}.` : ""}`
     : `1. Hae/valitse ${count} aitoa, laadukasta reseptiä, jotka vastaavat toivottuja keittiötyylejä ja hyödyntävät käyttäjän aineksia mahdollisimman paljon.`;
   return `Olet suomalainen keittiöapuri ja reseptiasiantuntija.
 
 KÄYTTÄJÄLLÄ ON JO (tunnistettu jääkaappikuvasta): ${ingredients.length > 0 ? ingredients.join(", ") : "ei tunnistettuja aineksia"}.
 TOIVOTUT KEITTIÖTYYLIT: ${cuisineStr}.
-RUOKAILIJAT: ${diners}${cookTwice ? " (ruoka syödään kahdesti)" : ""} => skaalaa TÄSMÄLLEEN ${effective} annokselle.${dietBlock(diet, days.length > 0, count)}${deals.length > 0 ? `\nTÄMÄN VIIKON TARJOUKSET (suosi, jos sopivat): ${deals.join("; ")}.` : ""}${avoid.length > 0 ? `\nÄLÄ EHDOTA NÄITÄ (jo suunniteltu): ${avoid.join(", ")}.` : ""}
+RUOKAILIJAT: ${diners}${cookTwice ? " (ruoka syödään kahdesti)" : ""} => skaalaa TÄSMÄLLEEN ${effective} annokselle.${dietBlock(diet, days.length > 0, count)}${prepTimeBlock(maxPrep, days.length > 0)}${cuisineHintBlock([...cuisines, ...Object.values(dayCuisines)])}${deals.length > 0 ? `\nTÄMÄN VIIKON TARJOUKSET (suosi, jos sopivat): ${deals.join("; ")}.` : ""}${avoid.length > 0 ? `\nÄLÄ EHDOTA NÄITÄ (jo suunniteltu): ${avoid.join(", ")}.` : ""}
 
 TEHTÄVÄT:
 ${weekTask}
@@ -86,6 +115,7 @@ ${weekTask}
 4. in_fridge = true, jos aines (tai selvä vastine) on käyttäjän listalla, muuten false.
 5. to_shopping_list = kauppalapulle kirjoitettava rivi muodossa "Aines (määrä)", esim. "Kookosmaito (4 dl)". Jos in_fridge on true, to_shopping_list = "".
 6. Perusmausteita (suola, pippuri, vesi) ei tarvitse ostaa: merkitse ne in_fridge=true.
+7. Ehdota JOKAISELLE reseptille ${sideRule.count} sopivaa lisuketta kenttään "side_dishes" (esim. perunat, riisi, salaatti, uunijuurekset, leipä). Jokaisella lisukkeella on "title" (nimi suomeksi) ja "ingredients" (enintään ${sideRule.maxIng} ainesta; kentät name, amount_needed, cat). Määrät ${effective} annokselle ja "cat" samoin kuin pääruoan aineksilla. Lisukkeet täydentävät pääruokaa: älä toista sen pääraaka-ainetta, ja valitse mieluiten kasvispohjaisia.${diet === "vege" || diet === "mixed" ? " Kaikkien lisukkeiden pitää olla kasvisruokaa (ei lihaa, kalaa eikä äyriäisiä)." : ""}
 
 Vastaa PELKÄLLÄ JSON-taulukolla, ei muuta tekstiä:
 [{
@@ -95,13 +125,52 @@ Vastaa PELKÄLLÄ JSON-taulukolla, ei muuta tekstiä:
   "original_servings": 4,
   "target_servings": ${effective},
   "ingredients": [{"name": "aines perusmuodossa suomeksi", "amount_needed": "esim. 400 g", "in_fridge": false, "to_shopping_list": "Aines (400 g)", "cat": ${JSON.stringify(catLine)}}],
+  "side_dishes": [{"title": "lisukkeen nimi", "ingredients": [{"name": "aines perusmuodossa suomeksi", "amount_needed": "esim. 800 g", "cat": ${JSON.stringify(catLine)}}]}],
+  "total_time_minutes": 30,
   "is_vegetarian": false,
   "vege_note": ${diet === "mixed" ? '"yksi lause kasvisversiosta"' : '""'},
   "instructions_brief": "2-3 lausetta suomeksi"
 }]`;
 }
 
-function normalizeRecipes(parsed, effective, max = 5, diet = "all") {
+const BASIC_PANTRY = /^(suola|pippuri|mustapippuri|merisuola|vesi|sokeri|jauhot)$/i;
+
+// Löytyykö aines käyttäjän tunnistetuista raaka-aineista (jääkaappikuva/puhe)?
+function inFridgeList(name, fridge) {
+  const n = String(name).trim().toLowerCase();
+  if (!n) return false;
+  if (BASIC_PANTRY.test(n)) return true;
+  return fridge.some(f => {
+    const x = String(f).trim().toLowerCase();
+    return x === n || (n.length >= 4 && x.includes(n)) || (x.length >= 4 && n.includes(x));
+  });
+}
+
+// Lisukkeet: 2-3 kpl, kullakin nimi + ainekset (samat kentät kuin pääruoan aineksilla, jotta kytkimet toimivat samoin)
+function normalizeSideDishes(list, fridge, maxSides = 3) {
+  return (Array.isArray(list) ? list : [])
+    .filter(sd => sd && String(sd.title || "").trim())
+    .map(sd => ({
+      title: String(sd.title).trim().slice(0, 80),
+      ingredients: (Array.isArray(sd.ingredients) ? sd.ingredients : [])
+        .filter(i => i && String(i.name || "").trim())
+        .slice(0, 10)
+        .map(i => {
+          const name = String(i.name).trim();
+          const amount = String(i.amount_needed ?? i.amount ?? "").trim();
+          const inFridge = inFridgeList(name, fridge);
+          return {
+            name, amount_needed: amount, in_fridge: inFridge,
+            to_shopping_list: inFridge ? "" : (amount ? `${name} (${amount})` : name),
+            cat: i.cat ? String(i.cat) : null
+          };
+        })
+    }))
+    .filter(sd => sd.ingredients.length > 0)   // tyhjät lisukkeet pois ennen rajausta
+    .slice(0, maxSides);
+}
+
+function normalizeRecipes(parsed, effective, max = 5, diet = "all", fridge = []) {
   const arr = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.recipes) ? parsed.recipes : []);
   return arr
     .filter(r => r && r.recipe_title)
@@ -122,6 +191,8 @@ function normalizeRecipes(parsed, effective, max = 5, diet = "all") {
           if (!inFridge && !toList) toList = amount ? `${name} (${amount})` : name;
           return { name, amount_needed: amount, in_fridge: inFridge, to_shopping_list: toList, cat: i.cat ? String(i.cat) : null };
         }),
+      total_time_minutes: (n => (Number.isFinite(n) && n >= 1 && n <= 600 ? Math.round(n) : null))(Number(r.total_time_minutes)),
+      side_dishes: normalizeSideDishes(r.side_dishes, fridge),
       is_vegetarian: diet === "vege" ? true : (r.is_vegetarian === true || r.is_vegetarian === "true"),
       vege_note: diet === "mixed" ? String(r.vege_note || "").trim().slice(0, 240) : "",
       instructions_brief: String(r.instructions_brief || "")
@@ -143,9 +214,10 @@ async function generateRecipes(key, body, mode) {
     days.forEach(d => { const c = String(body.day_cuisines[d] || "").trim().slice(0, 40); if (c) dayCuisines[d] = c; });
   }
   const diet = ["vege", "mixed"].includes(body.diet) ? body.diet : "all";
+  const maxPrep = Object.prototype.hasOwnProperty.call(PREP_LIMITS, body.max_prep_time) ? body.max_prep_time : "";
   const prompt = buildRecipePrompt({
     ingredients: strList(body.ingredients, 60),
-    dayCuisines, diet,
+    dayCuisines, diet, maxPrep,
     diners, cookTwice, effective, count, days,
     cuisines: strList(body.cuisines, 10),
     categories: strList(body.categories, 40),
@@ -156,7 +228,7 @@ async function generateRecipes(key, body, mode) {
     key,
     [{ role: "user", parts: [{ text: prompt }] }],
     data => {
-      const list = normalizeRecipes(parseJson(extractText(data), "[", "]"), effective, count, diet);
+      const list = normalizeRecipes(parseJson(extractText(data), "[", "]"), effective, count, diet, strList(body.ingredients, 60));
       // Ilman verkkohakua tehdyt reseptit: linkit voisivat olla keksittyjä, joten ne poistetaan
       if (data?._ungrounded) list.forEach(r => { r.source_url = null; });
       return list;
@@ -166,6 +238,11 @@ async function generateRecipes(key, body, mode) {
     mode !== "week" && process.env.RECIPE_SEARCH !== "off"   // viikkolista ilman hakua; RECIPE_SEARCH=off poistaa haun reseptihausta
   );
   if (recipes.length === 0) throw new ApiError(502, "Reseptejä ei saatu – yritä uudelleen");
+  // Hakutilassa pudotetaan reseptit, jotka ylittävät tavoiteajan selvästi (yli 5 min); jos kaikki ylittävät, säilytetään ne.
+  if (mode !== "week" && typeof PREP_LIMITS[maxPrep] === "number") {
+    const ok = recipes.filter(r => !r.total_time_minutes || r.total_time_minutes <= PREP_LIMITS[maxPrep] + 5);
+    if (ok.length > 0 && ok.length < recipes.length) recipes.splice(0, recipes.length, ...ok);
+  }
   return mode === "week"
     ? { effective_diners: effective, days: days.slice(0, recipes.length), recipes }
     : { effective_diners: effective, recipes };

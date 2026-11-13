@@ -1,27 +1,23 @@
 // Corsia – päivän tärppien haku (POST /api/refresh-deals).
 // Runko: { categories: [...] }   Vastaus: { deals: [{ cat, name, price, store, mainCat }] }
 //
-// Kaksi tapaa, molemmat ilman keksittyjä hintoja:
-//  1) Tavily-haku (ilmainen, 1000 hakua/kk, ei korttia): haetaan kauppojen tarjoussivujen tekstiä, tekoäly poimii
-//     tarjoukset VAIN siitä tekstistä, ja jokaisen hinnan on löydyttävä haetusta tekstistä (muuten tarjous hylätään).
-//  2) Geminin Google-haku (maadoitus): toimii, jos avaimella on verkkohakukiintiötä (Googlen ilmaisella avaimella uusille
-//     malleille ei yleensä ole).
-const { ApiError, callGemini, callWithSearchFallback, extractText, strList, createHandler } = require("./_lib/gemini");
+// Järjestys:
+//  1) Geminin Google-haku (maadoitus, gemini-2.5-flash, ei Lite-malleja; tools: [{ googleSearch: {} }]).
+//  2) Jos se antaa virheen (400, 429, aikakatkaisu ym.): Tavily-haku (ilmainen, ei korttia) -> haettu teksti
+//     annetaan Geminille tavallisena kehotteena ILMAN tools-kenttää. Tekoäly poimii tarjoukset VAIN siitä tekstistä,
+//     ja jokaisen hinnan on löydyttävä haetusta tekstistä (muuten tarjous hylätään) – hintoja ei keksitä.
+const { ApiError, callGemini, callWithSearchFallback, extractText, strList, createHandler, isSearchBlocked } = require("./_lib/gemini");
 
 const TAVILY_URL = "https://api.tavily.com/search";
-const STORES = [
-  { store: "K-Citymarket Tammisto", query: "K-Citymarket Vantaa Tammisto tarjoukset tämän viikon", domains: ["k-ruoka.fi"] },
-  { store: "K-Citymarket Jumbo", query: "K-Citymarket Vantaa Jumbo tarjoukset tämän viikon", domains: ["k-ruoka.fi"] },
-  { store: "Prisma Jumbo", query: "Prisma Jumbo Vantaa tarjoukset tämän viikon", domains: ["s-kaupat.fi", "prisma.fi"] },
-  { store: "Lidl Tammisto", query: "Lidl Vantaa Tammisto viikkotarjoukset", domains: ["lidl.fi"] }
-];
+const COMBINED_QUERY = "K-Citymarket Tammisto Prisma Jumbo ruokatarjoukset viikko";
+const SEARCH_DOMAINS = ["k-ruoka.fi", "s-kaupat.fi", "prisma.fi", "lidl.fi"];
 // K-ruoan tarjouslehtisivuilla hinnat ovat tekstinä; luetaan ne suoraan (Tavily Extract) hakutulosten lisäksi.
 const LEAFLETS = {
   "K-Citymarket Tammisto": "https://www.k-ruoka.fi/tarjouslehdet/kauppa/k-citymarket-vantaa-tammisto",
   "K-Citymarket Jumbo": "https://www.k-ruoka.fi/tarjouslehdet/kauppa/k-citymarket-vantaa-jumbo"
 };
 const LEAFLET_CHARS = 8000;   // yhdestä lehtisivusta
-const SEARCH_CHARS = 2500;    // hakutuloksista kauppaa kohti
+const SEARCH_CHARS = 1800;    // yhdestä hakutuloksesta
 const TOTAL_CHARS = 22000;    // koko tekoälylle annettava aineisto
 const clean = t => String(t || "").replace(/\s+/g, " ").trim();
 
@@ -57,7 +53,7 @@ async function tavilySearch(apiKey, query, domains) {
       method: "POST",
       headers: { "content-type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
-        query, search_depth: "basic", max_results: 4, include_raw_content: true,
+        query, search_depth: "basic", max_results: 8, include_raw_content: true,
         ...(domains && domains.length ? { include_domains: domains } : {})
       }),
       signal: ac.signal
@@ -136,55 +132,54 @@ async function dealsViaTavily(keys, cats, today) {
   const diag = [];
   const fail = (status, msg) => { const e = new ApiError(status, msg); e.detail = diag.join("; ").slice(0, 400); return e; };
 
-  // Tarjouslehtisivut suoraan + hakutulokset kaupoittain, rinnakkain
-  const [extracted, searched] = await Promise.all([
+  // Yksi yhdistetty haku + K-ruoan tarjouslehtisivut suoraan, rinnakkain
+  const [extracted, searchResults] = await Promise.all([
     tavilyExtract(keys.tavily, Object.values(LEAFLETS)).catch(e => {
       if (authLike(e)) throw e;
       diag.push(`luku: ${e.status} ${e.message}`);
       return {};
     }),
-    Promise.all(STORES.map(async s => {
+    (async () => {
       try {
-        let r = await tavilySearch(keys.tavily, s.query, s.domains);
-        if (r.length === 0) r = await tavilySearch(keys.tavily, s.query, null);
+        let r = await tavilySearch(keys.tavily, COMBINED_QUERY, SEARCH_DOMAINS);
+        if (r.length === 0) r = await tavilySearch(keys.tavily, COMBINED_QUERY, null);
         return r;
       } catch (e) {
         if (authLike(e)) throw e;
-        diag.push(`haku ${s.store}: ${e.status} ${e.message}`);
+        diag.push(`haku: ${e.status} ${e.message}`);
         return [];
       }
-    }))
+    })()
   ]);
 
-  let sources = 0;
-  const results = STORES.map((s, i) => {
-    const parts = [];
-    const leafUrl = LEAFLETS[s.store];
-    if (leafUrl && extracted[leafUrl]) { parts.push(`LÄHDE: ${leafUrl}\n${extracted[leafUrl].slice(0, LEAFLET_CHARS)}`); sources++; }
-    const searchText = searched[i]
-      .map(x => `LÄHDE: ${x.url}\n${clean(x.raw_content || x.content)}`).join("\n---\n").slice(0, SEARCH_CHARS);
-    if (searched[i].length) { parts.push(searchText); sources += searched[i].length; }
-    const text = parts.join("\n---\n");
-    diag.push(`${s.store}: ${text.length} merkkiä`);
-    return { store: s.store, text };
+  const sections = [];
+  Object.entries(LEAFLETS).forEach(([store, url]) => {
+    if (extracted[url]) sections.push(`=== TARJOUSLEHTI: ${store} (${url}) ===\n${extracted[url].slice(0, LEAFLET_CHARS)}`);
   });
-  const hay = results.map(r => r.text).join("\n").toLowerCase();
-  if (hay.replace(/lähde:[^\n]*/g, "").trim().length < 200) {
+  const searchText = searchResults
+    .map(x => `LÄHDE: ${x.url}\n${clean(x.raw_content || x.content).slice(0, SEARCH_CHARS)}`)
+    .join("\n---\n");
+  if (searchText) sections.push(`=== HAKUTULOKSET ===\n${searchText}`);
+  diag.push(`lehtisivuja ${Object.keys(extracted).length}, hakutuloksia ${searchResults.length}`);
+
+  const body = sections.join("\n\n").slice(0, TOTAL_CHARS);
+  const hay = body.toLowerCase();
+  const contentLen = body.split("\n").filter(l => !/^(===|LÄHDE:)/.test(l)).join(" ").trim().length;  // otsikkorivit pois
+  if (contentLen < 200) {
     throw fail(502, "Hakutuloksista ei löytynyt tarjoussivujen sisältöä – yritä myöhemmin uudelleen");
   }
 
-  let material = results.map(r => `=== KAUPPA: ${r.store} ===\n${r.text || "(ei hakutuloksia)"}`).join("\n\n");
-  if (material.length > TOTAL_CHARS) material = material.slice(0, TOTAL_CHARS);
-  const prompt = `Tänään on ${today}. Alla on kauppojen tarjoussivuilta ja hakutuloksista poimittua tekstiä.
+  const prompt = `Tänään on ${today}. Alla on hakutuloksista ja kauppojen tarjouslehtisivuilta poimittua tekstiä.
 Poimi tekstistä ruokatarjouksia. Säännöt:
 1. Käytä VAIN tekstissä näkyviä tarjouksia. Älä keksi tuotteita äläkä arvaa hintoja. Jos hintaa ei näy, jätä tuote pois.
 2. Hinta kirjoitetaan täsmälleen niin kuin se tekstissä näkyy (esim. "7,99 €/kg" tai "5,19 €/kpl"); jos tekstissä on vain numero ja yksikkö, käytä niitä.
-3. Anna 2-3 KOVINTA tarjousta per kauppa (yhteensä enintään 12). Painota kala- ja lihatarjouksia. Jos kaupasta ei löydy tarjouksia, jätä se pois.
-4. "store" on kaupan nimi tekstin KAUPPA-otsikon mukaan.
+3. Anna 2-3 KOVINTA tarjousta per kauppa (yhteensä enintään 12). Painota kala- ja lihatarjouksia.
+4. "store" on yksi näistä: K-Citymarket Tammisto, K-Citymarket Jumbo, Prisma Jumbo, Lidl Tammisto. Päättele kauppa tarjouslehden otsikosta tai lähteen osoitteesta (k-ruoka.fi = K-Citymarket, prisma.fi tai s-kaupat.fi = Prisma, lidl.fi = Lidl). Jos kauppaa ei voi päätellä, jätä tarjous pois.
 
 Vastaa PELKÄLLÄ JSON-taulukolla, ei muuta tekstiä. Kentät: "cat" (lyhyt otsikko emojilla, esim. "🐟 Kala"), "name" (tuote), "price", "store", "mainCat" (yksi näistä: ${cats}).
 
-${material}`;
+${body}`;
+  // Tavallinen kutsu ilman tools-kenttää
   const { data } = await callGemini(keys, {
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     generationConfig: { temperature: 0.1, responseMimeType: "application/json" }
@@ -193,7 +188,7 @@ ${material}`;
   const kept = all.filter(d => supportedByText(d, hay));
   diag.push(`tekoäly ${all.length}, vahvistui ${kept.length}`);
   if (kept.length === 0) {
-    throw fail(502, `Hakutuloksista ei löytynyt varmistettavia tarjouksia (haettu ${sources} sivua, tekoäly ehdotti ${all.length}, vahvistui 0) – yritä myöhemmin uudelleen`);
+    throw fail(502, `Hakutuloksista ei löytynyt varmistettavia tarjouksia (tekoäly ehdotti ${all.length}, vahvistui 0) – yritä myöhemmin uudelleen`);
   }
   return kept;
 }
@@ -206,18 +201,6 @@ module.exports = createHandler(async (keys, body) => {
     weekday: "long", day: "numeric", month: "numeric", year: "numeric", timeZone: "Europe/Helsinki"
   });
 
-  let tavilyError = null;
-  if (keys.tavily) {
-    try {
-      return { deals: await dealsViaTavily(keys, cats, today) };
-    } catch (e) {
-      if (!(e instanceof ApiError)) throw e;
-      console.error("refresh-deals tavily", e.status, e.message);
-      tavilyError = e.tavily ? new ApiError(e.status === 429 ? 429 : 502, describeTavily(e)) : e;
-      // jatketaan Geminin Google-hakuun, jos se sattuu toimimaan
-    }
-  }
-
   const prompt = `Tänään on ${today}. Etsi Google-haulla tämän viikon voimassa olevia ruokatarjouksia Tammiston seudun kaupoista Vantaalla: K-Citymarket Tammisto, Lidl Tammisto, Prisma Jumbo ja K-Citymarket Jumbo. Hyviä lähteitä: k-ruoka.fi/kauppa/k-citymarket-vantaa-tammisto/tarjoukset, k-ruoka.fi/kauppa/k-citymarket-vantaa-jumbo/tarjoukset, s-kaupat.fi/myymala/prisma-jumbo, lidl.fi viikkomainos, sekä kauppojen viikkomainokset. Jos juuri näiden myymälöiden tarjouksia ei löydy, käytä kyseisten ketjujen valtakunnallisia viikkotarjouksia.
 
 Anna 2-3 KOVINTA tarjousta PER KAUPPA (yhteensä 8-12 tarjousta). Painota erityisesti kala- ja lihatarjouksia (lohi, kirjolohi, naudanliha, broileri, jauheliha) – vähintään puolet tarjouksista olkoon kalaa tai lihaa.
@@ -225,17 +208,37 @@ Anna 2-3 KOVINTA tarjousta PER KAUPPA (yhteensä 8-12 tarjousta). Painota erityi
 Vastaa PELKÄLLÄ JSON-taulukolla, ei muuta tekstiä eikä lähdeviitteitä. Jokaisella alkiolla kentät:
 "cat" (lyhyt otsikko emojilla, esim. "🐟 Kala"), "name" (tuote), "price" (esim. "12,90 €/kg"), "store" (kaupan nimi), "mainCat" (yksi näistä: ${cats}).`;
 
-  let deals;
-  try {
-    deals = await callWithSearchFallback(keys, [{ role: "user", parts: [{ text: prompt }] }], parseDeals, 0.3, true); // true = vaatii verkkohaun
-  } catch (e) {
-    if (!(e instanceof ApiError)) throw e;
-    console.error("refresh-deals grounded", e.status, e.message);
-    if (tavilyError) throw tavilyError;
-    // Verkkohaku ei onnistunut (kiintiö, ei hakutukea tai aikakatkaisu): kerrotaan selvästi, mitä tarvitaan
-    const keyProblem = /api key|API_KEY/i.test(e.message || "") || e.status === 401 || e.status === 403;
-    throw keyProblem ? e : new ApiError(503, NO_SEARCH_MSG);
+  // 1) Geminin Google-haku. Jos haku on äskettäin kaatunut (esto), ohitetaan se turhan odotuksen välttämiseksi.
+  let groundedErr = null;
+  if (keys.gemini) {
+    if (isSearchBlocked()) {
+      groundedErr = new ApiError(429, "Google-haku ohitettu (äskettäinen virhe)");
+    } else {
+      try {
+        const deals = await callWithSearchFallback(keys, [{ role: "user", parts: [{ text: prompt }] }], parseDeals, 0.3, true);
+        if (deals.length > 0) return { deals };
+        groundedErr = new ApiError(502, "Google-haku ei palauttanut tarjouksia");
+      } catch (e) {
+        if (!(e instanceof ApiError)) throw e;
+        console.error("refresh-deals grounded", e.status, e.message);
+        groundedErr = e;
+      }
+    }
   }
-  if (deals.length === 0) throw tavilyError || new ApiError(502, "Tarjouksia ei löytynyt – yritä myöhemmin uudelleen");
-  return { deals };
+
+  // 2) Varakeino: Tavily-haku + tavallinen Gemini-kutsu ilman tools-kenttää
+  let tavilyErr = null;
+  if (keys.tavily) {
+    try {
+      return { deals: await dealsViaTavily(keys, cats, today) };
+    } catch (e) {
+      if (!(e instanceof ApiError)) throw e;
+      console.error("refresh-deals tavily", e.status, e.message);
+      tavilyErr = e.tavily ? new ApiError(e.status === 429 ? 429 : 502, describeTavily(e)) : e;
+    }
+  }
+
+  if (tavilyErr) throw tavilyErr;
+  const keyProblem = groundedErr && (/api key|API_KEY/i.test(groundedErr.message || "") || groundedErr.status === 401 || groundedErr.status === 403);
+  throw keyProblem ? groundedErr : new ApiError(503, NO_SEARCH_MSG);
 });
