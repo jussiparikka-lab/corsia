@@ -16,9 +16,9 @@ const LEAFLETS = {
   "K-Citymarket Tammisto": "https://www.k-ruoka.fi/tarjouslehdet/kauppa/k-citymarket-vantaa-tammisto",
   "K-Citymarket Jumbo": "https://www.k-ruoka.fi/tarjouslehdet/kauppa/k-citymarket-vantaa-jumbo"
 };
-const LEAFLET_CHARS = 8000;   // yhdestä lehtisivusta
-const SEARCH_CHARS = 1800;    // yhdestä hakutuloksesta
-const TOTAL_CHARS = 22000;    // koko tekoälylle annettava aineisto
+const LEAFLET_CHARS = 16000;  // yhdestä lehtisivusta
+const SEARCH_CHARS = 3000;    // yhdestä hakutuloksesta
+const TOTAL_CHARS = 45000;    // koko tekoälylle annettava aineisto
 const clean = t => String(t || "").replace(/\s+/g, " ").trim();
 
 // Poimii tarjoukset vastauksesta, vaikka mukana olisi selitystekstiä tai lähdeviitteitä.
@@ -35,7 +35,7 @@ function parseDeals(data) {
   }
   return arr
     .filter(d => d && d.name)
-    .slice(0, 12)
+    .slice(0, 80)
     .map(d => ({
       cat: String(d.cat || "🔥 Tärppi"),
       name: String(d.name),
@@ -43,6 +43,31 @@ function parseDeals(data) {
       store: String(d.store || ""),
       mainCat: d.mainCat ? String(d.mainCat) : null
     }));
+}
+
+// Tarjousten määrä: enintään 10 per kauppa (yhteensä enintään 40), kala- ja lihatarjoukset kunkin kaupan alussa
+const MAX_PER_STORE = 10;
+const MAX_DEALS = 40;
+const MEAT_FISH = /(kala|lohi|siika|silakka|kuha|ahven|taimen|katkarap|rapu|äyriäi|liha|nauta|naudan|possu|porsa|sian|broileri|kana|kanan|kalkkuna|pihvi|filee|fileepihvi|paisti|ribsi|kylki|makkara|nakki|kinkku|pekoni|poro|riista|hirvi|lammas|ulkofile|sisäfile|flank|lihapulla)/i;
+const isMeatFish = d => d.mainCat === "Liha" || MEAT_FISH.test(`${d.name} ${d.cat}`);
+
+function finalizeDeals(deals) {
+  const seen = new Set();
+  const groups = new Map();                       // kauppa -> tarjoukset, kauppojen järjestys säilyy
+  deals.forEach(d => {
+    const key = `${d.store}|${d.name}|${d.price}`.toLowerCase();
+    if (seen.has(key)) return;                    // sama tarjous kahdesti pois
+    seen.add(key);
+    const store = d.store || "";
+    if (!groups.has(store)) groups.set(store, []);
+    groups.get(store).push(d);
+  });
+  const out = [];
+  groups.forEach(list => {
+    const meat = list.filter(isMeatFish), rest = list.filter(d => !isMeatFish(d));
+    out.push(...[...meat, ...rest].slice(0, MAX_PER_STORE));   // kala ja liha ensin, enintään 10 / kauppa
+  });
+  return out.slice(0, MAX_DEALS);
 }
 
 async function tavilySearch(apiKey, query, domains) {
@@ -53,7 +78,7 @@ async function tavilySearch(apiKey, query, domains) {
       method: "POST",
       headers: { "content-type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
-        query, search_depth: "basic", max_results: 8, include_raw_content: true,
+        query, search_depth: "basic", max_results: 10, include_raw_content: true,
         ...(domains && domains.length ? { include_domains: domains } : {})
       }),
       signal: ac.signal
@@ -173,7 +198,7 @@ async function dealsViaTavily(keys, cats, today) {
 Poimi tekstistä ruokatarjouksia. Säännöt:
 1. Käytä VAIN tekstissä näkyviä tarjouksia. Älä keksi tuotteita äläkä arvaa hintoja. Jos hintaa ei näy, jätä tuote pois.
 2. Hinta kirjoitetaan täsmälleen niin kuin se tekstissä näkyy (esim. "7,99 €/kg" tai "5,19 €/kpl"); jos tekstissä on vain numero ja yksikkö, käytä niitä.
-3. Anna 2-3 KOVINTA tarjousta per kauppa (yhteensä enintään 12). Painota kala- ja lihatarjouksia.
+3. Poimi MAHDOLLISIMMAN MONTA tarjousta: enintään 10 per kauppa (yhteensä enintään 40). Jos kaupasta löytyy vähemmän, anna kaikki löytyneet – älä täytä keksityillä. Painota kala- ja lihatarjouksia (lohi, kirjolohi, siika, naudanliha, possu, broileri, jauheliha, makkarat): niitä vähintään puolet kunkin kaupan tarjouksista, jos niitä on tarjolla, ja ne ensin. Loput ovat muita ruokatarjouksia (maitotuotteet, vihannekset, hedelmät, kuivat tuotteet).
 4. "store" on yksi näistä: K-Citymarket Tammisto, K-Citymarket Jumbo, Prisma Jumbo, Lidl Tammisto. Päättele kauppa tarjouslehden otsikosta tai lähteen osoitteesta (k-ruoka.fi = K-Citymarket, prisma.fi tai s-kaupat.fi = Prisma, lidl.fi = Lidl). Jos kauppaa ei voi päätellä, jätä tarjous pois.
 
 Vastaa PELKÄLLÄ JSON-taulukolla, ei muuta tekstiä. Kentät: "cat" (lyhyt otsikko emojilla, esim. "🐟 Kala"), "name" (tuote), "price", "store", "mainCat" (yksi näistä: ${cats}).
@@ -185,7 +210,7 @@ ${body}`;
     generationConfig: { temperature: 0.1, responseMimeType: "application/json" }
   });
   const all = parseDeals(data);
-  const kept = all.filter(d => supportedByText(d, hay));
+  const kept = finalizeDeals(all.filter(d => supportedByText(d, hay)));
   diag.push(`tekoäly ${all.length}, vahvistui ${kept.length}`);
   if (kept.length === 0) {
     throw fail(502, `Hakutuloksista ei löytynyt varmistettavia tarjouksia (tekoäly ehdotti ${all.length}, vahvistui 0) – yritä myöhemmin uudelleen`);
@@ -203,7 +228,7 @@ module.exports = createHandler(async (keys, body) => {
 
   const prompt = `Tänään on ${today}. Etsi Google-haulla tämän viikon voimassa olevia ruokatarjouksia Tammiston seudun kaupoista Vantaalla: K-Citymarket Tammisto, Lidl Tammisto, Prisma Jumbo ja K-Citymarket Jumbo. Hyviä lähteitä: k-ruoka.fi/kauppa/k-citymarket-vantaa-tammisto/tarjoukset, k-ruoka.fi/kauppa/k-citymarket-vantaa-jumbo/tarjoukset, s-kaupat.fi/myymala/prisma-jumbo, lidl.fi viikkomainos, sekä kauppojen viikkomainokset. Jos juuri näiden myymälöiden tarjouksia ei löydy, käytä kyseisten ketjujen valtakunnallisia viikkotarjouksia.
 
-Anna 2-3 KOVINTA tarjousta PER KAUPPA (yhteensä 8-12 tarjousta). Painota erityisesti kala- ja lihatarjouksia (lohi, kirjolohi, naudanliha, broileri, jauheliha) – vähintään puolet tarjouksista olkoon kalaa tai lihaa.
+Etsi MAHDOLLISIMMAN MONTA tarjousta: enintään 10 tarjousta PER KAUPPA (yhteensä enintään 40). Jos kaupasta löytyy vähemmän, anna kaikki löytyneet äläkä keksi lisää. Painota erityisesti kala- ja lihatarjouksia (lohi, kirjolohi, siika, naudanliha, possu, broileri, jauheliha, makkarat): vähintään puolet kunkin kaupan tarjouksista olkoon kalaa tai lihaa (jos niitä on tarjolla), ja listaa ne ensin. Loput ovat muita ruokatarjouksia (maitotuotteet, vihannekset, hedelmät, kuivat tuotteet).
 
 Vastaa PELKÄLLÄ JSON-taulukolla, ei muuta tekstiä eikä lähdeviitteitä. Jokaisella alkiolla kentät:
 "cat" (lyhyt otsikko emojilla, esim. "🐟 Kala"), "name" (tuote), "price" (esim. "12,90 €/kg"), "store" (kaupan nimi), "mainCat" (yksi näistä: ${cats}).`;
@@ -215,7 +240,7 @@ Vastaa PELKÄLLÄ JSON-taulukolla, ei muuta tekstiä eikä lähdeviitteitä. Jok
       groundedErr = new ApiError(429, "Google-haku ohitettu (äskettäinen virhe)");
     } else {
       try {
-        const deals = await callWithSearchFallback(keys, [{ role: "user", parts: [{ text: prompt }] }], parseDeals, 0.3, true);
+        const deals = finalizeDeals(await callWithSearchFallback(keys, [{ role: "user", parts: [{ text: prompt }] }], parseDeals, 0.3, true));
         if (deals.length > 0) return { deals };
         groundedErr = new ApiError(502, "Google-haku ei palauttanut tarjouksia");
       } catch (e) {
