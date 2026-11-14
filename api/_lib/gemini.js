@@ -237,7 +237,7 @@ async function callGeminiProvider(key, payload, ctx = {}) {
           method: "POST",
           headers: { "Content-Type": "application/json", "x-goog-api-key": key },
           body: JSON.stringify(geminiPayloadFor(payload, model, useThinking))
-        }, ctx, wantGround ? 20000 : 35000);
+        }, ctx, wantGround ? 24000 : 35000);
         if (!(useThinking && res.status === 400 && geminiThinkingConfig(model))) break;
         preErr = await res.json().catch(() => ({}));
         if (!/think/i.test(String(preErr?.error?.message || ""))) break; // muu 400-virhe: ei yritetä uudelleen
