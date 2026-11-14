@@ -842,7 +842,7 @@ window.refreshDealsWithGemini = async function() {
     const data = await postApi("/api/refresh-deals", { categories: Object.keys(CATEGORY_THEMES) });
     const deals = (Array.isArray(data.deals) ? data.deals : []).filter(d => d && d.name);
     if (deals.length === 0) throw new Error("Tarjouksia ei löytynyt – yritä myöhemmin uudelleen");
-    appState.deals = deals.slice(0, 12).map((d, i) => ({
+    appState.deals = deals.slice(0, 40).map((d, i) => ({
       id: "ai" + Date.now() + i,
       cat: d.cat || "🔥 Tärppi",
       name: String(d.name),
@@ -854,7 +854,7 @@ window.refreshDealsWithGemini = async function() {
       new Date().toLocaleTimeString("fi-FI", { hour: "2-digit", minute: "2-digit" });
     await pushToCloud();
     render();
-    showToast("✓ Päivän tärpit päivitetty!", "success");
+    showToast(`✓ Päivän tärpit päivitetty (${appState.deals.length} tarjousta)`, "success");
   } catch (e) {
     console.warn("Tarjoushaku epäonnistui:", e);
     render();
@@ -1576,8 +1576,14 @@ function dealForIngredient(name) {
 }
 window.dealForIngredient = dealForIngredient;
 
+// Reseptikehotteeseen enintään 3 tarjousta per kauppa (kala/liha ovat kunkin kaupan alussa), yhteensä enintään 12
 function dealNamesForPrompt() {
-  return (appState.deals || []).slice(0, 12).map(d => `${d.name} ${d.price || ""} (${d.store || ""})`.trim());
+  const perStore = {};
+  return (appState.deals || []).filter(d => {
+    const k = d.store || "";
+    perStore[k] = (perStore[k] || 0) + 1;
+    return perStore[k] <= 3;
+  }).slice(0, 12).map(d => `${d.name} ${d.price || ""} (${d.store || ""})`.trim());
 }
 
 // ---------- Suosikin annosmäärän muutos ----------
