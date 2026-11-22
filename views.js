@@ -384,7 +384,9 @@ function renderDeals() {
   // Ryhmitellään tarjoukset kaupoittain, kauppojen alkuperäinen järjestys säilyy.
   const groups = {};
   const storeOrder = [];
-  appState.deals.forEach(d => {
+  // Vain Tammiston/Pakkalan (Vantaa) myymälät: aiemmin tallennetut kaukaiset tarjoukset piilotetaan
+  const localDeals = appState.deals.filter(d => !d.store || /(tammisto|pakkala|jumbo|vantaa|^lidl)/i.test(d.store));
+  localDeals.forEach(d => {
     const store = d.store || "Muut tarjoukset";
     if (!groups[store]) { groups[store] = []; storeOrder.push(store); }
     groups[store].push(d);
