@@ -11,8 +11,12 @@ Palauta JSON-lista: [{"name": "Tuotenimi", "cat": "Kategoria", "qty": 1}]
 
 SÄÄNNÖT:
 1. "cat" on AINA täsmälleen yksi näistä: ${categories.join(", ")}.
-2. Jos tuote vastaa alla olevan KATALOGIN tuotetta, käytä "name"-kentässä TÄSMÄLLEEN katalogin nimeä (myös etuliite, esim. "MAITO: Laktoositon kevyt (sininen)") ja sen kategoriaa.
-3. Jos tuotetta ei ole katalogissa, anna lyhyt suomenkielinen perusmuotoinen nimi (esim. "maitoa" -> "Maito") ja valitse kategoria saman tyyppisten katalogituotteiden mukaan. Tässä kaupassa:
+2. TUOTEMERKKI JA TARKKA NIMIKE SÄILYVÄT (tärkein sääntö). Jos mainitaan tai pakkauksessa näkyy tuotemerkki (esim. Coop, Pirkka, Valio, Arla, Atria, HK, Fazer, Oatly, Apetit, Saarioinen, Elovena, X-tra, Rainbow, Eldorado) tai tarkka tuotenimi tai tarkenne (esim. "rypsiöljyvalmiste", "laktoositon kevytmaito", "grillimaustettu"), kirjoita "name" muotoon [tuotemerkki] + tuote täsmälleen kuten se sanottiin tai pakkauksessa lukee. ÄLÄ pelkistä yleisnimeksi, älä poista tuotemerkkiä äläkä vaihda sitä katalogin yleisnimeen. Esimerkit:
+   - "Coop rypsiöljyvalmiste" -> {"name": "Coop rypsiöljyvalmiste", "cat": "Kuivat (mutta märät)", "qty": 1}   (EI "Rypsiöljy")
+   - "kaksi Valio laktoositonta kevytmaitoa" -> {"name": "Valio laktoositon kevytmaito", "cat": "Maitotuotteet", "qty": 2}
+   - "Pirkka kauramaito" -> {"name": "Pirkka kauramaito", "cat": "Maitotuotteet", "qty": 1}
+3. Käytä katalogin nimeä TÄSMÄLLEEN (myös etuliite, esim. "MAITO: Laktoositon kevyt (sininen)") VAIN, kun tuote on yleisnimi ilman tuotemerkkiä ja ilman erityistä tarkennetta ja vastaa suoraan katalogin tuotetta (esim. "kaksi maitoa" -> katalogin maito, qty 2). Brändätylle tai tarkasti nimetylle tuotteelle ota katalogista vain kategoria samankaltaisen tuotteen mukaan.
+4. Jos tuotetta ei ole katalogissa: anna suomenkielinen nimi, jossa taivutus on perusmuodossa (esim. "maitoa" -> "Maito") mutta tuotemerkki ja tarkenteet säilyvät, ja valitse kategoria saman tyyppisten katalogituotteiden mukaan. Tässä kaupassa:
    - oluet, siiderit, lonkerot, mehut, öljyt, kastikkeet, säilykkeet = Kuivat (mutta märät)
    - kananmunat, jogurtit, rahkat, kylmät maito- ja proteiinijuomat = Maitotuotteet
    - kala ja kana = Liha; makkarat, kinkut ja leivänpäälliset = Leikkeleet
@@ -20,14 +24,47 @@ SÄÄNNÖT:
    - pasta, riisi, mausteet, kahvi, tee, murot = Kuivat; jauhot, sokeri, pähkinät = Jauhot
    - karkit, sipsit, keksit, suklaa = Herkut; lääkkeet, vitamiinit, proteiinijauhe = Apteekki
    - pesuaineet, paperit, hammastahna, roskapussit = Hygienia
-4. "qty" on kappalemäärä kokonaislukuna (oletus 1). Älä keksi tuotteita, joita ei mainita.
-5. Jos tuotteita ei löydy, palauta [].
+5. "qty" on kappalemäärä kokonaislukuna (oletus 1); pakkauskoko (esim. "1 litra") ei ole kappalemäärä. Älä keksi tuotteita, joita ei mainita.
+6. Jos tuotteita ei löydy, palauta [].
 
 KATALOGI (nimi = kategoria):
 ${catalogLines}`;
 }
 
-module.exports = createHandler(async (key, body) => {
+// Yleisimmät tuotemerkit. Jos tekoäly pudottaa tällaisen merkin puhutusta/kirjoitetusta nimikkeestä, se palautetaan.
+const BRANDS = ["Pirkka Parhaat", "Pirkka Luomu", "Coop", "Pirkka", "Valio", "Arla", "Atria", "HK", "Fazer", "Oatly", "Apetit", "Saarioinen", "Elovena", "Kotimaista",
+  "Rainbow", "X-tra", "K-Menu", "Eldorado", "Heinz", "Barilla", "Findus", "Mutti", "Paulig", "Santa Maria", "Old El Paso", "Dolmio", "Alpro", "Planti", "Gefilus",
+  "Hartwall", "Olvi", "Sinebrychoff", "Milbona", "Ingman", "Via Verde", "Vitasia"];
+const escapeRe = w => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const hasWord = (text, word) => new RegExp("(^|[^a-zåäö0-9])" + escapeRe(word) + "(?=$|[^a-zåäö0-9])", "i").test(text);
+const stripQty = phrase => phrase.replace(/^\s*(\d+\s*(kpl|x)?|yksi|kaksi|kolme|neljä|viisi|kuusi|seitsemän|kahdeksan|yhdeksän|kymmenen)\s+/i, "").trim();
+
+function restoreBrands(text, products) {
+  const phrases = String(text || "").split(/[,;\n]|\.\s|\s+ja\s+|\s+sekä\s+/i).map(x => x.trim()).filter(Boolean);
+  const used = new Set();
+  return products.map(p => {
+    const nameL = String(p.name).toLowerCase();
+    for (let i = 0; i < phrases.length; i++) {
+      if (used.has(i)) continue;
+      const phrase = phrases[i], phraseL = phrase.toLowerCase();
+      const brand = BRANDS.find(b => hasWord(phraseL, b.toLowerCase()));
+      if (!brand) continue;
+      if (hasWord(nameL, brand.toLowerCase())) { used.add(i); break; }          // merkki on jo nimessä
+      const words = t => t.split(/[^a-zåäö0-9]+/).filter(w => w.length >= 4);
+      const nameWords = words(nameL), phraseWords = words(phraseL).filter(w => w !== brand.toLowerCase());
+      const sameProduct = nameWords.some(nw => phraseWords.some(pw =>
+        pw.startsWith(nw.slice(0, Math.max(4, nw.length - 2))) || nw.startsWith(pw.slice(0, Math.max(4, pw.length - 2)))));
+      if (!sameProduct) continue;
+      used.add(i);
+      // Puhutun fraasin viimeinen sana perusmuotoon, jos se on selvästi partitiivi ("kevytmaitoa" -> "kevytmaito")
+      const restored = stripQty(phrase).replace(/([a-zåäö]{3,}(?:o|u))a$|([a-zåäö]{3,}(?:ö|y))ä$/i, (m, a, b) => a || b);
+      return { ...p, name: restored.charAt(0).toUpperCase() + restored.slice(1) };   // tuotemerkki ja tarkka nimike takaisin
+    }
+    return p;
+  });
+}
+
+const handler = createHandler(async (key, body) => {
   const categories = strList(body.categories, 40);
   const catalog = (Array.isArray(body.catalog) ? body.catalog : [])
     .filter(p => Array.isArray(p) && p[0])
@@ -39,11 +76,11 @@ module.exports = createHandler(async (key, body) => {
   if (body.image) {
     const image = validateImage(body.image);
     parts = [
-      { text: buildProductPrompt("Tunnista kuvasta kaikki ostettavat tuotteet ja niiden määrät. Kuvassa voi olla fyysinen tuote tai pakkaus (esim. oluttölkki, maitopurkki, leipäpussi), käsin kirjoitettu kauppalappu tai kuitti.", categories, catalog) },
+      { text: buildProductPrompt("Tunnista kuvasta kaikki ostettavat tuotteet ja niiden määrät. Kuvassa voi olla fyysinen tuote tai pakkaus (esim. oluttölkki, maitopurkki, leipäpussi), käsin kirjoitettu kauppalappu tai kuitti. Lue pakkauksesta TUOTEMERKKI ja tuotteen tarkka nimi ja kirjoita ne name-kenttään (esim. \"Pirkka kauramaito\", \"Coop rypsiöljyvalmiste\"); älä pelkistä niitä yleisnimeksi. Pakkauskokoa ei tarvita.", categories, catalog) },
       { inlineData: image }
     ];
   } else if (text) {
-    parts = [{ text: buildProductPrompt(`Poimi tästä suomenkielisestä ostoslistasta (puhuttu tai kirjoitettu) kaikki tuotteet ja määrät. Muuta taivutetut muodot perusmuotoon (esim. "kaksi maitoa" -> Maito, qty 2).\n\nTEKSTI: "${text.replace(/"/g, "'")}"`, categories, catalog) }];
+    parts = [{ text: buildProductPrompt(`Poimi tästä suomenkielisestä ostoslistasta (puhuttu tai kirjoitettu) kaikki tuotteet ja määrät. Taivutetut muodot saa muuttaa perusmuotoon (esim. \"kaksi maitoa\" -> Maito, qty 2), mutta tuotemerkki ja tuotteen tarkka nimike säilytetään (esim. \"Coop rypsiöljyvalmiste\" pysyy sellaisenaan).\n\nTEKSTI: "${text.replace(/"/g, "'")}"`, categories, catalog) }];
   } else {
     throw new ApiError(400, "Teksti tai kuva puuttuu");
   }
@@ -54,10 +91,13 @@ module.exports = createHandler(async (key, body) => {
   });
   const parsed = parseJson(extractText(data), "[", "]");
   const list = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.items) ? parsed.items : []);
-  return {
-    products: list
-      .filter(p => p && p.name)
-      .slice(0, 80)
-      .map(p => ({ name: String(p.name).trim(), cat: p.cat ? String(p.cat) : null, qty: parseInt(p.qty, 10) || 1 }))
-  };
+  let products = list
+    .filter(p => p && p.name)
+    .slice(0, 80)
+    .map(p => ({ name: String(p.name).trim(), cat: p.cat ? String(p.cat) : null, qty: parseInt(p.qty, 10) || 1 }));
+  if (!body.image && text) products = restoreBrands(text, products);   // tuotemerkki ei saa pudota pois puhutusta nimikkeestä
+  return { products };
 });
+
+module.exports = handler;
+module.exports.restoreBrands = restoreBrands;

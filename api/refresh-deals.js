@@ -9,12 +9,32 @@
 const { ApiError, callGemini, callWithSearchFallback, extractText, strList, createHandler, isSearchBlocked } = require("./_lib/gemini");
 
 const TAVILY_URL = "https://api.tavily.com/search";
-const COMBINED_QUERY = "K-Citymarket Tammisto Prisma Jumbo ruokatarjoukset viikko";
+// Vain nämä neljä Vantaan myymälää (Tammisto ja Pakkala, jossa Jumbo sijaitsee). Muiden paikkakuntien tarjouksia ei hyväksytä.
+const STORE_NAMES = ["K-Citymarket Tammisto", "K-Citymarket Jumbo (Pakkala)", "Prisma Jumbo (Pakkala)", "Lidl Tammisto"];
+const COMBINED_QUERY = "K-Citymarket Tammisto Vantaa, K-Citymarket Jumbo Prisma Jumbo Pakkala Vantaa, Lidl ruokatarjoukset viikko";
+// Hakutuloksista hyväksytään vain myymäläkohtaiset osoitteet (ei esim. k-citymarket-oulu) tai Lidlin valtakunnallinen viikkomainos
+const ALLOWED_URL = /(vantaa-tammisto|vantaa-jumbo|prisma-jumbo|jumbo|pakkala|tammisto|lidl\.fi)/i;
+
+// Kaupan nimi -> yksi neljästä sallitusta nimestä, tai null (muu myymälä/paikkakunta -> tarjous hylätään)
+function canonicalStore(raw) {
+  const t = String(raw || "").toLowerCase();
+  if (/citymarket/.test(t)) {
+    if (/tammisto/.test(t)) return STORE_NAMES[0];
+    if (/(jumbo|pakkala)/.test(t)) return STORE_NAMES[1];
+    return null;                                   // "K-Citymarket" ilman paikkaa tai muu paikkakunta
+  }
+  if (/prisma/.test(t)) return /(jumbo|pakkala)/.test(t) ? STORE_NAMES[2] : null;
+  if (/lidl/.test(t)) {                            // Lidlin viikkotarjoukset ovat samat kaikissa myymälöissä
+    const rest = t.replace(/lidl/g, " ").split(/[^a-zåäö]+/).filter(Boolean);
+    return rest.every(w => ["tammisto", "vantaa", "pakkala", "suomi"].includes(w)) ? STORE_NAMES[3] : null;
+  }
+  return null;
+}
 const SEARCH_DOMAINS = ["k-ruoka.fi", "s-kaupat.fi", "prisma.fi", "lidl.fi"];
 // K-ruoan tarjouslehtisivuilla hinnat ovat tekstinä; luetaan ne suoraan (Tavily Extract) hakutulosten lisäksi.
 const LEAFLETS = {
   "K-Citymarket Tammisto": "https://www.k-ruoka.fi/tarjouslehdet/kauppa/k-citymarket-vantaa-tammisto",
-  "K-Citymarket Jumbo": "https://www.k-ruoka.fi/tarjouslehdet/kauppa/k-citymarket-vantaa-jumbo"
+  "K-Citymarket Jumbo (Pakkala)": "https://www.k-ruoka.fi/tarjouslehdet/kauppa/k-citymarket-vantaa-jumbo"
 };
 const LEAFLET_CHARS = 16000;  // yhdestä lehtisivusta
 const SEARCH_CHARS = 3000;    // yhdestä hakutuloksesta
@@ -51,7 +71,9 @@ const MAX_DEALS = 40;
 const MEAT_FISH = /(kala|lohi|siika|silakka|kuha|ahven|taimen|katkarap|rapu|äyriäi|liha|nauta|naudan|possu|porsa|sian|broileri|kana|kanan|kalkkuna|pihvi|filee|fileepihvi|paisti|ribsi|kylki|makkara|nakki|kinkku|pekoni|poro|riista|hirvi|lammas|ulkofile|sisäfile|flank|lihapulla)/i;
 const isMeatFish = d => d.mainCat === "Liha" || MEAT_FISH.test(`${d.name} ${d.cat}`);
 
-function finalizeDeals(deals) {
+function finalizeDeals(rawDeals) {
+  // Vain Tammiston ja Pakkalan myymälät: muut kaupat (esim. toinen paikkakunta) pudotetaan ja nimet yhdenmukaistetaan
+  const deals = rawDeals.map(d => ({ ...d, store: canonicalStore(d.store) })).filter(d => d.store);
   const seen = new Set();
   const groups = new Map();                       // kauppa -> tarjoukset, kauppojen järjestys säilyy
   deals.forEach(d => {
@@ -181,11 +203,12 @@ async function dealsViaTavily(keys, cats, today) {
   Object.entries(LEAFLETS).forEach(([store, url]) => {
     if (extracted[url]) sections.push(`=== TARJOUSLEHTI: ${store} (${url}) ===\n${extracted[url].slice(0, LEAFLET_CHARS)}`);
   });
-  const searchText = searchResults
+  const localResults = searchResults.filter(x => ALLOWED_URL.test(String(x.url || "")));   // vain myymäläkohtaiset osoitteet
+  const searchText = localResults
     .map(x => `LÄHDE: ${x.url}\n${clean(x.raw_content || x.content).slice(0, SEARCH_CHARS)}`)
     .join("\n---\n");
   if (searchText) sections.push(`=== HAKUTULOKSET ===\n${searchText}`);
-  diag.push(`lehtisivuja ${Object.keys(extracted).length}, hakutuloksia ${searchResults.length}`);
+  diag.push(`lehtisivuja ${Object.keys(extracted).length}, hakutuloksia ${localResults.length}/${searchResults.length}`);
 
   const body = sections.join("\n\n").slice(0, TOTAL_CHARS);
   const hay = body.toLowerCase();
@@ -199,7 +222,7 @@ Poimi tekstistä ruokatarjouksia. Säännöt:
 1. Käytä VAIN tekstissä näkyviä tarjouksia. Älä keksi tuotteita äläkä arvaa hintoja. Jos hintaa ei näy, jätä tuote pois.
 2. Hinta kirjoitetaan täsmälleen niin kuin se tekstissä näkyy (esim. "7,99 €/kg" tai "5,19 €/kpl"); jos tekstissä on vain numero ja yksikkö, käytä niitä.
 3. Poimi MAHDOLLISIMMAN MONTA tarjousta: enintään 10 per kauppa (yhteensä enintään 40). Jos kaupasta löytyy vähemmän, anna kaikki löytyneet – älä täytä keksityillä. Painota kala- ja lihatarjouksia (lohi, kirjolohi, siika, naudanliha, possu, broileri, jauheliha, makkarat): niitä vähintään puolet kunkin kaupan tarjouksista, jos niitä on tarjolla, ja ne ensin. Loput ovat muita ruokatarjouksia (maitotuotteet, vihannekset, hedelmät, kuivat tuotteet).
-4. "store" on yksi näistä: K-Citymarket Tammisto, K-Citymarket Jumbo, Prisma Jumbo, Lidl Tammisto. Päättele kauppa tarjouslehden otsikosta tai lähteen osoitteesta (k-ruoka.fi = K-Citymarket, prisma.fi tai s-kaupat.fi = Prisma, lidl.fi = Lidl). Jos kauppaa ei voi päätellä, jätä tarjous pois.
+4. "store" on TÄSMÄLLEEN yksi näistä: K-Citymarket Tammisto, K-Citymarket Jumbo (Pakkala), Prisma Jumbo (Pakkala), Lidl Tammisto. Päättele kauppa tarjouslehden otsikosta tai lähteen osoitteesta (k-ruoka.fi = K-Citymarket, prisma.fi tai s-kaupat.fi = Prisma, lidl.fi = Lidl). ÄLÄ poimi muiden paikkakuntien tai muiden myymälöiden tarjouksia. Jos kauppaa ei voi päätellä, jätä tarjous pois.
 
 Vastaa PELKÄLLÄ JSON-taulukolla, ei muuta tekstiä. Kentät: "cat" (lyhyt otsikko emojilla, esim. "🐟 Kala"), "name" (tuote), "price", "store", "mainCat" (yksi näistä: ${cats}).
 
@@ -226,7 +249,13 @@ module.exports = createHandler(async (keys, body) => {
     weekday: "long", day: "numeric", month: "numeric", year: "numeric", timeZone: "Europe/Helsinki"
   });
 
-  const prompt = `Tänään on ${today}. Etsi Google-haulla tämän viikon voimassa olevia ruokatarjouksia Tammiston seudun kaupoista Vantaalla: K-Citymarket Tammisto, Lidl Tammisto, Prisma Jumbo ja K-Citymarket Jumbo. Hyviä lähteitä: k-ruoka.fi/kauppa/k-citymarket-vantaa-tammisto/tarjoukset, k-ruoka.fi/kauppa/k-citymarket-vantaa-jumbo/tarjoukset, s-kaupat.fi/myymala/prisma-jumbo, lidl.fi viikkomainos, sekä kauppojen viikkomainokset. Jos juuri näiden myymälöiden tarjouksia ei löydy, käytä kyseisten ketjujen valtakunnallisia viikkotarjouksia.
+  const prompt = `Tänään on ${today}. Etsi Google-haulla tämän viikon voimassa olevia ruokatarjouksia VAIN näistä neljästä Vantaan myymälästä:
+1. K-Citymarket Tammisto (Tammisto, Vantaa)
+2. K-Citymarket Jumbo (Pakkala, Vantaanportinkatu 3, Vantaa)
+3. Prisma Jumbo (Pakkala, Vantaanportinkatu 3, Vantaa)
+4. Lidl Tammisto (Tammisto, Vantaa; Lidlin viikkotarjoukset lidl.fi ovat samat kaikissa myymälöissä)
+Hyviä lähteitä: k-ruoka.fi/kauppa/k-citymarket-vantaa-tammisto/tarjoukset, k-ruoka.fi/kauppa/k-citymarket-vantaa-jumbo/tarjoukset, s-kaupat.fi/myymala/prisma-jumbo, lidl.fi viikkomainos.
+TÄRKEÄÄ: Käytä vain näiden myymälöiden omia tarjouksia. ÄLÄ käytä muiden paikkakuntien (esim. Oulu, Tampere, Turku) tai muiden Vantaan tai pääkaupunkiseudun myymälöiden tarjouksia äläkä ketjujen yleisiä valtakunnallisia tarjouksia (Lidlia lukuun ottamatta). Jos jonkin myymälän tarjouksia ei löydy, jätä se pois äläkä täytä muilta paikkakunnilta. "store"-kenttään kirjoitetaan TÄSMÄLLEEN myymälän nimi yllä olevasta listasta.
 
 Etsi MAHDOLLISIMMAN MONTA tarjousta: enintään 10 tarjousta PER KAUPPA (yhteensä enintään 40). Jos kaupasta löytyy vähemmän, anna kaikki löytyneet äläkä keksi lisää. Painota erityisesti kala- ja lihatarjouksia (lohi, kirjolohi, siika, naudanliha, possu, broileri, jauheliha, makkarat): vähintään puolet kunkin kaupan tarjouksista olkoon kalaa tai lihaa (jos niitä on tarjolla), ja listaa ne ensin. Loput ovat muita ruokatarjouksia (maitotuotteet, vihannekset, hedelmät, kuivat tuotteet).
 
