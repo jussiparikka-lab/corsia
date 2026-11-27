@@ -95,6 +95,7 @@ function prepTimeBlock(maxPrep, isWeek) {
 function buildRecipePrompt({ ingredients, diners, cookTwice, effective, cuisines, categories, count = 3, days = [], avoid = [], deals = [], dayCuisines = {}, diet = "all", maxPrep = "" }) {
   // Viikkolistassa lisukkeita on vähemmän ja lyhyempinä, jotta vastaus pysyy pienenä ja nopeana
   const sideRule = days.length > 0 ? { count: "2", maxIng: 4 } : { count: "2-3", maxIng: 6 };
+  const stepSentences = days.length > 0 ? "3-5" : "4-7";   // hakutilassa seikkaperäisemmät vaiheet
   const dcEntries = days.filter(d => dayCuisines[d]).map(d => `${d} = ${dayCuisines[d]}`);
   const cuisineStr = dcEntries.length > 0 ? "vaihtelee päivittäin (katso KEITTIÖ PÄIVITTÄIN)" : (cuisines.length > 0 ? cuisines.join(", ") : "vapaavalintainen");
   const catLine = categories.length > 0 ? `TÄSMÄLLEEN yksi näistä: ${categories.join(", ")}` : "kaupan osasto suomeksi";
@@ -114,8 +115,11 @@ ${weekTask}
 3. Käytä metrisiä yksiköitä (g, kg, dl, l, rkl, tl, kpl) ja pyöristä järkeviin kaupan pakkauskokoihin.
 4. in_fridge = true, jos aines (tai selvä vastine) on käyttäjän listalla, muuten false.
 5. to_shopping_list = kauppalapulle kirjoitettava rivi muodossa "Aines (määrä)", esim. "Kookosmaito (4 dl)". Jos in_fridge on true, to_shopping_list = "".
-6. Perusmausteita (suola, pippuri, vesi) ei tarvitse ostaa: merkitse ne in_fridge=true.
+6. Listaa KAIKKI valmistukseen tarvittavat ainekset tarkkoine määrineen, myös öljy, voi, suola, pippuri, mausteet, liemikuutiot, sokeri, jauhot, vesi ja koristeet. Mikään valmistusvaihe ei saa vaatia ainesta, jota ei ole aineslistalla, ja jokainen aineslistan aines käytetään jossakin vaiheessa. Perusaineet (suola, pippuri, vesi, öljy, voi, sokeri, jauhot, yleisimmät kuivamausteet) merkitään in_fridge=true, mutta ne listataan silti.
 7. Ehdota JOKAISELLE reseptille ${sideRule.count} sopivaa lisuketta kenttään "side_dishes" (esim. perunat, riisi, salaatti, uunijuurekset, leipä). Jokaisella lisukkeella on "title" (nimi suomeksi) ja "ingredients" (enintään ${sideRule.maxIng} ainesta; kentät name, amount_needed, cat). Määrät ${effective} annokselle ja "cat" samoin kuin pääruoan aineksilla. Lisukkeet täydentävät pääruokaa: älä toista sen pääraaka-ainetta, ja valitse mieluiten kasvispohjaisia.${diet === "vege" || diet === "mixed" ? " Kaikkien lisukkeiden pitää olla kasvisruokaa (ei lihaa, kalaa eikä äyriäisiä)." : ""}
+8. "instructions_brief": ${stepSentences} lausetta: valmistusvaiheet järjestyksessä, lämpötilat, ajat ja valmiuden merkit sekä mahdolliset etukäteen tehtävät työvaiheet.
+9. Hinta: jokaiselle aineksille (myös lisukkeiden aineksille) kenttä "price_eur" = arvio euroina VAIN reseptissä käytetylle määrälle (ei koko pakkaukselle) suomalaisten ruokakauppojen (K-Citymarket, Prisma, Lidl) tyypillisillä hinnoilla, kaksi desimaalia. Perusaineille (suola, mausteet, öljy) pieni osuus pakkauksen hinnasta.
+10. Ravintoarvio: kenttä "nutrition_per_serving" = arvio YHTÄ annosta kohden pääruoalle (ilman lisukkeita): energy_kcal, protein_g, carbs_g, fat_g, fiber_g. Lisukkeelle vastaava arvio yhtä lisukeannosta kohden: energy_kcal, protein_g, carbs_g, fat_g. Laske ainesten määristä ja jaa ${effective} annoksella.
 
 Vastaa PELKÄLLÄ JSON-taulukolla, ei muuta tekstiä:
 [{
@@ -124,12 +128,13 @@ Vastaa PELKÄLLÄ JSON-taulukolla, ei muuta tekstiä:
   "source_url": "todellinen reseptin URL tai null",
   "original_servings": 4,
   "target_servings": ${effective},
-  "ingredients": [{"name": "aines perusmuodossa suomeksi", "amount_needed": "esim. 400 g", "in_fridge": false, "to_shopping_list": "Aines (400 g)", "cat": ${JSON.stringify(catLine)}}],
-  "side_dishes": [{"title": "lisukkeen nimi", "ingredients": [{"name": "aines perusmuodossa suomeksi", "amount_needed": "esim. 800 g", "cat": ${JSON.stringify(catLine)}}]}],
+  "ingredients": [{"name": "aines perusmuodossa suomeksi", "amount_needed": "esim. 400 g", "in_fridge": false, "to_shopping_list": "Aines (400 g)", "cat": ${JSON.stringify(catLine)}, "price_eur": 2.4}],
+  "side_dishes": [{"title": "lisukkeen nimi", "ingredients": [{"name": "aines perusmuodossa suomeksi", "amount_needed": "esim. 800 g", "cat": ${JSON.stringify(catLine)}, "price_eur": 1.6}], "nutrition_per_serving": {"energy_kcal": 150, "protein_g": 3, "carbs_g": 25, "fat_g": 4}}],
+  "nutrition_per_serving": {"energy_kcal": 520, "protein_g": 35, "carbs_g": 45, "fat_g": 20, "fiber_g": 6},
   "total_time_minutes": 30,
   "is_vegetarian": false,
   "vege_note": ${diet === "mixed" ? '"yksi lause kasvisversiosta"' : '""'},
-  "instructions_brief": "2-3 lausetta suomeksi"
+  "instructions_brief": "${stepSentences} lausetta suomeksi"
 }]`;
 }
 
@@ -144,6 +149,34 @@ function inFridgeList(name, fridge) {
     const x = String(f).trim().toLowerCase();
     return x === n || (n.length >= 4 && x.includes(n)) || (x.length >= 4 && n.includes(x));
   });
+}
+
+// Numero rajattuna ja pyöristettynä; muuten null
+function cleanNumber(v, min, max, digits = 1) {
+  if (v === null || v === undefined || String(v).trim() === "") return null;   // puuttuva arvo ei ole 0
+  const n = Number(String(v).replace(",", "."));
+  if (!Number.isFinite(n) || n < min || n > max) return null;
+  const f = Math.pow(10, digits);
+  return Math.round(n * f) / f;
+}
+
+// Ravintoarvio yhtä annosta kohden: null, jos yhtään kelvollista arvoa ei ole
+function normalizeNutrition(o, withFiber) {
+  if (!o || typeof o !== "object") return null;
+  const out = {
+    energy_kcal: cleanNumber(o.energy_kcal ?? o.kcal, 0, 3000, 0),
+    protein_g: cleanNumber(o.protein_g, 0, 300),
+    carbs_g: cleanNumber(o.carbs_g, 0, 500),
+    fat_g: cleanNumber(o.fat_g, 0, 300)
+  };
+  if (withFiber) out.fiber_g = cleanNumber(o.fiber_g, 0, 100);
+  return Object.values(out).some(v => v !== null) ? out : null;
+}
+
+// Ainesten hintojen summa (€) ja kuinka monella aineksella hinta tiedetään
+function sumPrices(list) {
+  const priced = list.filter(i => i.price_eur !== null);
+  return { cost_total_eur: Math.round(priced.reduce((a, i) => a + i.price_eur, 0) * 100) / 100, cost_known: priced.length, cost_count: list.length };
 }
 
 // Lisukkeet: 2-3 kpl, kullakin nimi + ainekset (samat kentät kuin pääruoan aineksilla, jotta kytkimet toimivat samoin)
@@ -162,10 +195,13 @@ function normalizeSideDishes(list, fridge, maxSides = 3) {
           return {
             name, amount_needed: amount, in_fridge: inFridge,
             to_shopping_list: inFridge ? "" : (amount ? `${name} (${amount})` : name),
-            cat: i.cat ? String(i.cat) : null
+            cat: i.cat ? String(i.cat) : null,
+            price_eur: cleanNumber(i.price_eur, 0, 200, 2)
           };
-        })
+        }),
+      nutrition_per_serving: normalizeNutrition(sd.nutrition_per_serving, false)
     }))
+    .map(sd => ({ ...sd, ...sumPrices(sd.ingredients) }))
     .filter(sd => sd.ingredients.length > 0)   // tyhjät lisukkeet pois ennen rajausta
     .slice(0, maxSides);
 }
@@ -186,17 +222,19 @@ function normalizeRecipes(parsed, effective, max = 5, diet = "all", fridge = [])
         .map(i => {
           const name = String(i.name).trim();
           const amount = String(i.amount_needed ?? i.amount ?? "").trim();
-          const inFridge = i.in_fridge === true || i.in_fridge === "true";
+          const inFridge = i.in_fridge === true || i.in_fridge === "true" || BASIC_PANTRY.test(name);
           let toList = inFridge ? "" : String(i.to_shopping_list || "").trim();
           if (!inFridge && !toList) toList = amount ? `${name} (${amount})` : name;
-          return { name, amount_needed: amount, in_fridge: inFridge, to_shopping_list: toList, cat: i.cat ? String(i.cat) : null };
+          return { name, amount_needed: amount, in_fridge: inFridge, to_shopping_list: toList, cat: i.cat ? String(i.cat) : null, price_eur: cleanNumber(i.price_eur, 0, 200, 2) };
         }),
       total_time_minutes: (n => (Number.isFinite(n) && n >= 1 && n <= 600 ? Math.round(n) : null))(Number(r.total_time_minutes)),
+      nutrition_per_serving: normalizeNutrition(r.nutrition_per_serving, true),
       side_dishes: normalizeSideDishes(r.side_dishes, fridge),
       is_vegetarian: diet === "vege" ? true : (r.is_vegetarian === true || r.is_vegetarian === "true"),
       vege_note: diet === "mixed" ? String(r.vege_note || "").trim().slice(0, 240) : "",
       instructions_brief: String(r.instructions_brief || "")
-    }));
+    }))
+    .map(r => ({ ...r, ...sumPrices(r.ingredients) }));   // cost_total_eur (pääruoka, kaikki ainekset), cost_known, cost_count
 }
 
 const VALID_DAYS = ["Ma", "Ti", "Ke", "To", "Pe", "La", "Su"];

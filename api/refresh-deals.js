@@ -31,14 +31,22 @@ function canonicalStore(raw) {
   return null;
 }
 const SEARCH_DOMAINS = ["k-ruoka.fi", "s-kaupat.fi", "prisma.fi", "lidl.fi"];
-// K-ruoan tarjouslehtisivuilla hinnat ovat tekstinä; luetaan ne suoraan (Tavily Extract) hakutulosten lisäksi.
-const LEAFLETS = {
-  "K-Citymarket Tammisto": "https://www.k-ruoka.fi/tarjouslehdet/kauppa/k-citymarket-vantaa-tammisto",
-  "K-Citymarket Jumbo (Pakkala)": "https://www.k-ruoka.fi/tarjouslehdet/kauppa/k-citymarket-vantaa-jumbo"
-};
+// Kauppakohtaiset lähteet: tarjouslehtisivut luetaan suoraan (Tavily Extract), hakutulokset kohdistetaan kauppaan osoitteen perusteella.
+// hint = osoite, josta hakutulos tunnistetaan juuri tämän kaupan sivuksi (muut osoitteet, esim. toiset paikkakunnat, hylätään).
+const STORE_SOURCES = [
+  { store: STORE_NAMES[0], hint: /k-citymarket-vantaa-tammisto/i, domains: ["k-ruoka.fi"], query: "K-Citymarket Vantaa Tammisto tarjoukset viikko",
+    pages: ["https://www.k-ruoka.fi/tarjouslehdet/kauppa/k-citymarket-vantaa-tammisto", "https://www.k-ruoka.fi/kauppa/k-citymarket-vantaa-tammisto/tarjoukset"] },
+  { store: STORE_NAMES[1], hint: /k-citymarket-vantaa-jumbo/i, domains: ["k-ruoka.fi"], query: "K-Citymarket Vantaa Jumbo Pakkala tarjoukset viikko",
+    pages: ["https://www.k-ruoka.fi/tarjouslehdet/kauppa/k-citymarket-vantaa-jumbo", "https://www.k-ruoka.fi/kauppa/k-citymarket-vantaa-jumbo/tarjoukset"] },
+  { store: STORE_NAMES[2], hint: /prisma-jumbo/i, domains: ["s-kaupat.fi", "prisma.fi"], query: "Prisma Jumbo Vantaa Pakkala tarjoukset viikko",
+    pages: ["https://www.s-kaupat.fi/myymala/prisma-jumbo"] },
+  { store: STORE_NAMES[3], hint: /lidl\.fi/i, domains: ["lidl.fi"], query: "Lidl viikon tarjoukset ruoka",
+    pages: [] }
+];
+const normUrl = u => String(u || "").toLowerCase().replace(/^https?:\/\/(www\.)?/, "").replace(/[?#].*$/, "").replace(/\/+$/, "");
+const MIN_STORE_CHARS = 300;   // alle tämän: tehdään kohdennettu lisähaku kyseiselle kaupalle
 const LEAFLET_CHARS = 16000;  // yhdestä lehtisivusta
 const SEARCH_CHARS = 3000;    // yhdestä hakutuloksesta
-const TOTAL_CHARS = 45000;    // koko tekoälylle annettava aineisto
 const clean = t => String(t || "").replace(/\s+/g, " ").trim();
 
 // Poimii tarjoukset vastauksesta, vaikka mukana olisi selitystekstiä tai lähdeviitteitä.
@@ -54,7 +62,15 @@ function parseDeals(data) {
     (text.match(/\{[^{}]*\}/g) || []).forEach(s => { try { arr.push(JSON.parse(s)); } catch (e) {} });
   }
   return arr
-    .filter(d => d && d.name)
+    .filter(d => d && typeof d === "object")
+    .map(d => ({
+      cat: d.cat ?? d.category ?? d.kategoria,
+      name: d.name ?? d.nimi ?? d.tuote ?? d.product ?? d.title,
+      price: d.price ?? d.hinta,
+      store: d.store ?? d.kauppa ?? d.myymala,
+      mainCat: d.mainCat ?? d.main_cat
+    }))
+    .filter(d => d.name)
     .slice(0, 80)
     .map(d => ({
       cat: String(d.cat || "🔥 Tärppi"),
@@ -143,7 +159,7 @@ async function tavilyExtract(apiKey, urls) {
     }
     const data = await res.json();
     const out = {};
-    (Array.isArray(data?.results) ? data.results : []).forEach(r => { if (r?.url) out[r.url] = clean(r.raw_content || r.content); });
+    (Array.isArray(data?.results) ? data.results : []).forEach(r => { if (r?.url) out[normUrl(r.url)] = clean(r.raw_content || r.content); });
     return out;
   } catch (e) {
     if (e instanceof ApiError) throw e;
@@ -175,13 +191,38 @@ function supportedByText(deal, hay) {
 
 const authLike = e => e && (e.status === 401 || e.status === 403 || e.status === 429 || e.status === 432 || e.status === 433);
 
+// Yhden kaupan tekstistä tarjoukset tekoälyllä. Ensin JSON-tilassa; jos tulos on tyhjä vaikka tekstiä on paljon, toinen yritys ilman JSON-tilaa.
+async function extractStoreDeals(keys, store, text, cats, today) {
+  const prompt = `Tänään on ${today}. Alla on kaupan "${store}" tarjoussivujen tekstiä.
+Poimi tekstistä ruokatarjouksia. Säännöt:
+1. Käytä VAIN tekstissä näkyviä tarjouksia. Älä keksi tuotteita äläkä arvaa hintoja. Jos hintaa ei näy, jätä tuote pois.
+2. Hinta kirjoitetaan täsmälleen niin kuin se tekstissä näkyy (esim. "7,99 €/kg" tai "5,19 €/kpl"); jos tekstissä on vain numero ja yksikkö, käytä niitä.
+3. Poimi MAHDOLLISIMMAN MONTA tarjousta, enintään 10. Painota kala- ja lihatarjouksia (lohi, kirjolohi, siika, naudanliha, possu, broileri, jauheliha, makkarat): vähintään puolet, jos niitä on tarjolla, ja ne ensin. Loput ovat muita ruokatarjouksia (maitotuotteet, vihannekset, hedelmät, kuivat tuotteet).
+4. "store" on TÄSMÄLLEEN: ${store}
+
+Vastaa PELKÄLLÄ JSON-taulukolla, ei muuta tekstiä. Kentät: "cat" (lyhyt otsikko emojilla, esim. "🐟 Kala"), "name" (tuote), "price", "store", "mainCat" (yksi näistä: ${cats}).
+
+${text}`;
+  const ask = async jsonMode => {
+    const { data } = await callGemini(keys, {
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: jsonMode ? { temperature: 0.1, responseMimeType: "application/json" } : { temperature: 0.2 }
+    });
+    return parseDeals(data);
+  };
+  let list = await ask(true);
+  if (list.length === 0 && text.length > 300) list = await ask(false);   // toinen yritys ilman JSON-tilaa
+  return list.map(d => ({ ...d, store }));
+}
+
 async function dealsViaTavily(keys, cats, today) {
   const diag = [];
   const fail = (status, msg) => { const e = new ApiError(status, msg); e.detail = diag.join("; ").slice(0, 400); return e; };
 
-  // Yksi yhdistetty haku + K-ruoan tarjouslehtisivut suoraan, rinnakkain
+  // 1) Tarjouslehtisivut suoraan + yksi yhdistetty haku, rinnakkain
+  const allPages = STORE_SOURCES.flatMap(s => s.pages);
   const [extracted, searchResults] = await Promise.all([
-    tavilyExtract(keys.tavily, Object.values(LEAFLETS)).catch(e => {
+    tavilyExtract(keys.tavily, allPages).catch(e => {
       if (authLike(e)) throw e;
       diag.push(`luku: ${e.status} ${e.message}`);
       return {};
@@ -199,44 +240,49 @@ async function dealsViaTavily(keys, cats, today) {
     })()
   ]);
 
-  const sections = [];
-  Object.entries(LEAFLETS).forEach(([store, url]) => {
-    if (extracted[url]) sections.push(`=== TARJOUSLEHTI: ${store} (${url}) ===\n${extracted[url].slice(0, LEAFLET_CHARS)}`);
+  // 2) Teksti kaupoittain: omat sivut + hakutulokset, jotka tunnistetaan osoitteesta (muut osoitteet hylätään)
+  const parts = new Map(STORE_SOURCES.map(s => [s.store, []]));
+  const addResults = (list, restrictTo) => list.forEach(x => {
+    const src = STORE_SOURCES.find(s => (!restrictTo || s.store === restrictTo) && s.hint.test(String(x.url || "")));
+    if (src) parts.get(src.store).push(`LÄHDE: ${x.url}\n${clean(x.raw_content || x.content).slice(0, SEARCH_CHARS)}`);
   });
-  const localResults = searchResults.filter(x => ALLOWED_URL.test(String(x.url || "")));   // vain myymäläkohtaiset osoitteet
-  const searchText = localResults
-    .map(x => `LÄHDE: ${x.url}\n${clean(x.raw_content || x.content).slice(0, SEARCH_CHARS)}`)
-    .join("\n---\n");
-  if (searchText) sections.push(`=== HAKUTULOKSET ===\n${searchText}`);
-  diag.push(`lehtisivuja ${Object.keys(extracted).length}, hakutuloksia ${localResults.length}/${searchResults.length}`);
+  STORE_SOURCES.forEach(src => src.pages.forEach(u => {
+    const t = extracted[normUrl(u)];
+    if (t) parts.get(src.store).unshift(`LÄHDE: ${u}\n${t.slice(0, LEAFLET_CHARS)}`);
+  }));
+  addResults(searchResults);
+  const contentLen = store => parts.get(store).join("\n").split("\n").filter(l => !/^LÄHDE:/.test(l)).join(" ").length;
 
-  const body = sections.join("\n\n").slice(0, TOTAL_CHARS);
-  const hay = body.toLowerCase();
-  const contentLen = body.split("\n").filter(l => !/^(===|LÄHDE:)/.test(l)).join(" ").trim().length;  // otsikkorivit pois
-  if (contentLen < 200) {
-    throw fail(502, "Hakutuloksista ei löytynyt tarjoussivujen sisältöä – yritä myöhemmin uudelleen");
-  }
+  // 3) Kauppa, jolta tekstiä on liian vähän: kohdennettu lisähaku
+  await Promise.all(STORE_SOURCES.filter(src => contentLen(src.store) < MIN_STORE_CHARS).map(async src => {
+    try { addResults(await tavilySearch(keys.tavily, src.query, src.domains), src.store); }
+    catch (e) { if (authLike(e)) throw e; diag.push(`lisähaku ${src.store}: ${e.status} ${e.message}`); }
+  }));
 
-  const prompt = `Tänään on ${today}. Alla on hakutuloksista ja kauppojen tarjouslehtisivuilta poimittua tekstiä.
-Poimi tekstistä ruokatarjouksia. Säännöt:
-1. Käytä VAIN tekstissä näkyviä tarjouksia. Älä keksi tuotteita äläkä arvaa hintoja. Jos hintaa ei näy, jätä tuote pois.
-2. Hinta kirjoitetaan täsmälleen niin kuin se tekstissä näkyy (esim. "7,99 €/kg" tai "5,19 €/kpl"); jos tekstissä on vain numero ja yksikkö, käytä niitä.
-3. Poimi MAHDOLLISIMMAN MONTA tarjousta: enintään 10 per kauppa (yhteensä enintään 40). Jos kaupasta löytyy vähemmän, anna kaikki löytyneet – älä täytä keksityillä. Painota kala- ja lihatarjouksia (lohi, kirjolohi, siika, naudanliha, possu, broileri, jauheliha, makkarat): niitä vähintään puolet kunkin kaupan tarjouksista, jos niitä on tarjolla, ja ne ensin. Loput ovat muita ruokatarjouksia (maitotuotteet, vihannekset, hedelmät, kuivat tuotteet).
-4. "store" on TÄSMÄLLEEN yksi näistä: K-Citymarket Tammisto, K-Citymarket Jumbo (Pakkala), Prisma Jumbo (Pakkala), Lidl Tammisto. Päättele kauppa tarjouslehden otsikosta tai lähteen osoitteesta (k-ruoka.fi = K-Citymarket, prisma.fi tai s-kaupat.fi = Prisma, lidl.fi = Lidl). ÄLÄ poimi muiden paikkakuntien tai muiden myymälöiden tarjouksia. Jos kauppaa ei voi päätellä, jätä tarjous pois.
+  // 4) Tarjousten poiminta kaupoittain (pienemmät, luotettavammat kutsut); hinnan pitää löytyä juuri tämän kaupan tekstistä
+  const summary = [];
+  const perStore = await Promise.all(STORE_SOURCES.map(async src => {
+    const text = parts.get(src.store).join("\n---\n").slice(0, LEAFLET_CHARS + SEARCH_CHARS * 3);
+    const chars = contentLen(src.store);
+    if (chars < 150) { summary.push(`${src.store.split(" (")[0]}: ei lähdetekstiä`); return []; }
+    try {
+      const proposed = await extractStoreDeals(keys, src.store, text, cats, today);
+      const verified = proposed.filter(d => supportedByText(d, text.toLowerCase()));
+      summary.push(`${src.store.split(" (")[0]}: ${chars} merk., ehdotti ${proposed.length}, vahvistui ${verified.length}`);
+      return verified;
+    } catch (e) {
+      if (!(e instanceof ApiError)) throw e;
+      diag.push(`poiminta ${src.store}: ${e.status} ${e.message}`);
+      summary.push(`${src.store.split(" (")[0]}: virhe ${e.status}`);
+      return [];
+    }
+  }));
+  diag.push(...summary);
 
-Vastaa PELKÄLLÄ JSON-taulukolla, ei muuta tekstiä. Kentät: "cat" (lyhyt otsikko emojilla, esim. "🐟 Kala"), "name" (tuote), "price", "store", "mainCat" (yksi näistä: ${cats}).
-
-${body}`;
-  // Tavallinen kutsu ilman tools-kenttää
-  const { data } = await callGemini(keys, {
-    contents: [{ role: "user", parts: [{ text: prompt }] }],
-    generationConfig: { temperature: 0.1, responseMimeType: "application/json" }
-  });
-  const all = parseDeals(data);
-  const kept = finalizeDeals(all.filter(d => supportedByText(d, hay)));
-  diag.push(`tekoäly ${all.length}, vahvistui ${kept.length}`);
+  const kept = finalizeDeals(perStore.flat());
   if (kept.length === 0) {
-    throw fail(502, `Hakutuloksista ei löytynyt varmistettavia tarjouksia (tekoäly ehdotti ${all.length}, vahvistui 0) – yritä myöhemmin uudelleen`);
+    if (summary.every(x => /ei lähdetekstiä/.test(x))) throw fail(502, "Hakutuloksista ei löytynyt tarjoussivujen sisältöä – yritä myöhemmin uudelleen");
+    throw fail(502, `Hakutuloksista ei löytynyt varmistettavia tarjouksia (${summary.join("; ")}) – yritä myöhemmin uudelleen`);
   }
   return kept;
 }
