@@ -507,6 +507,7 @@ function renderRecipeCard(r, idx, source, effective) {
       ${ingHeader}
       <div class="fp-ing-list">${ingRows}</div>
       ${renderSideDishes(r, idx, source)}
+      ${renderMealEstimate(r)}
       <div style="margin-top: 8px; font-size: 0.7rem; font-weight: 800; color: #64748b;">📅 LISÄÄ VIIKOLLE ${weekNumberOf(activeWeekKey())} (${formatWeekRange(activeWeekKey())})</div>
       <div class="fp-days">${dayChips}</div>
       <button class="fp-add-btn ${confirmed ? "fp-add-btn-done" : buyCount === 0 ? "fp-add-btn-off" : ""}" id="add-btn-${source}-${idx}" onclick="addSelectedToShoppingList('${source}', ${idx})" ${confirmed || buyCount === 0 ? "disabled" : ""}>
@@ -691,6 +692,33 @@ window.addSelectedToShoppingList = async function(source, idx) {
   return res;
 };
 
+// 📊 Aterian arvio: kustannus (pääruoka + valitut lisukkeet, kytkimet huomioiden) ja ravintoarvio yhtä syöjää kohden
+function renderMealEstimate(r) {
+  const cost = recipeCostInfo(r), nut = recipeNutritionInfo(r);
+  const nutChips = [];
+  if (nut) {
+    if (nut.energy_kcal !== null) nutChips.push(`<span class="fp-nut-chip">🔥 ${Math.round(nut.energy_kcal)} kcal</span>`);
+    if (nut.protein_g !== null) nutChips.push(`<span class="fp-nut-chip fp-nut-protein">💪 Proteiini ${fmtNum(nut.protein_g)} g</span>`);
+    if (nut.carbs_g !== null) nutChips.push(`<span class="fp-nut-chip">🍞 Hiilihydraatit ${fmtNum(nut.carbs_g)} g</span>`);
+    if (nut.fat_g !== null) nutChips.push(`<span class="fp-nut-chip">🧈 Rasva ${fmtNum(nut.fat_g)} g</span>`);
+    if (nut.fiber_g !== null) nutChips.push(`<span class="fp-nut-chip">🌾 Kuitu ${fmtNum(nut.fiber_g)} g</span>`);
+  }
+  if (!cost.hasData && nutChips.length === 0) return "";
+  const withSides = selectedSideDishes(r).length > 0;
+  return `
+    <div class="fp-est">
+      <div class="fp-est-title">📊 Aterian arvio${withSides ? " (sis. valitut lisukkeet)" : ""}</div>
+      ${cost.hasData ? `
+        <div class="fp-est-row">
+          <span>💶 Kustannus</span>
+          <strong>~${fmtEur(cost.total)} · ~${fmtEur(cost.perServing)} / annos</strong>
+        </div>
+        <div class="fp-est-sub">🛒 Kauppalapulle ~${fmtEur(cost.toBuy)} (ostettaviksi valitut)${cost.unknown ? ` · ${cost.unknown} aineksen hintaa ei arvioitu` : ""}</div>` : ""}
+      ${nutChips.length ? `<div class="fp-est-label">Ravintoarvio yhtä syöjää kohden</div><div class="fp-nut-chips">${nutChips.join("")}</div>` : ""}
+      <div class="fp-est-note">Tekoälyn arvio: todelliset hinnat ja ravintoarvot vaihtelevat tuotteen ja kaupan mukaan.</div>
+    </div>`;
+}
+
 // 🥗 Ehdotetut lisukkeet: valittavat chipit; valitun lisukkeen ainekset tulevat aineslistaan samoilla kytkimillä
 function renderSideDishes(r, idx, source) {
   const sides = recipeSideDishes(r);
@@ -804,9 +832,21 @@ function renderWeekNav() {
     </div>`;
 }
 
+// Viikkorivin lyhyt arvio: ~hinta/annos ja proteiini/annos
+function weekEstimateBadge(r) {
+  const c = recipeCostInfo(r), n = r.nutrition_per_serving;
+  const parts = [];
+  if (c.hasData) parts.push(`~${fmtEur(c.perServing)}/annos`);
+  if (n && Number.isFinite(n.protein_g)) parts.push(`${fmtNum(n.protein_g)} g prot.`);
+  return parts.length ? ` · 💶 ${parts.join(" · ")}` : "";
+}
+
 function renderWeekPlan() {
   const combined = combinedWeekIngredients();
   const wkKey = activeWeekKey();
+  // Viikon kokonaiskustannus (kaikkien päivien pääruokien ainekset, tekoälyn arvio)
+  const weekCosts = WEEK_DAYS.map(d => appState.weekPlan[d]).filter(Boolean).map(recipeCostInfo).filter(c => c.hasData);
+  const weekCostHtml = weekCosts.length ? ` <span class="fp-est-week">💶 ~${fmtEur(weekCosts.reduce((a, c) => a + c.total, 0))}</span>` : "";
   const dates = weekDates(wkKey);
   const now = new Date();
   const isToday = dt => dt.getUTCFullYear() === now.getFullYear() && dt.getUTCMonth() === now.getMonth() && dt.getUTCDate() === now.getDate();
@@ -818,7 +858,7 @@ function renderWeekPlan() {
         <div class="fp-week-day">${d}<small>${dt.getUTCDate()}.${dt.getUTCMonth() + 1}.</small></div>
         <div style="flex: 1; min-width: 0;">
           ${r ? `<div style="font-size: 0.86rem; font-weight: 800; color: #0f172a;">${esc(r.recipe_title)}</div>
-                 <div style="font-size: 0.7rem; color: #64748b; font-weight: 700;">${esc(r.cuisine || "")} · ${missingIngredients(r).length} ostettavaa${r.is_vegetarian ? " · 🥦 Kasvis" : ""}${r.total_time_minutes ? ` · ⏱️ ${r.total_time_minutes} min` : ""}${weekCookBadge(r)}</div>
+                 <div style="font-size: 0.7rem; color: #64748b; font-weight: 700;">${esc(r.cuisine || "")} · ${missingIngredients(r).length} ostettavaa${r.is_vegetarian ? " · 🥦 Kasvis" : ""}${r.total_time_minutes ? ` · ⏱️ ${r.total_time_minutes} min` : ""}${weekEstimateBadge(r)}${weekCookBadge(r)}</div>
                  ${r.vege_note && !r.is_vegetarian ? `<div class="fp-vege-note fp-vege-note-sm">🥦 ${esc(r.vege_note)}</div>` : ""}`
               : `<div style="font-size: 0.8rem; color: #94a3b8; font-weight: 700;">Ei suunniteltu</div>`}
         </div>
@@ -862,7 +902,7 @@ function renderWeekPlan() {
     ${loadingHtml}
     <div class="recipe-card">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-        <div style="font-size: 0.95rem; font-weight: 800; color: #0f172a;">📅 Viikon ${weekNumberOf(wkKey)} ruokalista</div>
+        <div style="font-size: 0.95rem; font-weight: 800; color: #0f172a;">📅 Viikon ${weekNumberOf(wkKey)} ruokalista${weekCostHtml}</div>
         ${anyPlanned ? `<button id="btn-share-week" class="fp-share-btn" onclick="shareWeekPlan()">📤 Jaa viikko</button>` : ""}
       </div>
       ${rows}

@@ -473,3 +473,16 @@ body.route-drag-active { cursor: grabbing; user-select: none; -webkit-user-selec
 .fp-time-on { background: #16a34a; border-color: #16a34a; color: #ffffff; }
 .fp-time-hint { font-size: 0.7rem; color: #64748b; margin-top: 5px; line-height: 1.4; }
 .fp-time-badge { background: #e0f2fe; color: #075985; font-size: 0.68rem; font-weight: 800; padding: 2px 8px; border-radius: 999px; }
+
+/* Aterian arvio (kustannus ja ravintoarvio) */
+.fp-est { margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: #f8fafc; border: 1px solid #e2e8f0; }
+.fp-est-title { font-size: 0.82rem; font-weight: 800; color: #0f172a; }
+.fp-est-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-top: 8px; font-size: 0.8rem; font-weight: 700; color: #334155; flex-wrap: wrap; }
+.fp-est-row strong { color: #166534; font-size: 0.84rem; }
+.fp-est-sub { font-size: 0.72rem; font-weight: 700; color: #c2410c; margin-top: 3px; }
+.fp-est-label { font-size: 0.68rem; font-weight: 800; color: #64748b; margin-top: 10px; }
+.fp-nut-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 5px; }
+.fp-nut-chip { padding: 4px 10px; border-radius: 999px; background: #ffffff; border: 1px solid #cbd5e1; font-size: 0.74rem; font-weight: 800; color: #334155; }
+.fp-nut-protein { background: #dcfce7; border-color: #86efac; color: #166534; }
+.fp-est-note { font-size: 0.64rem; color: #94a3b8; margin-top: 8px; line-height: 1.35; }
+.fp-est-week { font-size: 0.74rem; font-weight: 800; color: #166534; background: #dcfce7; border-radius: 999px; padding: 2px 8px; margin-left: 6px; }

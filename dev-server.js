@@ -29,9 +29,10 @@ function mockTotalMinutes(raw) {
 }
 
 function vietnamMock(minutes = 35) {
-  const ing = (name, amount, cat) => ({ name, amount_needed: amount, in_fridge: false, to_shopping_list: `${name} (${amount})`, cat });
-  const side = (title, items) => ({ title, ingredients: items.map(([n, a, c]) => ({ name: n, amount_needed: a, cat: c })) });
-  const base = { cuisine: "Vietnamilainen", source_url: null, original_servings: 4, target_servings: 4, is_vegetarian: false, vege_note: "", total_time_minutes: minutes };
+  const ing = (name, amount, cat, price = 1.5) => ({ name, amount_needed: amount, in_fridge: false, to_shopping_list: `${name} (${amount})`, cat, price_eur: price });
+  const side = (title, items) => ({ title, ingredients: items.map(([n, a, c]) => ({ name: n, amount_needed: a, cat: c, price_eur: 1.2 })), nutrition_per_serving: { energy_kcal: 140, protein_g: 4, carbs_g: 22, fat_g: 3 } });
+  const base = { cuisine: "Vietnamilainen", source_url: null, original_servings: 4, target_servings: 4, is_vegetarian: false, vege_note: "", total_time_minutes: minutes,
+    nutrition_per_serving: { energy_kcal: 480, protein_g: 32, carbs_g: 52, fat_g: 14, fiber_g: 5 } };
   return [
     { ...base, recipe_title: "Phở bò (testi)", instructions_brief: "Keitä tähtianis-inkiväärilientä, lisää nuudelit ja ohuet naudan siivut. Tarjoile yrttien, itujen ja limetin kanssa.",
       ingredients: [ing("Naudan ulkofile", "300 g", "Liha"), ing("Riisinuudelit", "250 g", "Aasia / Texmex"), ing("Tähtianis", "3 kpl", "Kuivat"), ing("Inkivääri", "1 pala", "Hevi"),
@@ -97,16 +98,23 @@ if (process.env.MOCK_GEMINI === "1") {
         recipe_title: t, cuisine: "Aasialainen", total_time_minutes: mockTotalMinutes(raw), source_url: "https://www.k-ruoka.fi/reseptit/" + t.toLowerCase(),
         original_servings: 4, target_servings: 8,
         ingredients: [
-          { name: "Paprika", amount_needed: "2 kpl", in_fridge: true, to_shopping_list: "", cat: "Hevi" },
-          { name: "Kerma", amount_needed: "2 dl", in_fridge: false, to_shopping_list: "Kerma (2 dl)", cat: "Maitotuotteet" },
-          { name: "Testiaines " + t, amount_needed: "100 g", in_fridge: false, to_shopping_list: "Testiaines " + t + " (100 g)", cat: "Muut" }
+          { name: "Kanafile", amount_needed: "600 g", in_fridge: false, to_shopping_list: "Kanafile (600 g)", cat: "Liha", price_eur: 6.9 },
+          { name: "Paprika", amount_needed: "2 kpl", in_fridge: true, to_shopping_list: "", cat: "Hevi", price_eur: 1.8 },
+          { name: "Kerma", amount_needed: "2 dl", in_fridge: false, to_shopping_list: "Kerma (2 dl)", cat: "Maitotuotteet", price_eur: 0.9 },
+          { name: "Riisi", amount_needed: "3 dl", in_fridge: false, to_shopping_list: "Riisi (3 dl)", cat: "Kuivat", price_eur: 0.7 },
+          { name: "Rypsiöljy", amount_needed: "2 rkl", in_fridge: true, to_shopping_list: "", cat: "Kuivat (mutta märät)", price_eur: 0.1 },
+          { name: "Soijakastike", amount_needed: "3 rkl", in_fridge: false, to_shopping_list: "Soijakastike (3 rkl)", cat: "Aasia / Texmex", price_eur: 0.5 },
+          { name: "Suola", amount_needed: "1 tl", in_fridge: true, to_shopping_list: "", cat: "Kuivat", price_eur: 0.01 },
+          { name: "Mustapippuri", amount_needed: "1 tl", in_fridge: true, to_shopping_list: "", cat: "Kuivat", price_eur: 0.05 },
+          { name: "Testiaines " + t, amount_needed: "100 g", in_fridge: false, to_shopping_list: "Testiaines " + t + " (100 g)", cat: "Muut", price_eur: 0.8 }
         ],
+        nutrition_per_serving: { energy_kcal: 540, protein_g: 38, carbs_g: 52, fat_g: 18, fiber_g: 4 },
         side_dishes: [
-          { title: "Valkosipuli-kermaperunat", ingredients: [{ name: "Peruna", amount_needed: "800 g", cat: "Juurekset" }, { name: "Kerma", amount_needed: "2 dl", cat: "Maitotuotteet" }, { name: "Valkosipuli", amount_needed: "2 kpl", cat: "Hevi" }] },
-          { title: "Raikas vihreä salaatti", ingredients: [{ name: "Jäävuorisalaatti", amount_needed: "1 kpl", cat: "Hevi" }, { name: "Kurkku", amount_needed: "1 kpl", cat: "Hevi" }] },
-          { title: "Uunijuurekset", ingredients: [{ name: "Porkkana", amount_needed: "500 g", cat: "Juurekset" }, { name: "Oliiviöljy", amount_needed: "2 rkl", cat: "Kuivat (mutta märät)" }] }
+          { title: "Valkosipuli-kermaperunat", nutrition_per_serving: { energy_kcal: 210, protein_g: 4, carbs_g: 30, fat_g: 8 }, ingredients: [{ name: "Peruna", amount_needed: "800 g", cat: "Juurekset", price_eur: 1.4 }, { name: "Kerma", amount_needed: "2 dl", cat: "Maitotuotteet", price_eur: 0.9 }, { name: "Valkosipuli", amount_needed: "2 kpl", cat: "Hevi", price_eur: 0.3 }, { name: "Voi", amount_needed: "1 rkl", cat: "Maitotuotteet", price_eur: 0.2 }] },
+          { title: "Raikas vihreä salaatti", nutrition_per_serving: { energy_kcal: 40, protein_g: 2, carbs_g: 6, fat_g: 1 }, ingredients: [{ name: "Jäävuorisalaatti", amount_needed: "1 kpl", cat: "Hevi", price_eur: 1.5 }, { name: "Kurkku", amount_needed: "1 kpl", cat: "Hevi", price_eur: 1.2 }] },
+          { title: "Uunijuurekset", nutrition_per_serving: { energy_kcal: 120, protein_g: 2, carbs_g: 20, fat_g: 4 }, ingredients: [{ name: "Porkkana", amount_needed: "500 g", cat: "Juurekset", price_eur: 0.9 }, { name: "Oliiviöljy", amount_needed: "2 rkl", cat: "Kuivat (mutta märät)", price_eur: 0.4 }] }
         ],
-        instructions_brief: "Testiohje."
+        instructions_brief: "Leikkaa kana kuutioiksi ja suolaa. Kuumenna rypsiöljy pannulla ja paista kana kypsäksi 8–10 minuuttia. Lisää paprika ja kerma, sekoita ja anna hautua 5 minuuttia. Keitä riisi pakkauksen ohjeen mukaan ja tarjoile."
       }]);
     }
     return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text }] } }] }), { status: 200, headers: { "Content-Type": "application/json" } });

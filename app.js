@@ -1626,15 +1626,17 @@ window.setFavoriteServings = function(idx, delta) {
     return {
       ...i,
       amount_needed: amount,
-      to_shopping_list: i.in_fridge ? "" : (amount ? `${i.name} (${amount})` : i.name)
+      to_shopping_list: i.in_fridge ? "" : (amount ? `${i.name} (${amount})` : i.name),
+      price_eur: scalePrice(i.price_eur, factor)
     };
   });
+  f.cost_total_eur = scalePrice(f.base_cost_total_eur ?? (f.base_cost_total_eur = f.cost_total_eur), factor);
   // Lisukkeiden määrät skaalataan samalla kertoimella
   f.side_dishes = (f.base_side_dishes || []).map(sd => ({
     ...sd,
     ingredients: (sd.ingredients || []).map(i => {
       const amount = scaleAmount(i.amount_needed, factor);
-      return { ...i, amount_needed: amount, to_shopping_list: i.in_fridge ? "" : (amount ? `${i.name} (${amount})` : i.name) };
+      return { ...i, amount_needed: amount, to_shopping_list: i.in_fridge ? "" : (amount ? `${i.name} (${amount})` : i.name), price_eur: scalePrice(i.price_eur, factor) };
     })
   }));
   pushToCloud();
@@ -1687,6 +1689,43 @@ const ingChoiceKey = (r, ing) => `${String(r?.recipe_title || "").trim().toLower
 function effectiveInFridge(r, ing) {
   const k = ingChoiceKey(r, ing);
   return Object.prototype.hasOwnProperty.call(foodPlan.ingChoice, k) ? !!foodPlan.ingChoice[k] : !!ing.in_fridge;
+}
+
+// Hinta skaalataan annoskertoimella (null säilyy nullina)
+const scalePrice = (price, factor) => (Number.isFinite(price) ? Math.round(price * factor * 100) / 100 : null);
+
+// ---------- Kustannus- ja ravintoarvio (tekoälyn arvio) ----------
+const fmtEur = n => `${(Math.round(n * 100) / 100).toFixed(2).replace(".", ",")} €`;
+const fmtNum = n => String(Math.round(n * 10) / 10).replace(".", ",");
+
+// Aterian kustannus: pääruoka + valitut lisukkeet. toBuy = vain "Lisää kauppalapulle" -tilassa olevat (kytkimet huomioiden).
+function recipeCostInfo(r) {
+  const servings = Math.max(1, Number(r?.target_servings) || 1);
+  let total = 0, toBuy = 0, unknown = 0, count = 0;
+  const add = (ing, inFridge) => {
+    count++;
+    if (!Number.isFinite(ing.price_eur)) { unknown++; return; }
+    total += ing.price_eur;
+    if (!inFridge) toBuy += ing.price_eur;
+  };
+  recipeIngredients(r).forEach(i => add(i, effectiveInFridge(r, i)));
+  selectedSideDishes(r).forEach(sd => sideIngredients(sd).forEach(i => add(i, effectiveSideInFridge(r, sd, i))));
+  return { total, toBuy, perServing: total / servings, perServingToBuy: toBuy / servings, unknown, count, servings, hasData: count > unknown };
+}
+
+// Ravintoarvio yhtä syöjää kohden: pääruoka + valitut lisukkeet (yksi lisukeannos per syöjä). null, jos pääruoalla ei ole arviota.
+function recipeNutritionInfo(r) {
+  const main = r?.nutrition_per_serving;
+  if (!main) return null;
+  const keys = ["energy_kcal", "protein_g", "carbs_g", "fat_g", "fiber_g"];
+  const out = {};
+  keys.forEach(k => { out[k] = Number.isFinite(main[k]) ? main[k] : null; });
+  selectedSideDishes(r).forEach(sd => {
+    const n = sd.nutrition_per_serving;
+    if (!n) return;
+    keys.forEach(k => { if (Number.isFinite(n[k])) out[k] = (out[k] || 0) + n[k]; });
+  });
+  return out;
 }
 
 // ---------- Lisukkeet (side_dishes) ----------
@@ -1830,6 +1869,13 @@ window.shareRecipe = async function(source, idx) {
     r.instructions_brief ? `\n${r.instructions_brief}` : "",
     r.vege_note ? `\n🥦 Kasvissyöjälle: ${r.vege_note}` : "",
     selectedSideDishes(r).length ? `\n🥗 Lisukkeet: ${selectedSideDishes(r).map(sd => sd.title).join(", ")}` : "",
+    (() => {
+      const c = recipeCostInfo(r), n = recipeNutritionInfo(r);
+      const parts = [];
+      if (c.hasData) parts.push(`💶 ~${fmtEur(c.perServing)}/annos`);
+      if (n && n.protein_g !== null) parts.push(`💪 ${fmtNum(n.protein_g)} g proteiinia/annos`);
+      return parts.length ? `\n${parts.join(" · ")} (arvio)` : "";
+    })(),
     missing.length ? `\n🛒 Ostettavaa:\n${missing.map(i => `• ${i.to_shopping_list || i.name}`).join("\n")}` : "\n✓ Kaikki ainekset löytyvät kotoa",
     r.source_url ? `\n🔗 ${r.source_url}` : "",
     "\n– Corsia"
